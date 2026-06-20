@@ -1,3 +1,12 @@
+---
+title: FileToLink
+emoji: ⚡
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 <p align="center">
   <img src="https://cdn.jsdelivr.net/gh/fyaz05/Resources@main/FileToLink/Thunder.jpg" alt="Thunder Logo" width="120">
   <h1 align="center">⚡ Thunder</h1>
