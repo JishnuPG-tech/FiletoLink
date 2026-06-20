@@ -12,9 +12,9 @@ class TokenParser:
     def parse_from_env(self) -> Dict[int, str]:
         try:
             multi_tokens = {
-                key: value.strip()
+                key: value.strip(" '\"")
                 for key, value in os.environ.items()
-                if key.startswith("MULTI_TOKEN") and value.strip()
+                if key.startswith("MULTI_TOKEN") and value.strip(" '\"")
             }
             
             if not multi_tokens:
