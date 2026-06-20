@@ -26,8 +26,15 @@ def str_to_int_set(val: str) -> Set[int]:
 
 class Var:
     API_ID: int = int(os.getenv("API_ID", "0"))
-    API_HASH: str = os.getenv("API_HASH", "")
-    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
+    API_HASH: str = os.getenv("API_HASH", "").strip()
+    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "").strip()
+
+    # Diagnostics to help debug API_ID_INVALID
+    logger.info("--- API CONFIGURATION DIAGNOSTICS ---")
+    logger.info(f"API_ID: {API_ID} (raw env: '{os.getenv('API_ID')}')")
+    logger.info(f"API_HASH length: {len(API_HASH) if API_HASH else 0}")
+    logger.info(f"BOT_TOKEN length: {len(BOT_TOKEN) if BOT_TOKEN else 0}")
+    logger.info("------------------------------------")
 
     if not all([API_ID, API_HASH, BOT_TOKEN]):
         logger.critical("Missing required Telegram API configuration")
