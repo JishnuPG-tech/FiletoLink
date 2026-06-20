@@ -25,9 +25,10 @@ def str_to_int_set(val: str) -> Set[int]:
 
 
 class Var:
-    API_ID: int = int(os.getenv("API_ID", "0"))
-    API_HASH: str = os.getenv("API_HASH", "").strip()
-    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "").strip()
+    raw_api_id = os.getenv("API_ID", "0").strip(" '\"")
+    API_ID: int = int(raw_api_id) if raw_api_id.isdigit() else 0
+    API_HASH: str = os.getenv("API_HASH", "").strip(" '\"")
+    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "").strip(" '\"")
 
     # Diagnostics to help debug API_ID_INVALID
     logger.info("--- API CONFIGURATION DIAGNOSTICS ---")
