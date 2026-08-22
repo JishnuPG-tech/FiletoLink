@@ -4,6 +4,7 @@
 .venv/
 .Python
 config.env
+.env
 log.text
 .vscode/
 **/__pycache__/
