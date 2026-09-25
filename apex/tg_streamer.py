@@ -840,11 +840,12 @@ if tg_app:
 
 logger.info(
     "[CONFIG] Jellyfin Telegram primary bot: api_id=%s api_hash=%s bot_token=%s "
-    "allowed_chat_ids=%s",
+    "allowed_chat_ids=%s tmdb_api_key=%s",
     "set" if API_ID else "missing",
     "set" if API_HASH else "missing",
     "set" if BOT_TOKEN else "missing",
     "configured" if RAW_CHANNEL_ID else "not configured (all accessible chats)",
+    "set" if TMDB_API_KEY else "missing",
 )
 
 routes = web.RouteTableDef()
@@ -866,6 +867,7 @@ async def health(request):
         "cache": apex_cache.stats(),
         "metrics": {k: v for k, v in apex_metrics.snapshot().items() if k != "recent_streams"},
         "cached_files": len(FILE_ID_CACHE),
+        "tmdb_configured": bool(TMDB_API_KEY),
         "pending_subtitles": sum(1 for s in SUBTITLE_CACHE.values() if isinstance(s, dict) and not s.get("placed")),
         "placed_subtitles": sum(1 for s in SUBTITLE_CACHE.values() if isinstance(s, dict) and s.get("placed")),
         "movies_dir": MOVIES_DIR,
@@ -918,8 +920,17 @@ async def _tmdb_search(media_type, query, year=None):
         else:
             params["year"] = int(year)
     data = await _tmdb_get(f"/search/{media_type}", params)
-    if data:
-        return data.get("results") or []
+    results = data.get("results") or [] if data else []
+    # Release filenames often contain an incorrect/future year. Retry without
+    # the year so a valid TMDB title can still be matched and enriched.
+    if not results and year:
+        data = await _tmdb_get(
+            f"/search/{media_type}",
+            {"query": query or "", "include_adult": "false"},
+        )
+        results = data.get("results") or [] if data else []
+    if results:
+        return results
     return []
 
 
@@ -975,7 +986,10 @@ async def _enrich_media_metadata(entry):
         results = await _tmdb_search("tv" if is_tv else "movie", query, entry.get("year"))
         hit = best_tmdb_match(results, query, "tv" if is_tv else "movie", entry.get("year"))
         if not hit:
-            logger.info(f"[TMDB] No match for '{query}' (tv={is_tv})")
+            logger.warning(
+                f"[TMDB] No match for '{query}' (tv={is_tv}, year={entry.get('year')}); "
+                "verify the filename/title or add a TMDB title hint in the caption."
+            )
             return False
 
         tmdb_id = hit.get("id")
