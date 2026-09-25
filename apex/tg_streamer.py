@@ -1911,7 +1911,13 @@ async def _sync_configured_channel_once():
         except ValueError:
             logger.warning(f"[SYNC] Ignoring invalid configured chat ID: {raw!r}")
     if not targets:
-        return
+        try:
+            targets = await _resolve_reindex_targets(None)
+        except Exception as exc:
+            logger.info(f"[SYNC] Dialog discovery unavailable: {type(exc).__name__}: {exc}")
+            return
+        if not targets:
+            return
     results = []
     for chat_id in targets:
         try:
@@ -1940,7 +1946,7 @@ async def _configured_channel_sync_loop():
             raise
         except Exception as exc:
             logger.warning(f"[SYNC] Recent channel sync failed: {type(exc).__name__}: {exc}")
-        await asyncio.sleep(60)
+        await asyncio.sleep(120)
 
 
 async def _resolve_reindex_targets(explicit_chat_id):
