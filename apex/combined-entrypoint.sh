@@ -5,6 +5,16 @@ FILETOLINK_PID="${1:-}"
 
 echo "[BOOT] Starting Gateway..."
 mkdir -p /data/jellyfin/data /data/jellyfin/config /data/jellyfin/cache /data/jellyfin/log /data/cache 2>/dev/null || true
+PERSISTENCE_MARKER=/data/.apex-persistence-marker
+if [ -f "$PERSISTENCE_MARKER" ]; then
+    echo "[PERSISTENCE] Persistent /data marker found; restoring durable state."
+else
+    if printf '%s\n' "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$PERSISTENCE_MARKER" 2>/dev/null; then
+        echo "[PERSISTENCE] No prior marker found. If this reappears after a restart, attach HF Persistent Storage."
+    else
+        echo "[PERSISTENCE] WARNING: /data is not writable; Jellyfin state cannot survive this container restart."
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # Jellyfin local datadir strategy (HF Spaces persistent /data is network-backed
@@ -30,6 +40,9 @@ restore_jellyfin_local() {
         find /data/jellyfin/data -mindepth 1 -maxdepth 1 \
             \( -name metadata -o -name metadata.snapshot \) -prune -o \
             -exec cp -a -f {} "$LOCAL_ROOT/data/" \; 2>/dev/null || true
+        echo "[PERSISTENCE] Jellyfin database snapshot found ($(stat -c '%s' /data/jellyfin/data/data/jellyfin.db 2>/dev/null || echo unknown) bytes)."
+    else
+        echo "[PERSISTENCE] No Jellyfin database snapshot found; Jellyfin will run first-time initialization."
     fi
     if [ -d "/data/jellyfin/config" ]; then
         cp -a -f /data/jellyfin/config/. "$LOCAL_ROOT/config/" 2>/dev/null || true
@@ -64,8 +77,15 @@ sync_jellyfin_back() {
         sleep 20
         if [ -f "$LOCAL_ROOT/data/data/jellyfin.db" ]; then
             mkdir -p /data/jellyfin/data/data
-            sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" ".backup /data/jellyfin/data/data/jellyfin.db" 2>/dev/null || \
-                cp -f "$LOCAL_ROOT/data/data/jellyfin.db" /data/jellyfin/data/data/jellyfin.db 2>/dev/null || true
+            snapshot="/data/jellyfin/data/data/jellyfin.db.tmp"
+            if sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" ".backup '$snapshot'" 2>/dev/null; then
+                mv -f "$snapshot" /data/jellyfin/data/data/jellyfin.db
+            elif cp -f "$LOCAL_ROOT/data/data/jellyfin.db" "$snapshot" 2>/dev/null; then
+                mv -f "$snapshot" /data/jellyfin/data/data/jellyfin.db
+            else
+                rm -f "$snapshot" 2>/dev/null || true
+                echo "[PERSISTENCE] WARNING: Jellyfin database snapshot failed."
+            fi
         fi
         if [ -d "$LOCAL_ROOT/data" ]; then
             find "$LOCAL_ROOT/data" -mindepth 1 -maxdepth 1 \

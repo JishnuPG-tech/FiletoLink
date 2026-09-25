@@ -196,7 +196,15 @@ Gateway/Nginx: 7860
 ```
 
 The Jellyfin application data is stored under `/data/jellyfin` and does not
-share FileToLink's MongoDB or Telegram storage channel.
+share FileToLink's MongoDB or Telegram storage channel. Hugging Face Persistent
+Storage must be attached to the Space for `/data` to survive a container restart
+or rebuild. Without it, Jellyfin correctly starts as a new server each time.
+
+The startup log reports `[PERSISTENCE] Persistent /data marker found` when a
+previous durable volume was restored. If `No prior marker found` appears after
+a later restart, enable Persistent Storage in the Space settings. The combined
+entrypoint runs Jellyfin on fast local disk and periodically snapshots its
+database, configuration, and metadata to `/data`.
 
 ### Basic Usage
 
