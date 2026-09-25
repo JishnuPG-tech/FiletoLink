@@ -166,6 +166,32 @@ Copy `config_sample.env` to `config.env` and fill in your values.
 
 ## Usage and Commands
 
+## Combined Jellyfin deployment
+
+The Space also runs the Apex Jellyfin service without changing FileToLink's
+primary bot, MongoDB, or storage channel. FileToLink remains available at the
+public root and Jellyfin is available at `/jellyfin/`.
+
+Use separate Telegram bot pools:
+
+```text
+FileToLink: MULTI_TOKEN1, MULTI_TOKEN2, ...
+Jellyfin:   JELLYFIN_MULTI_TOKEN1, JELLYFIN_MULTI_TOKEN2, ...
+```
+
+Jellyfin's primary bot uses `TELEGRAM_BOT_TOKEN`; FileToLink continues to use
+`BOT_TOKEN`. Internal ports are isolated automatically:
+
+```text
+FileToLink: 8081
+Jellyfin Telegram streamer: 8082
+Jellyfin: 8096
+Gateway/Nginx: 7860
+```
+
+The Jellyfin application data is stored under `/data/jellyfin` and does not
+share FileToLink's MongoDB or Telegram storage channel.
+
 ### Basic Usage
 
 1. **Start** → Send `/start` to the bot.

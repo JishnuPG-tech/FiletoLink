@@ -1,4 +1,3 @@
-aiohttp
 cloudscraper
 Jinja2
 pyrofork
@@ -8,3 +7,8 @@ python-dotenv
 speedtest-cli
 tgcrypto
 uvloop==0.21.0
+aiohttp
+fastapi
+httpx
+uvicorn[standard]
+websockets

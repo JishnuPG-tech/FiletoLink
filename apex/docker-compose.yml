@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  apex:
+    build: .
+    ports:
+      - "7860:7860"
+    environment:
+      # Configure these in HF Space Settings -> Variables and secrets instead
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID:-}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_ALLOWED_CHAT_IDS=${TELEGRAM_ALLOWED_CHAT_IDS:-}
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - APEX_SECRET_KEY=${APEX_SECRET_KEY:-}
+      # Conservative defaults for the small HF Space CPU/memory profile.
+      - APEX_STREAM_MAX_GLOBAL=${APEX_STREAM_MAX_GLOBAL:-8}
+      - APEX_STREAM_MAX_PER_CLIENT=${APEX_STREAM_MAX_PER_CLIENT:-2}
+      - APEX_STREAM_MAX_PER_SOURCE=${APEX_STREAM_MAX_PER_SOURCE:-2}
+      - APEX_TELEGRAM_MAX_CONCURRENT=${APEX_TELEGRAM_MAX_CONCURRENT:-2}
+      - APEX_METADATA_WORKERS=${APEX_METADATA_WORKERS:-1}
+      - APEX_ARTWORK_WORKERS=${APEX_ARTWORK_WORKERS:-1}
+    volumes:
+      - apex-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  apex-data:
