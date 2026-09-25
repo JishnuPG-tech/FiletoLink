@@ -1897,6 +1897,52 @@ async def _scan_chat_history(chat_id, limit, indexed_list):
     indexed_list.append({"chat_id": chat_id, "indexed": indexed, "skipped": skipped})
 
 
+async def _sync_configured_channel_once():
+    """Recover recent channel posts when webhook delivery is delayed or missed."""
+    if not tg_app or not tg_app.is_connected:
+        return
+    targets = []
+    for raw in (RAW_CHANNEL_ID or "").split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            targets.append(int(raw) if raw.lstrip("-").isdigit() else raw)
+        except ValueError:
+            logger.warning(f"[SYNC] Ignoring invalid configured chat ID: {raw!r}")
+    if not targets:
+        return
+    results = []
+    for chat_id in targets:
+        try:
+            await _scan_chat_history(chat_id, limit=25, indexed_list=results)
+        except FloodWait as exc:
+            logger.info(f"[SYNC] FloodWait for {chat_id}; retrying after {exc.value}s")
+            await asyncio.sleep(exc.value)
+        except Exception as exc:
+            logger.info(
+                f"[SYNC] Recent history unavailable for {chat_id}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+    indexed = sum(item.get("indexed", 0) for item in results)
+    if indexed:
+        await save_cache_async()
+        await trigger_jellyfin_scan()
+        logger.info(f"[SYNC] Recovered {indexed} recent media item(s) from configured channel(s)")
+
+
+async def _configured_channel_sync_loop():
+    await asyncio.sleep(15)
+    while True:
+        try:
+            await _sync_configured_channel_once()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(f"[SYNC] Recent channel sync failed: {type(exc).__name__}: {exc}")
+        await asyncio.sleep(60)
+
+
 async def _resolve_reindex_targets(explicit_chat_id):
     """Return a de-duplicated list of chat ids to scan for media."""
     targets = set()
@@ -2575,9 +2621,14 @@ async def start_background_tasks(app):
             logger.exception(f"[PYROGRAM] start_pyrogram crashed: {e}")
     app['pyrogram_task'] = asyncio.create_task(_guard())
     app['reconciliation_task'] = asyncio.create_task(_reconciliation_loop())
+    app['channel_sync_task'] = asyncio.create_task(_configured_channel_sync_loop())
 
 async def cleanup_background_tasks(app):
     task = app.get("reconciliation_task")
+    if task:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    task = app.get("channel_sync_task")
     if task:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
