@@ -182,6 +182,12 @@ Jellyfin:   JELLYFIN_MULTI_TOKEN1, JELLYFIN_MULTI_TOKEN2, ...
 Jellyfin's primary bot uses `TELEGRAM_BOT_TOKEN`; FileToLink continues to use
 `BOT_TOKEN`. Internal ports are isolated automatically:
 
+For the Jellyfin Telegram client, use `JELLYFIN_API_ID` and
+`JELLYFIN_API_HASH` with the same valid Telegram application credentials used
+by the Jellyfin bot. These are separate names so a stale or conflicting
+`TELEGRAM_API_ID`/`TELEGRAM_API_HASH` pair cannot prevent Jellyfin from
+starting while FileToLink continues to run.
+
 ```text
 FileToLink: 8081
 Jellyfin Telegram streamer: 8082

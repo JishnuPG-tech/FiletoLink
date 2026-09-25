@@ -75,8 +75,12 @@ def get_env(*names, default=None):
             return v
     return default
 
-API_ID = get_env("TELEGRAM_API_ID", "TG_API_ID", "API_ID")
-API_HASH = get_env("TELEGRAM_API_HASH", "TG_API_HASH", "API_HASH")
+API_ID = get_env(
+    "JELLYFIN_API_ID", "TELEGRAM_API_ID", "TG_API_ID", "API_ID"
+)
+API_HASH = get_env(
+    "JELLYFIN_API_HASH", "TELEGRAM_API_HASH", "TG_API_HASH", "API_HASH"
+)
 BOT_TOKEN = get_env("TELEGRAM_BOT_TOKEN", "TG_BOT_TOKEN")
 RAW_CHANNEL_ID = get_env("TELEGRAM_ALLOWED_CHAT_IDS", "TG_CHANNEL_ID", default="")
 TMDB_API_KEY = get_env("TMDB_API_KEY")
@@ -2295,7 +2299,13 @@ async def _prune_orphan_strms(movies_dir, shows_dir, keep):
                         content = fh.read(256)
                 except OSError:
                     continue
-                if f"127.0.0.1:{PORT}" not in content and f"{PORT}/stream" not in content:
+                stream_port = os.environ.get(
+                    "TG_LISTEN_PORT", os.environ.get("PORT", "8080")
+                )
+                if (
+                    f"127.0.0.1:{stream_port}" not in content
+                    and f"{stream_port}/stream" not in content
+                ):
                     continue
                 try:
                     os.remove(path)
