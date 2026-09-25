@@ -8,6 +8,7 @@ from apex_stream.organize import (
     DEFAULT_LANGUAGE,
     detect_language,
     language_code,
+    language_name_from_code,
     match_subtitle_media,
     movie_target_dir,
     safe_folder,
@@ -63,6 +64,11 @@ class TestLanguageCode:
 
     def test_unknown(self):
         assert language_code("Klingon") == ""
+
+    def test_tmdb_code(self):
+        assert language_name_from_code("ml") == "Malayalam"
+        assert language_name_from_code("en") == "English"
+        assert language_name_from_code("unknown") == ""
 
 
 class TestFolders:

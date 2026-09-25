@@ -35,6 +35,7 @@ from apex_stream.organize import (
     DEFAULT_LANGUAGE,
     detect_language,
     language_code,
+    language_name_from_code,
     match_subtitle_media,
     strm_base,
     strm_dir,
@@ -986,6 +987,34 @@ async def _enrich_media_metadata(entry):
         if not detail:
             logger.info(f"[TMDB] No detail for tmdb_id={tmdb_id} ({query})")
             return False
+
+        # Filename tags are only a hint. TMDB's original_language is the
+        # authoritative fallback for files such as a Malayalam movie whose
+        # filename does not contain "Malayalam", "mal", or a language code.
+        tmdb_language = language_name_from_code(detail.get("original_language"))
+        if tmdb_language and tmdb_language != entry.get("language"):
+            old_strm_path = entry.get("strm_path")
+            entry["language"] = tmdb_language
+            new_target_dir = strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
+            new_show_root = (
+                tv_show_root(SHOWS_DIR, tmdb_language, entry.get("show_name"), entry.get("year"))
+                if entry.get("is_tv") and entry.get("show_name")
+                else None
+            )
+            new_strm_path = os.path.join(
+                new_target_dir, f"{entry.get('strm_base', strm_base(entry))}.strm"
+            )
+            if old_strm_path and os.path.exists(old_strm_path) and old_strm_path != new_strm_path:
+                os.makedirs(new_target_dir, exist_ok=True)
+                os.replace(old_strm_path, new_strm_path)
+                entry["strm_path"] = new_strm_path
+                logger.info(
+                    f"[ORGANIZE] Moved '{entry.get('title')}' to {tmdb_language} folder"
+                )
+            entry["target_dir"] = new_target_dir
+            entry["show_root"] = new_show_root
+            target_dir = new_target_dir
+            show_root = new_show_root
 
         os.makedirs(target_dir, exist_ok=True)
         connector = aiohttp.TCPConnector(family=socket.AF_INET)

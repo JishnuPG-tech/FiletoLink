@@ -52,6 +52,15 @@ _LANGUAGES: List[Tuple[str, str, List[str]]] = [
 ]
 
 _BY_NAME: Dict[str, str] = {name: code for name, code, _ in _LANGUAGES}
+_NAME_BY_CODE: Dict[str, str] = {code: name for name, code, _ in _LANGUAGES}
+_NAME_BY_CODE.update({
+    "ml": "Malayalam", "hi": "Hindi", "ta": "Tamil", "te": "Telugu",
+    "kn": "Kannada", "bn": "Bengali", "pa": "Punjabi", "mr": "Marathi",
+    "gu": "Gujarati", "ur": "Urdu", "en": "English", "ko": "Korean",
+    "ja": "Japanese", "zh": "Chinese", "es": "Spanish", "fr": "French",
+    "de": "German", "ru": "Russian", "ar": "Arabic", "pt": "Portuguese",
+    "id": "Indonesian", "it": "Italian",
+})
 
 _ALL_LANG_TOKENS = {
     t.lower() for _, _, tokens in _LANGUAGES for t in tokens
@@ -89,6 +98,12 @@ def detect_language(text: Optional[str]) -> str:
 def language_code(language_name: str) -> str:
     """ISO 639-2/B subtitle-file code for a language name ('' if unknown)."""
     return _BY_NAME.get(language_name, "")
+
+
+def language_name_from_code(code: Optional[str]) -> str:
+    """Return the canonical display language for a TMDB/ISO-639-1 code."""
+    normalized = (code or "").strip().lower()
+    return _NAME_BY_CODE.get(normalized, "")
 
 
 def safe_folder(name: str) -> str:
