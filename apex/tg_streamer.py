@@ -86,7 +86,11 @@ RAW_CHANNEL_ID = get_env("TELEGRAM_ALLOWED_CHAT_IDS", "TG_CHANNEL_ID", default="
 TMDB_API_KEY = get_env("TMDB_API_KEY")
 
 # Public URL Telegram must deliver bot updates to (through the Apex gateway).
-PUBLIC_BASE_URL = get_env("PUBLIC_BASE_URL", "PUBLIC_URL", default="https://jishnupg-apex.hf.space")
+PUBLIC_BASE_URL = get_env(
+    "PUBLIC_BASE_URL",
+    "PUBLIC_URL",
+    default="https://jishnupg-filetolink.hf.space",
+)
 WEBHOOK_PATH = "/tg-stream/telegram-webhook"
 
 DATA_DIR = "/data/jellyfin"

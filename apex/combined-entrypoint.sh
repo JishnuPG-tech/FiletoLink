@@ -104,10 +104,20 @@ sync_jellyfin_back() {
 }
 
 launch_jellyfin() {
+    # Jellyfin logs its complete environment at Information level on startup.
+    # Filter only that line while preserving the Jellyfin process PID and all
+    # other operational messages.
+    redact_jellyfin_environment() {
+        sed -E 's/Environment Variables:.*/Environment Variables: [redacted]/'
+    }
     if command -v jellyfin >/dev/null 2>&1; then
-        jellyfin $JELLYFIN_OPTS &
+        jellyfin $JELLYFIN_OPTS \
+            > >(redact_jellyfin_environment) \
+            2> >(redact_jellyfin_environment >&2) &
     elif [ -f "/usr/bin/jellyfin" ]; then
-        /usr/bin/jellyfin $JELLYFIN_OPTS &
+        /usr/bin/jellyfin $JELLYFIN_OPTS \
+            > >(redact_jellyfin_environment) \
+            2> >(redact_jellyfin_environment >&2) &
     else
         echo "[CRITICAL] jellyfin binary not found!"
         JELLYFIN_PID=""
