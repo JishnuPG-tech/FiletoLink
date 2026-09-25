@@ -86,6 +86,16 @@ BOT_TOKEN = get_env("TELEGRAM_BOT_TOKEN", "TG_BOT_TOKEN")
 RAW_CHANNEL_ID = get_env("TELEGRAM_ALLOWED_CHAT_IDS", "TG_CHANNEL_ID", default="")
 TMDB_API_KEY = get_env("TMDB_API_KEY")
 
+# Optional AI title-extraction fallback (omniroute OpenAI-compatible proxy).
+# Only used when the rule-based parser + TMDB search both miss, so the fast
+# offline path is never slowed down. Both vars must be set or AI is disabled.
+OMNIROUTE_URL = get_env("OMNIROUTE_API_URL").rstrip("/") if get_env("OMNIROUTE_API_URL") else ""
+OMNIROUTE_KEY = get_env("OMNIROUTE_API_KEY")
+AI_TITLE_MODEL = get_env("AI_TITLE_MODEL", default="auto/best-fast")
+AI_TITLE_MAX_TOKENS = int(get_env("AI_TITLE_MAX_TOKENS", default="160"))
+# Small in-memory cache so restart/idempotency re-checks don't re-call the LLM.
+_AI_TITLE_CACHE = {}
+
 # Public URL Telegram must deliver bot updates to (through the Apex gateway).
 PUBLIC_BASE_URL = get_env(
     "PUBLIC_BASE_URL",
@@ -934,6 +944,82 @@ async def _tmdb_search(media_type, query, year=None):
     return []
 
 
+_AI_TITLE_SYSTEM = (
+    "You are a release-filename parser. Given a movie/series release filename, "
+    "return a strict JSON object {\"title\": string|null, \"year\": int|null}. "
+    "Strip ALL release junk: extensions (.mkv/.mp4), codecs (DD+5.1, DTS-MA, "
+    "1080p, 720p, x264, x265, WEB-DL), OTT brands (JioHotstar, Hotstar, "
+    "JioCinema, SonyLiv, Zee5, MXPlayer), group tags, languages, and channel "
+    "indicators. Only the true series/movie title and its release year. "
+    "No explanation, no markdown fences, only the JSON object."
+)
+
+
+async def _ai_extract_title(filename):
+    """Use the omniroute LLM proxy to extract the canonical title+year.
+
+    Returns (title, year) or (None, None). Never raises; on any proxy/parse
+    failure it logs a warning and returns None so ingestion always proceeds.
+    """
+    if not (OMNIROUTE_URL and OMNIROUTE_KEY):
+        return None, None
+    key = filename or ""
+    if key in _AI_TITLE_CACHE:
+        return _AI_TITLE_CACHE[key]
+    try:
+        connector = aiohttp.TCPConnector(family=socket.AF_INET)
+        payload = {
+            "model": AI_TITLE_MODEL,
+            "temperature": 0,
+            "max_tokens": AI_TITLE_MAX_TOKENS,
+            "messages": [
+                {"role": "system", "content": _AI_TITLE_SYSTEM},
+                {"role": "user", "content": filename or ""},
+            ],
+        }
+        headers = {
+            "Authorization": f"Bearer {OMNIROUTE_KEY}",
+            "Content-Type": "application/json",
+        }
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.post(
+                f"{OMNIROUTE_URL}/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=30,
+            ) as resp:
+                if resp.status != 200:
+                    body = (await resp.text())[:200] or ""
+                    logger.warning(
+                        f"[AI-TITLE] proxy {resp.status} for '{filename}': {body}"
+                    )
+                    _AI_TITLE_CACHE[key] = (None, None)
+                    return None, None
+                data = await resp.json()
+        content = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+        stripped = content.strip()
+        # Tolerate ```json ... ``` fences the model sometimes wraps output in.
+        if stripped.startswith("```"):
+            stripped = re.sub(r"^```[a-z]*\s*", "", stripped)
+            stripped = re.sub(r"\s*```$", "", stripped)
+        try:
+            parsed = json.loads(stripped)
+        except Exception:
+            m = re.search(r"\{.*\}", stripped, re.DOTALL)
+            parsed = json.loads(m.group(0)) if m else {}
+        title = (parsed.get("title") or "").strip() or None
+        year_v = parsed.get("year")
+        year = int(year_v) if isinstance(year_v, int) or (isinstance(year_v, str) and str(year_v).isdigit()) else None
+        if not title:
+            logger.warning(f"[AI-TITLE] empty extraction for '{filename}': {stripped[:160]}")
+        _AI_TITLE_CACHE[key] = (title, year)
+        return title, year
+    except Exception as e:
+        logger.warning(f"[AI-TITLE] call notice for '{filename}': {e}")
+        _AI_TITLE_CACHE[key] = (None, None)
+        return None, None
+
+
 async def _download_image(session, url, save_path):
     """Download an image (e.g. TMDB poster/backdrop) to save_path."""
     try:
@@ -983,8 +1069,42 @@ async def _enrich_media_metadata(entry):
                 return True
 
         query = entry.get("search_title") or entry.get("show_name") or entry.get("title")
-        results = await _tmdb_search("tv" if is_tv else "movie", query, entry.get("year"))
-        hit = best_tmdb_match(results, query, "tv" if is_tv else "movie", entry.get("year"))
+        candidates = entry.get("search_candidates") or []
+        if query and query not in candidates:
+            candidates.insert(0, query)
+        if not candidates:
+            candidates = [query or ""]
+
+        hit = None
+        used_query = ""
+        media_type = "tv" if is_tv else "movie"
+        for cand in candidates:
+            try:
+                results = await _tmdb_search(media_type, cand, entry.get("year"))
+            except Exception as _exc:
+                results = []
+            hit = best_tmdb_match(results, cand, media_type, entry.get("year"))
+            used_query = cand
+            if hit:
+                break
+        # AI-tier-2 fallback: rule parsing + TMDB all missed; ask the LLM to
+        # pull the canonical title (it handles ANY format/OTT junk), then retry
+        # TMDB once before giving up.
+        if not hit:
+            ai_title, ai_year = await _ai_extract_title(
+                entry.get("file_name") or entry.get("raw_name") or entry.get("title")
+            )
+            if ai_title and ai_title != used_query:
+                year_hint = ai_year or entry.get("year")
+                try:
+                    results = await _tmdb_search(media_type, ai_title, year_hint)
+                except Exception as _exc:
+                    results = []
+                hit = best_tmdb_match(results, ai_title, media_type, year_hint)
+                if hit:
+                    used_query = ai_title
+                    logger.info(f"[AI-TITLE] '{entry.get('title')}' -> '{ai_title}' (tmdb_id={hit.get('id')})")
+        query = used_query
         if not hit:
             logger.warning(
                 f"[TMDB] No match for '{query}' (tv={is_tv}, year={entry.get('year')}); "

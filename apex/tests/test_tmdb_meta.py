@@ -117,6 +117,69 @@ class TestParseMediaMeta:
         assert meta["title"] == "1917"
         assert meta["search_title"] == "1917"
 
+    def test_ott_brand_audio_tail_stripped(self):
+        meta = parse_media_meta("I Nobody Jiohotstar Dd+5.1 H (2026).mkv")
+        assert meta["is_tv"] is False
+        assert meta["year"] == 2026
+        assert meta["search_title"] == "i nobody"
+
+    def test_ott_brand_with_glued_channel_count(self):
+        meta = parse_media_meta("I Nobody Jiohotstar Dd5.1 H (2026).mkv")
+        assert meta["search_title"] == "i nobody"
+        assert "jiohotstar" not in meta["search_title"]
+        assert "dd5" not in meta["search_title"]
+        assert "h" not in meta["search_title"]
+
+    def test_series_part_number_kept(self):
+        meta = parse_media_meta("K.G.F.Chapter.2.2022.1080p.mkv")
+        assert meta["year"] == 2022
+        assert meta["search_title"] == "k g f chapter 2"
+
+    def test_codec_ma_tail_stripped(self):
+        meta = parse_media_meta("Interstellar (2014) 1080p DTS-MA Hindi.mkv")
+        assert meta["year"] == 2014
+        assert meta["search_title"] == "interstellar"
+
+    def test_audio_channel_count_lang_stripped(self):
+        meta = parse_media_meta("Vikram.2022.1080p.DDP5.1.Tamil.mkv")
+        assert meta["year"] == 2022
+        assert meta["search_title"] == "vikram"
+
+    def test_ott_brand_malayalam_tail_stripped(self):
+        meta = parse_media_meta("Bharath.Circus.2023.1080p.JioHotstar.DD+5.1.Malayalam.mkv")
+        assert meta["year"] == 2023
+        assert meta["search_title"] == "bharath circus"
+
+    def test_ott_brand_short_isocode_tail_stripped(self):
+        meta = parse_media_meta("Kaathal.The.Core.2023.1080p.Hotstar.Mal.mkv")
+        assert meta["year"] == 2023
+        assert meta["search_title"] == "kaathal the core"
+
+    def test_webdl_audio_tail_stripped(self):
+        meta = parse_media_meta("Manjummel.Boys.2024.720p.Hotstar.WEB-DL.x265.DDP5.1.Hindi.mkv")
+        assert meta["year"] == 2024
+        assert meta["search_title"] == "manjummel boys"
+
+    def test_hdr_bit_audio_tail_stripped(self):
+        meta = parse_media_meta("Deadpool.and.Wolverine.2024.1080p.JioHotstar.HDR.10bit.DD+.Mal.mkv")
+        assert meta["year"] == 2024
+        assert meta["search_title"] == "deadpool and wolverine"
+
+    def test_search_candidates_present_and_ordered(self):
+        meta = parse_media_meta("Bharath.Circus.2023.1080p.JioHotstar.DD+5.1.Malayalam.mkv")
+        cands = meta["search_candidates"]
+        assert cands
+        assert cands[0] == "bharath circus"
+        assert "bharath" in cands
+
+    def test_search_candidates_fallback_no_pollution(self):
+        meta = parse_media_meta("I Nobody Jiohotstar Dd+5.1 H (2026).mkv")
+        assert "i nobody" in meta["search_candidates"]
+        # Fragments ripped off release tokens must not become search queries.
+        for cand in meta["search_candidates"]:
+            for frag in (" dd", " h", " p", " ma", " jiohotstar"):
+                assert frag not in cand
+
 
 class TestBestTmdbMatch:
     def test_exact_film(self):

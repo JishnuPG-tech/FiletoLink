@@ -43,11 +43,16 @@ _EPISODE_WORD = re.compile(r"(?i)\bEpisode\s*(\d{1,3})\b")
 _EXTRA_STOP = {
     "hdr", "dolby", "vision", "hd", "fhd", "uhd", "amzn", "nf", "netflix",
     "web-dl", "webdl", "webrip", "bdrip", "hdrip", "brrip", "hdtv", "remux",
-    "10bit", "8bit", "50fps", "60fps", "multisub", "truehd", "ddplus", "ddp5",
-    "avc", "h264", "h265", "x264", "x265", "hevc", "itunes", "max", "disney",
-    "disneyplus", "hulu", "paramount", "cmc", "hbo", "hbomax", "amazon",
-    "googleplay", "sd", "hq", "ts", "cam", "hdcam", "blu-ray", "bluray",
-    "hdrip", "dvdrip", "dvd", "webm", "mkv", "mp4",
+    "10bit", "8bit", "50fps", "60fps", "multisub", "truehd", "ddplus", "ddp",
+    "ddp5", "dtsx", "dtshd", "avc", "h264", "h265", "x264", "x265", "hevc",
+    "itunes", "max", "disney", "disneyplus", "hulu", "paramount",
+    "cmc", "hbo", "hbomax", "amazon", "googleplay", "sd", "hq",
+    "ts", "cam", "hdcam", "blu-ray", "bluray", "hdrip", "dvdrip", "dvd",
+    "webm", "mkv", "mp4",
+    # OTT platform brandings that commonly prefix release audio/codec tags.
+    "jiohotstar", "hotstar", "jiocinema", "sonyliv", "zee5", "mxplayer",
+    "voot", "airtel", "sunnxt", "manoramamax", "primevideo", "nuefliks",
+    "tvf",
 }
 
 _ALL_STOP = _STOP_TOKENS | _EXTRA_STOP | _ALL_LANG_TOKENS
@@ -115,15 +120,32 @@ def _clean_check(text: str) -> str:
     return text
 
 
-def _strip_noise(text: str) -> str:
-    """Strip group tags ([...], @Handle) and collapse whitespace.
+_MEDIA_EXT_RE = re.compile(
+    r"(?i)\.(?:mkv|mp4|avi|mov|m4v|webm|ts|m2ts|mpg|mpeg|wmv|flv|iso|rar|zip|7z)\s*$"
+)
 
-    Dots are release separators in filenames ("Movie.2021.720p.Pah") so they are
-    turned into spaces here; keeping them produces dotted folder names and
-    breaks both Jellyfin matching and TMDB search queries.
+
+def _strip_noise(text: str) -> str:
+    """Strip group tags ([...], @Handle), the real media extension and collapse
+    whitespace.
+
+    The media extension must be removed BEFORE dots are turned into spaces, or
+    ".mkv" becomes a trailing "mkv" token that breaks the audio/language tail
+    detection for every release that ends in one. Dots are release separators
+    in filenames ("Movie.2021.720p.Pah") so they are turned into spaces here;
+    keeping them produces dotted folder names and breaks both Jellyfin
+    matching and TMDB search queries.
     """
     t = re.sub(r"\[[^\]]*\]", " ", text)
     t = re.sub(r"@[\w.\-]+", " ", t)
+    t = _MEDIA_EXT_RE.sub(" ", t)
+    # "+" and "&" are release/present separators too ("Dd+5.1 H" -> "Dd 5 1 H",
+    # "Birds of Prey & Fantabulous" -> "Birds of Prey  Fantabulous"). A dash is a
+    # word separator ("DTS-MA", "Dead-Reckoning") so it is left as-is; Dots are
+    # release separators in filenames ("Movie.2021.720p.Pah") so they are also
+    # turned into spaces here; keeping them produces dotted folder names and
+    # breaks both Jellyfin matching and TMDB search queries.
+    t = re.sub(r"[.+&_]", " ", t)
     t = re.sub(r"\.", " ", t)
     t = re.sub(r"[\s_]+", " ", t)
     return t.strip()
@@ -163,6 +185,78 @@ def _remove_tokens(text: str, tokens: set) -> str:
     return re.sub(r"\s+", " ", text).strip(" -.,")
 
 
+# Junk words that are safe to consume in a trailing release run: OTT brands,
+# language tokens, quality/codec/res tokens and generic "release word"
+# suffixes. These are all also in `_ALL_STOP`, so `_remove_tokens` clears any
+# that survive; the tail-stripper only exists to carry the adjacent channel
+# DIGITS whose stop-words were already resolved.
+_TAIL_RUN_WORDS = _ALL_LANG_TOKENS | _EXTRA_STOP | _STOP_TOKENS | {
+    "blu", "ray", "dvdr", "web", "hdtv", "hdtvrip", "xvid", "divx", "wmv",
+    "flac", "mp3", "dual", "subs", "proper", "repack", "extended", "uncut",
+    "unrated",
+}
+
+# Short ISO 639-1 dub/language codes that appear as release tail tokens.
+_ISO_LANG_CODES = {
+    "en", "hi", "ml", "ta", "te", "kn", "bn", "pa", "mr", "gu", "ur", "ko",
+    "ja", "zh", "es", "fr", "de", "ru", "ar", "pt", "id", "it",
+}
+
+# TRUE audio/codec channel anchors. A trailing run is only dropped when it
+# contains one of these, so quality tokens ("1080p", "x264") or a lone digit
+# never eat a real number in a title ("K.G.F. Chapter 2", "Room 237").
+_AUDIO_WORDS = {
+    "dd", "dd5", "ddp", "ddp5", "ddplus", "dolby", "dts", "dtsx", "dtshd",
+    "dtse", "dtsecore", "atmos", "truehd", "aac", "ac3", "ehq", "eac3",
+}
+
+
+def _strip_audio_lang_tail(text: str) -> str:
+    """Drop a trailing audio/codec/language/platform run from a search query.
+
+    Release names in any Telegram format carry release junk after the real
+    title: "I Nobody Jiohotstar Dd+5.1 H (2026)", "Premam Dd5.1 1080p
+    Malayalam", "Vikram.2022.1080p.DDP5.1.Tamil", "Interstellar (2014) 1080p
+    DTS-MA Hindi". After `_strip_noise` those become space-separated tokens
+    ("dd 5 1 h", "ddp5 1 tamil", "dts ma hin"). A trailing run of junk tokens
+    (codec/dub digits included) is dropped only when it CONTAINS a true audio
+    anchor word ("dd", "ddp5", "dts", "dts-ma", "atmos", ...), so real numbers
+    in titles end up preserved:
+      - "K.G.F.Chapter.2.1080p"      -> run "2 1080p", no audio anchor -> keep
+      - "Manjummel.Boys.DDP5.1.Hindi" -> run "ddp5 1 hindi", anchor present -> drop
+      - "I Nobody Jiohotstar Dd 5 1 H"-> run "dd 5 1 h", anchor present   -> drop
+    """
+    if not text:
+        return text
+    parts = text.split()
+    i = len(parts) - 1
+    run = []  # (token, is_audio_anchor)
+    while i >= 0:
+        tok = parts[i].lower().lstrip("-_.")
+        npfx, dash, mark = tok.partition("-ma")
+        is_anchor = tok in _AUDIO_WORDS or (dash and npfx in _AUDIO_WORDS)
+        is_ma = tok == "ma"
+        is_digit = bool(re.fullmatch(r"\d[\d.]*", tok.strip(".-_")))
+        is_short = (len(tok) == 1 and tok.isalpha()) or tok in _ISO_LANG_CODES
+        is_word_junk = tok in _TAIL_RUN_WORDS or is_ma or is_short
+        if not (is_anchor or is_digit or is_word_junk):
+            break
+        run.append((tok, is_anchor))
+        i -= 1
+
+    if not run:
+        return text
+    # A trailing run is only dropped when it contains a true audio anchor.
+    has_anchor = any(is_anchor for _, is_anchor in run)
+    if not has_anchor:
+        return text
+    # Bare "ma" with an audio anchor on its left ("dts ma") counts into the run.
+    head = parts[: i + 1]
+    if len(re.findall(r"[a-z0-9]+", " ".join(head).lower())) < 1:
+        return text
+    return " ".join(head).strip()
+
+
 def _detect_year(text: Optional[str]) -> Optional[int]:
     if not text:
         return None
@@ -175,9 +269,61 @@ def _clean_search_title(text: str) -> str:
     text = _strip_noise(_drop_dotted_group_tail(text))
     text = YEAR_RE.sub(" ", text)
     text = re.sub(r"\(\s*\)", " ", text)
+    # Remove audio/dub tails BEFORE generic token removal so codec words are
+    # still present to anchor the trailing pattern.
+    text = _strip_audio_lang_tail(text)
     text = _remove_tokens(text, _ALL_STOP)
     text = _drop_group_tags(text)
     return " ".join(text.lower().split())
+
+
+def _significant_token_stream(text: str):
+    """Yield non-stop, non-digit words that are likely part of the real title."""
+    seen = set()
+    stop_tokens = _ALL_STOP
+    for tok in re.findall(r"[a-z0-9]+", (text or "").lower()):
+        if tok in stop_tokens or (tok.isdigit() and len(tok) != 4):
+            continue
+        # Drop ambiguous fragments ripped off a release token ("1080p"->"p",
+        # "DTS-MA"->"ma", "WEB-DL"->"dl") that add no matching value and only
+        # widen the wrong-hit window on the TMDB search.
+        if any(
+            w != tok and (w.startswith(tok) or w.endswith(tok))
+            for w in stop_tokens
+        ):
+            continue
+        if tok not in seen:
+            seen.add(tok)
+            yield tok
+
+
+def _search_candidates(raw: Optional[str]) -> List[str]:
+    """Ordered candidate search queries for a raw Telegram file name.
+
+    The fully-cleaned title is the most precise, but unforeseen release
+    formats can leave OTT/codec junk in the middle of the string that a
+    prefix-cleaning pass cannot see. We therefore also emit progressively
+    simpler token queries that TMDB handles gracefully:
+      - full significant-token stream (drops every stop/quality/dub token),
+      - then leading-prefix sub-queries of that stream.
+    Every candidate is still filtered through `best_tmdb_match`, so an
+    over-broad query can never return a wrong hit.
+    """
+    if not raw:
+        return []
+    cands: List[str] = []
+    cleaned = _clean_search_title(raw)
+    if cleaned:
+        cands.append(cleaned)
+    toks = list(_significant_token_stream(raw))
+    full_toks = " ".join(toks[:12])
+    if full_toks and full_toks != cleaned:
+        cands.append(full_toks)
+    for n in (1, 2, 3, 4):
+        prefix = " ".join(toks[:n])
+        if prefix and prefix not in cands:
+            cands.append(prefix)
+    return cands
 
 
 def _numeric_title_fallback(raw: str) -> str:
@@ -256,6 +402,7 @@ def parse_media_meta(filename_or_caption: Optional[str]) -> Dict:
             "year": year,
             "clean_title": show_title,
             "search_title": clean_show,
+            "search_candidates": _search_candidates(show_raw),
             "language": language,
         }
 
@@ -276,6 +423,7 @@ def parse_media_meta(filename_or_caption: Optional[str]) -> Dict:
         "year": year,
         "clean_title": display,
         "search_title": movie_title,
+        "search_candidates": _search_candidates(raw),
         "language": language,
     }
 
