@@ -833,6 +833,15 @@ if tg_app:
         await process_telegram_media(message, is_channel_post)
     logger.info("[PYROGRAM] Message & channel-post media handlers registered.")
 
+logger.info(
+    "[CONFIG] Jellyfin Telegram primary bot: api_id=%s api_hash=%s bot_token=%s "
+    "allowed_chat_ids=%s",
+    "set" if API_ID else "missing",
+    "set" if API_HASH else "missing",
+    "set" if BOT_TOKEN else "missing",
+    "configured" if RAW_CHANNEL_ID else "not configured (all accessible chats)",
+)
+
 routes = web.RouteTableDef()
 
 @routes.get("/")
@@ -1926,9 +1935,15 @@ async def _sync_configured_channel_once():
             logger.info(f"[SYNC] FloodWait for {chat_id}; retrying after {exc.value}s")
             await asyncio.sleep(exc.value)
         except Exception as exc:
+            detail = f"{type(exc).__name__}: {exc}"
+            if "BOT_METHOD_INVALID" in detail or "GetHistory" in detail:
+                logger.info(
+                    f"[SYNC] Telegram bot accounts cannot read historical messages from "
+                    f"{chat_id}; waiting for new webhook/channel updates."
+                )
+                continue
             logger.info(
-                f"[SYNC] Recent history unavailable for {chat_id}: "
-                f"{type(exc).__name__}: {exc}"
+                f"[SYNC] Recent history unavailable for {chat_id}: {detail}"
             )
     indexed = sum(item.get("indexed", 0) for item in results)
     if indexed:
@@ -2549,7 +2564,14 @@ async def start_pyrogram():
             await _register_main_client()
             await _start_extra_clients()
             await restore_cached_strm_files()
-            await register_telegram_webhook()
+            webhook_ok, webhook_url, webhook_detail = await register_telegram_webhook()
+            if webhook_ok:
+                logger.info(f"[WEBHOOK] Primary bot update delivery active: {webhook_url}")
+            else:
+                logger.warning(
+                    f"[WEBHOOK] Primary bot webhook is not active: {webhook_detail}. "
+                    f"Use /webhook-link to activate it from a browser."
+                )
             return
         except AuthKeyDuplicated as e:
             logger.warning(f"[PYROGRAM] AUTH_KEY_DUPLICATED (attempt {attempt}): {e}")
