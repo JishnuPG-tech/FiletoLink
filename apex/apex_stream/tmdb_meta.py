@@ -52,9 +52,61 @@ _EXTRA_STOP = {
 
 _ALL_STOP = _STOP_TOKENS | _EXTRA_STOP | _ALL_LANG_TOKENS
 
+# Dotted release/quality anchors: when a trailing dotted segment follows one of
+# these, it is almost always an uploader group tag (".x264.Pah", ".WEB-DL.XYZ")
+# and safe to drop — genuine dotted titles like "K.G.F.Chapter.2" contain none.
+_QUALITY_ANCHORS = {
+    "720p", "1080p", "2160p", "1440p", "480p", "360p",
+    "x264", "x265", "h264", "h265", "hevc", "avc", "aac", "ac3",
+    "web-dl", "webdl", "webrip", "hdrip", "bdrip", "brrip", "hdtv",
+    "remux", "bluray", "blu-ray", "10bit", "8bit", "truehd", "dts",
+    "ddp5", "tvrip", "dvdrip", "dvd", "web", "amzn", "nf", "netflix",
+    "mkv", "mp4", "avi", "mov", "ts", "m2ts",
+}
+
+
+def _drop_dotted_group_tail(text: Optional[str]) -> str:
+    """Drop a trailing dotted release-group (".x264.Pah" -> ".x264").
+
+    Preserves genuine dotted title segments ("K.G.F.Chapter.2.2022") because
+    those contain no release/quality anchor; only content AFTER the last
+    recognized anchor segment is treated as group residue. Keeps tails that
+    carry a year or a language/release token (real subtitle-less variants).
+    """
+    if not text:
+        return text or ""
+    stripped = text.strip()
+    # Strip a real media extension so ".mkv" is never mistaken for a group,
+    # but keep ".Pah"-style tails (not real extensions) so they can be detected.
+    ext_re = re.split(r"(?i)\.(?:mkv|mp4|avi|mov|m4v|webm|ts|m2ts|mpg|mpeg|wmv|flv|iso)\s*$", stripped)
+    base = ext_re[0]
+    if "." not in base:
+        return text
+    parts = base.split(".")
+    last_anchor = None
+    for i, part in enumerate(parts):
+        if part.strip().lower() in _QUALITY_ANCHORS:
+            last_anchor = i
+    if last_anchor is None:
+        return text
+    tail = parts[last_anchor + 1:]
+    if not tail:
+        return text
+    tail_text = " ".join(p.strip() for p in tail)
+    if re.search(r"\b(?:19|20)\d{2}\b", tail_text):
+        return text
+    # Keep a language token so detect_language still sees it after the drop
+    # (e.g. ".1080p.Kannada"); pure codec/group residue is always dropped.
+    if _ALL_LANG_TOKENS & set(re.findall(r"[a-z0-9]+", tail_text.lower())):
+        return text
+    return ".".join(parts[: last_anchor + 1])
+
 
 def _sig_tokens(text: str) -> set:
     toks = {t for t in re.findall(r"[a-z0-9]+", text.lower()) if t not in _ALL_STOP}
+    # A lone 4-digit token is a numeric title (e.g. the film "2018"), not a year.
+    if len(toks) == 1 and next(iter(toks)).isdigit() and len(next(iter(toks))) == 4:
+        return toks
     return {t for t in toks if not (t.isdigit() and len(t) == 4)}
 
 
@@ -102,7 +154,7 @@ def _drop_group_tags(text: str) -> str:
 
 def _remove_tokens(text: str, tokens: set) -> str:
     for tok in sorted(tokens, key=len, reverse=True):
-        if len(tok) < 3:
+        if len(tok) < 2:
             continue
         text = re.sub(
             r"(?<![a-z0-9])" + re.escape(tok) + r"(?![a-z0-9])", " ", text,
@@ -120,12 +172,27 @@ def _detect_year(text: Optional[str]) -> Optional[int]:
 
 def _clean_search_title(text: str) -> str:
     """A title ready to send to the TMDB search API (no year/release tags)."""
-    text = _strip_noise(text or "")
+    text = _strip_noise(_drop_dotted_group_tail(text))
     text = YEAR_RE.sub(" ", text)
     text = re.sub(r"\(\s*\)", " ", text)
     text = _remove_tokens(text, _ALL_STOP)
     text = _drop_group_tags(text)
     return " ".join(text.lower().split())
+
+
+def _numeric_title_fallback(raw: str) -> str:
+    """Recover a numeric-only title eaten by the year remover.
+
+    MYSTERY_2018.2018.Malayalam.1080p -> "2018" (the film "2018"), while a real
+    year ("2008", "2015") in the tag tail still reads as `year`. Rebuilds the
+    first dotted numeric run when the stop-token pipeline emptied the title.
+    """
+    if not raw:
+        return ""
+    for token in re.split(r"[._\-\s]+", raw.strip()):
+        if re.fullmatch(r"(?:19|20)\d{2}", token):
+            return token
+    return ""
 
 
 def _extract_tv(filename: str):
@@ -161,7 +228,7 @@ def parse_media_meta(filename_or_caption: Optional[str]) -> Dict:
       clean_title (folder-safe movie/show title w/ year removed),
       search_title (TMDB query), language
     """
-    raw = _strip_noise(filename_or_caption or "")
+    raw = _strip_noise(_drop_dotted_group_tail(filename_or_caption or ""))
     if not raw:
         return {
             "is_tv": False, "title": "Unknown_Media", "show_name": None,
@@ -193,6 +260,10 @@ def parse_media_meta(filename_or_caption: Optional[str]) -> Dict:
         }
 
     movie_title = _clean_search_title(raw)
+    if not movie_title:
+        # Numeric-only/recovered titles: "2018.2018.Malayalam.1080p" is the
+        # Malayalam film "2018", not a bare year; TMDB knows it by that name.
+        movie_title = _numeric_title_fallback(filename_or_caption or raw)
     if not movie_title:
         movie_title = "Unknown_Media"
     display = safe_folder(movie_title.title() or movie_title)

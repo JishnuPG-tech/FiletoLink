@@ -87,6 +87,36 @@ class TestParseMediaMeta:
         assert meta["year"] == 2023
         assert "dead reckoning" in meta["search_title"]
 
+    def test_dotted_release_group_stripped(self):
+        meta = parse_media_meta("Premam.2015.Malayalam.1080p.x264.Pah")
+        assert meta["is_tv"] is False
+        assert meta["year"] == 2015
+        assert meta["search_title"] == "premam"
+        assert meta["clean_title"] == "Premam"
+
+    def test_dotted_group_after_bluray_anchor(self):
+        meta = parse_media_meta("Inception.2010.1080p.BluRay.x264.DTS-WiKi")
+        assert meta["search_title"] == "inception"
+        assert "wiki" not in meta["search_title"]
+
+    def test_short_stop_tokens_removed(self):
+        meta = parse_media_meta("Njan.Gandharvan.2023.1080p.Malayalam.HQ")
+        assert meta["search_title"] == "njan gandharvan"
+        assert "hq" not in meta["search_title"]
+
+    def test_numeric_only_title_recovered(self):
+        meta = parse_media_meta("2018.2018.Malayalam.1080p")
+        assert meta["is_tv"] is False
+        assert meta["title"] == "2018"
+        assert meta["search_title"] == "2018"
+        assert meta["year"] == 2018
+
+    def test_numeric_title_with_release_year(self):
+        meta = parse_media_meta("1917.2019.1080p.x264")
+        assert meta["is_tv"] is False
+        assert meta["title"] == "1917"
+        assert meta["search_title"] == "1917"
+
 
 class TestBestTmdbMatch:
     def test_exact_film(self):
@@ -118,6 +148,22 @@ class TestBestTmdbMatch:
 
     def test_empty_results(self):
         assert best_tmdb_match([], "Whatever", "movie") is None
+
+    def test_numeric_title_matches(self):
+        results = [
+            {"id": 451048, "title": "2018", "release_date": "2023-05-05", "original_language": "ml"},
+            {"id": 999, "title": "Player", "release_date": "2018-06-14"},
+        ]
+        hit = best_tmdb_match(results, "2018", "movie", 2018)
+        assert hit is not None
+        assert hit["id"] == 451048
+
+    def test_expected_none_no_match(self):
+        # A lone 4-digit token that matches nothing still returns None.
+        assert best_tmdb_match(
+            [{"id": 7, "title": "Dune", "release_date": "2021-10-22"}],
+            "2099", "movie",
+        ) is None
 
 
 class TestNfoBuilders:
