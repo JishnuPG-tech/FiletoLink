@@ -574,3 +574,101 @@ async def ops_jellyfin_cache_patch(request: Request):
         return JSONResponse({"ok": False, "error": f"cache write failed: {exc}"}, status_code=500)
 
     return JSONResponse({"ok": True, "old": old, "new": entry})
+
+
+@router.post("/apex/ops/jellyfin/repositories")
+async def ops_jellyfin_repositories(request: Request):
+    """Write the plugin repository list straight into system.xml.
+
+    Body: {"repositories": [{"Name": "...", "Url": "...", "Enabled": true}]}
+
+    Hardened Jellyfin builds strip POST /Repositories (the API returns 405,
+    which also breaks the web UI's add-repository dialog with a
+    'r.map is not a function' crash). The server reads the repo list from
+    the <PluginRepositories> element of system.xml at start-up, so this
+    writes that element directly on the /data volume. Jellyfin only picks
+    it up once the process (re)starts.
+    """
+    if not _is_admin(request):
+        return _denied()
+
+    cfg_path = os.path.join(JELLYFIN_ROOT, "config", "system.xml")
+    if not os.path.isfile(cfg_path):
+        return JSONResponse({"ok": False, "error": "system.xml not found"}, status_code=404)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "body must be JSON"}, status_code=400)
+
+    repositories = payload.get("repositories")
+    if not isinstance(repositories, list):
+        return JSONResponse({"ok": False, "error": "'repositories' must be a list"}, status_code=400)
+
+    import xml.etree.ElementTree as ET
+
+    try:
+        tree = ET.parse(cfg_path)
+        root = tree.getroot()
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"system.xml unreadable: {exc}"}, status_code=500)
+
+    repos_el = root.find(".//PluginRepositories")
+    if repos_el is None:
+        repos_el = ET.SubElement(root, "PluginRepositories")
+    for child in list(repos_el):
+        repos_el.remove(child)
+
+    for repo in repositories:
+        name = str(repo.get("Name") or repo.get("name") or "").strip()
+        url = str(repo.get("Url") or repo.get("url") or "").strip()
+        if not name or not url:
+            return JSONResponse({"ok": False, "error": "each repository needs Name and Url"}, status_code=400)
+        item = ET.SubElement(repos_el, "RepositoryInfo")
+        ET.SubElement(item, "Name").text = name
+        ET.SubElement(item, "Url").text = url
+        ET.SubElement(item, "Enabled").text = "true" if repo.get("Enabled", True) else "false"
+
+    tmp_path = cfg_path + ".tmp"
+    try:
+        tree.write(tmp_path, encoding="utf-8", xml_declaration=True)
+        with open(tmp_path, "rb+") as fh:
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, cfg_path)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"system.xml write failed: {exc}"}, status_code=500)
+
+    return JSONResponse({
+        "ok": True,
+        "wrote": len(repositories),
+        "note": "Jellyfin reads this at start-up; restart the app (Space Restart) to apply.",
+    })
+
+
+@router.post("/apex/ops/space/restart")
+async def ops_space_restart(request: Request):
+    """Restart the HF Space runtime (no rebuild) so the Jellyfin process
+    re-reads system.xml / config from the /data volume.
+    """
+    if not _is_admin(request):
+        return _denied()
+
+    token = os.environ.get("HF_TOKEN", "").strip()
+    space_id = (os.environ.get("SPACE_ID") or os.environ.get("SPACE_REPO_NAME") or "").strip()
+    if not space_id or "/" not in space_id:
+        return JSONResponse({"ok": False, "error": "SPACE_ID env not set"}, status_code=500)
+    if not token:
+        return JSONResponse({"ok": False, "error": "HF_TOKEN not available"}, status_code=500)
+
+    import aiohttp
+
+    owner, name = space_id.split("/", 1)
+    url = f"https://huggingface.co/api/spaces/{owner}/{name}/restart"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers={"Authorization": f"Bearer {token}"}, timeout=20) as resp:
+                body = await resp.text()
+                return JSONResponse({"ok": resp.status < 300, "status": resp.status, "detail": body[:400]})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"restart call failed: {exc}"}, status_code=502)
