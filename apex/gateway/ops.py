@@ -186,6 +186,7 @@ async def ops_tmdb_probe(tmdb_id: int = 1248251, request: Request = None):
         return _denied()
     import aiohttp
     import socket
+    import sys
     import urllib.parse
 
     tmdb_key = os.environ.get("TMDB_API_KEY", "").strip().strip('"')
@@ -195,24 +196,34 @@ async def ops_tmdb_probe(tmdb_id: int = 1248251, request: Request = None):
         return JSONResponse({"ok": False, "error": "no TMDB_API_KEY in env"})
     qs = urllib.parse.urlencode({"api_key": tmdb_key})
     url = f"https://api.themoviedb.org/3/movie/{tmdb_id}?{qs}"
+    out = {"py": sys.version.split()[0], "aiohttp": aiohttp.__version__}
     try:
+        import json as _json
         connector = aiohttp.TCPConnector(family=socket.AF_INET)
         async with aiohttp.ClientSession(connector=connector) as session:
-            async with session.get(url, timeout=15) as resp:
+            async with session.get(
+                url, timeout=15, headers={"Accept-Encoding": "identity"}
+            ) as resp:
+                out["status"] = resp.status
+                out["content_type"] = resp.headers.get("Content-Type")
+                out["resp_charset"] = getattr(resp, "charset", None)
                 raw = await resp.read()
-                j = await resp.json()
-                return JSONResponse({
-                    "ok": True,
-                    "status": resp.status,
-                    "content_type": resp.headers.get("Content-Type"),
-                    "raw_hex_head": raw[:512].hex(),
-                    "raw_head": raw[:512].decode("utf-8", errors="replace"),
-                    "title": j.get("title"),
-                    "original_title": j.get("original_title"),
-                    "original_title_repr": repr(j.get("original_title")),
-                })
+                out["raw_len"] = len(raw)
+                # Manual utf-8 decode of the raw bytes:
+                manual = _json.loads(raw.decode("utf-8", errors="replace"))
+                out["manual_original_title"] = repr(manual.get("original_title"))
+                out["manual_has_malayalam"] = "മോളിവുഡ്" in (manual.get("original_title") or "")
+                # aiohttp's own json() on a fresh request:
+                async with session.get(
+                    url, timeout=15, headers={"Accept-Encoding": "identity"}
+                ) as resp2:
+                    j = await resp2.json()
+                    out["json_original_title"] = repr(j.get("original_title"))
+                    out["json_has_malayalam"] = "മോളിവുഡ്" in (j.get("original_title") or "")
+                    out["json_title"] = j.get("title")
+        return JSONResponse(out)
     except Exception as exc:
-        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}", **out})
 
 
 @router.post("/apex/ops/jellyfin/reset")
