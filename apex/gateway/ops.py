@@ -368,7 +368,7 @@ async def ops_jellyfin_theme(request: Request):
         })
 
 
-@router.api_route("/apex/ops/jellyfin/api", methods=["GET", "POST", "DELETE"])
+@router.api_route("/apex/ops/jellyfin/api", methods=["GET", "POST", "PUT", "DELETE"])
 async def ops_jellyfin_api(request: Request):
     """Admin-gated passthrough to the internal Jellyfin API.
 
@@ -390,8 +390,8 @@ async def ops_jellyfin_api(request: Request):
         return JSONResponse({"ok": False, "error": "No Jellyfin API key available"}, status_code=503)
 
     method = str(request.query_params.get("method") or request.method or "GET").upper()
-    if method not in ("GET", "POST", "DELETE"):
-        return JSONResponse({"ok": False, "error": "method must be GET, POST or DELETE"}, status_code=400)
+    if method not in ("GET", "POST", "PUT", "DELETE"):
+        return JSONResponse({"ok": False, "error": "method must be GET, POST, PUT or DELETE"}, status_code=400)
 
     api_path = str(request.query_params.get("path") or "").lstrip("/")
     if not api_path:
@@ -400,7 +400,7 @@ async def ops_jellyfin_api(request: Request):
         return JSONResponse({"ok": False, "error": "Invalid path"}, status_code=400)
 
     json_body = None
-    if method == "POST":
+    if method in ("POST", "PUT"):
         raw_body = request.query_params.get("body")
         if raw_body is None:
             try:
@@ -586,16 +586,14 @@ async def ops_jellyfin_cache_patch(request: Request):
 
 @router.post("/apex/ops/jellyfin/repositories")
 async def ops_jellyfin_repositories(request: Request):
-    """Write the plugin repository list straight into system.xml.
+    """Write the plugin repository list straight into the on-disk system.xml.
 
     Body: {"repositories": [{"Name": "...", "Url": "...", "Enabled": true}]}
 
-    Hardened Jellyfin builds strip POST /Repositories (the API returns 405,
-    which also breaks the web UI's add-repository dialog with a
-    'r.map is not a function' crash). The server reads the repo list from
-    the <PluginRepositories> element of system.xml at start-up, so this
-    writes that element directly on the /data volume. Jellyfin only picks
-    it up once the process (re)starts.
+    Fallback helper that edits the live <PluginRepositories> element so the
+    server reads it at the next start-up. Preferred path is the API
+    passthrough (POST /Repositories via /apex/ops/jellyfin/api), which Jellyfin
+    applies immediately and which its write-back loop also mirrors to /data.
     """
     if not _is_admin(request):
         return _denied()

@@ -1,14 +1,64 @@
 import os
+import asyncio
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from gateway.utils import get_http_client, proxy_http_request, proxy_websocket_stream
-from gateway.ops import router as ops_router
+from gateway.ops import router as ops_router, _jellyfin_auth_header, _JELLYFIN_BASE
 
 logger = logging.getLogger("gateway.main")
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="OpenCode Space Gateway", docs_url=None, redoc_url=None)
+# Default plugin catalog repository, guaranteed at startup so online plugins
+# always show up in the web UI after every boot/rebuild (Jellyfin reads the
+# repo list into memory at startup; the live config is mirrored to /data by
+# the write-back loop, so an API-set repo also survives restarts).
+DEFAULT_PLUGIN_REPO = {
+    "Name": "Jellyfin Stable",
+    "Url": "https://repo.jellyfin.org/files/plugin/manifest.json",
+    "Enabled": True,
+}
+
+async def ensure_jellyfin_plugin_repository() -> None:
+    """Idempotently configure the plugin repository on the live Jellyfin server."""
+    import aiohttp
+
+    for attempt in range(1, 61):
+        await asyncio.sleep(2)
+        headers = _jellyfin_auth_header()
+        if not headers:
+            continue
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{_JELLYFIN_BASE}/Repositories", headers=headers, timeout=5
+                ) as resp:
+                    if resp.status != 200:
+                        continue
+                    repos = await resp.json()
+                    if isinstance(repos, list) and any(
+                        isinstance(r, dict) and str(r.get("Url")) == DEFAULT_PLUGIN_REPO["Url"]
+                        for r in repos
+                    ):
+                        logger.info("[PLUGINS] Repository already configured.")
+                        return
+                async with session.post(
+                    f"{_JELLYFIN_BASE}/Repositories", headers=headers, json=[DEFAULT_PLUGIN_REPO], timeout=10
+                ) as resp:
+                    if resp.status in (200, 204):
+                        logger.info("[PLUGINS] Plugin repository configured via API (attempt %s).", attempt)
+                        return
+        except Exception:
+            continue
+    logger.warning("[PLUGINS] Could not ensure plugin repository during startup window.")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    asyncio.create_task(ensure_jellyfin_plugin_repository())
+    yield
+
+app = FastAPI(title="OpenCode Space Gateway", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 app.include_router(ops_router)
 
