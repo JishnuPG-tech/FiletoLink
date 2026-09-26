@@ -253,20 +253,21 @@
 			}
 
 			function imageDimensions(type) {
-				const dpr = Math.min(window.devicePixelRatio || 1, 2);
+				const dpr = Math.max(window.devicePixelRatio || 1, 2);
 				if (type === 'Logo') {
-					return { width: Math.min(960, Math.ceil(window.innerWidth * 0.55 * dpr)), height: Math.min(360, Math.ceil(120 * dpr)) };
+					return { width: Math.min(1920, Math.ceil(window.innerWidth * 0.75 * dpr)), height: Math.min(480, Math.ceil(160 * dpr)) };
 				}
-				return { width: Math.min(2560, Math.ceil(window.innerWidth * dpr)), height: Math.min(1440, Math.ceil(window.innerHeight * dpr)) };
+				return { width: Math.max(1920, Math.ceil(window.innerWidth * dpr)), height: Math.max(1080, Math.ceil(window.innerHeight * dpr)) };
 			}
 
-			function imageUrl(itemId, type, index = null) {
+			function imageUrl(itemId, type, index = null, tag = null) {
 				const suffix = index == null ? '' : `/${index}`;
-				if (type === 'Backdrop') {
-					return `${base}/Items/${itemId}/Images/${type}${suffix}?quality=100&maxWidth=3840`;
+				const tagParam = tag ? `&tag=${tag}` : '';
+				if (type === 'Backdrop' || type === 'Thumb') {
+					return `${base}/Items/${itemId}/Images/${type}${suffix}?quality=100&maxWidth=3840${tagParam}`;
 				}
 				const { width, height } = imageDimensions(type);
-				return `${base}/Items/${itemId}/Images/${type}${suffix}?quality=96&maxWidth=${width}&maxHeight=${height}`;
+				return `${base}/Items/${itemId}/Images/${type}${suffix}?quality=100&maxWidth=${width}&maxHeight=${height}${tagParam}`;
 			}
 
 			async function fetchImage(url, signal) {
@@ -382,43 +383,56 @@
 				return response.ok ? response.json() : {};
 			}
 
-			async function fetchItems(signal) {
-				const MIN_ITEMS = 5;
-				const MAX_ITEMS = 7;
+			function shuffleArray(arr) {
+				const shuffled = [...arr];
+				for (let i = shuffled.length - 1; i > 0; i--) {
+					const j = Math.floor(Math.random() * (i + 1));
+					[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+				}
+				return shuffled;
+			}
 
-				const [resumeResult, nextUpResult] = await Promise.allSettled([
-					fetchJson(`${base}/Users/${userId}/Items/Resume?Limit=3&Recursive=true&IncludeItemTypes=Movie,Episode&Fields=${FIELDS}`, signal),
-					fetchJson(`${base}/Shows/NextUp?Limit=5&UserId=${userId}&Fields=${FIELDS}`, signal)
+			async function fetchItems(signal) {
+				const MIN_ITEMS = 6;
+				const MAX_ITEMS = 8;
+
+				// Fetch a generous pool of random movies from Jellyfin
+				const [randomMoviesResult, resumeResult] = await Promise.allSettled([
+					fetchJson(`${base}/Users/${userId}/Items?Recursive=true&IncludeItemTypes=Movie&SortBy=Random&Limit=40&Fields=${FIELDS}&ImageTypes=Backdrop,Primary,Thumb,Logo`, signal),
+					fetchJson(`${base}/Users/${userId}/Items/Resume?Limit=2&Recursive=true&IncludeItemTypes=Movie,Episode&Fields=${FIELDS}`, signal)
 				]);
 				if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-				const resumeItems = resumeResult.status === 'fulfilled' ? resumeResult.value.Items || [] : [];
-				const nextUpItems = nextUpResult.status === 'fulfilled' ? nextUpResult.value.Items || [] : [];
-				const combined = [
-					...resumeItems.map(item => ({ ...item, _source: 'resume' })),
-					...nextUpItems.map(item => ({ ...item, _source: 'nextup' }))
-				];
-				const picked = new Map(combined.map(item => [item.Id, item]));
 
-				// Tier 2: top up with recently added movies if below the target minimum.
-				if (picked.size < MIN_ITEMS) {
-					try {
-						const recentMovies = await fetchJson(`${base}/Users/${userId}/Items?Limit=${MAX_ITEMS}&Recursive=true&SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=Movie&Fields=${FIELDS}`, signal);
-						for (const item of recentMovies.Items || []) {
-							if (picked.size >= MAX_ITEMS) break;
-							if (!picked.has(item.Id)) picked.set(item.Id, { ...item, _source: 'recent-movie' });
-						}
-					} catch (error) {
-						if (error.name === 'AbortError') throw error;
+				const picked = new Map();
+
+				// If there is an active in-progress item, include it first so resume is convenient
+				const resumeItems = resumeResult.status === 'fulfilled' ? resumeResult.value.Items || [] : [];
+				for (const item of resumeItems) {
+					if (item?.Id && !picked.has(item.Id)) {
+						picked.set(item.Id, { ...item, _source: 'resume' });
+						break; // Max 1 resume item so the top section stays a vibrant random showcase
 					}
 				}
 
-				// Tier 3: still below the minimum -> top up with recently added shows.
+				// Populate the rest with true randomized movies from the library
+				const rawMovies = randomMoviesResult.status === 'fulfilled' ? randomMoviesResult.value.Items || [] : [];
+				const randomizedMovies = shuffleArray(rawMovies);
+				for (const item of randomizedMovies) {
+					if (picked.size >= MAX_ITEMS) break;
+					if (item?.Id && !picked.has(item.Id)) {
+						picked.set(item.Id, { ...item, _source: 'random-movie' });
+					}
+				}
+
+				// Fallback Tier: if library has very few movies, supplement with recently added items or shows
 				if (picked.size < MIN_ITEMS) {
 					try {
-						const recentShows = await fetchJson(`${base}/Users/${userId}/Items?Limit=${MAX_ITEMS}&Recursive=true&SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=Series&Fields=${FIELDS}`, signal);
-						for (const item of recentShows.Items || []) {
+						const recentItems = await fetchJson(`${base}/Users/${userId}/Items?Limit=${MAX_ITEMS}&Recursive=true&SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=Movie,Series&Fields=${FIELDS}`, signal);
+						for (const item of recentItems.Items || []) {
 							if (picked.size >= MAX_ITEMS) break;
-							if (!picked.has(item.Id)) picked.set(item.Id, { ...item, _source: 'recent-show' });
+							if (item?.Id && !picked.has(item.Id)) {
+								picked.set(item.Id, { ...item, _source: 'recent-fallback' });
+							}
 						}
 					} catch (error) {
 						if (error.name === 'AbortError') throw error;
@@ -487,35 +501,41 @@
 			function itemImageUrls(item) {
 				const isEpisode = item.Type === 'Episode';
 				const artworkId = isEpisode ? item.SeriesId || item.Id : item.Id;
+				const backdropTag = item.BackdropImageTags && item.BackdropImageTags.length > 0 ? item.BackdropImageTags[0] : null;
+				const thumbTag = item.ImageTags ? item.ImageTags.Thumb : null;
+				const primaryTag = item.ImageTags ? item.ImageTags.Primary : null;
+				const logoTag = item.ImageTags ? item.ImageTags.Logo : null;
 				return {
-					primary: imageUrl(artworkId, 'Primary'),
-					backdrop: imageUrl(artworkId, 'Backdrop', 0),
-					logo: imageUrl(artworkId, 'Logo')
+					primary: imageUrl(artworkId, 'Primary', null, primaryTag),
+					backdrop: imageUrl(artworkId, 'Backdrop', 0, backdropTag),
+					thumb: imageUrl(artworkId, 'Thumb', null, thumbTag),
+					logo: imageUrl(artworkId, 'Logo', null, logoTag)
 				};
 			}
 
 			async function fetchArtwork(item, signal) {
 				const urls = itemImageUrls(item);
 				const logoPromise = fetchImage(urls.logo, signal);
-				// Always prefer high-res widescreen backdrop over tiny episode snapshot
-				const preferBackdrop = localStorage.getItem('abyss-prefer-backdrop') !== 'false';
-				let backdrop;
+				let backdrop = null;
 				let primaryBackdrop = false;
-				if (preferBackdrop) {
-					backdrop = await fetchImage(urls.backdrop, signal);
-					if (!backdrop && urls.primary) {
-						backdrop = await fetchImage(urls.primary, signal);
-						primaryBackdrop = true;
-					}
-				} else {
-					backdrop = urls.primary ? await fetchImage(urls.primary, signal) : null;
-					primaryBackdrop = Boolean(backdrop);
-					if (!backdrop) {
-						backdrop = await fetchImage(urls.backdrop, signal);
-						primaryBackdrop = false;
-					}
+				let usedThumb = false;
+
+				// 1. Try high-res 1080p widescreen backdrop
+				backdrop = await fetchImage(urls.backdrop, signal);
+
+				// 2. If backdrop not found, try 1080p horizontal thumb/landscape
+				if (!backdrop && urls.thumb) {
+					backdrop = await fetchImage(urls.thumb, signal);
+					if (backdrop) usedThumb = true;
 				}
-				return { backdrop, logo: await logoPromise, primaryBackdrop };
+
+				// 3. Fallback to Primary poster only if neither horizontal asset exists
+				if (!backdrop && urls.primary) {
+					backdrop = await fetchImage(urls.primary, signal);
+					primaryBackdrop = true;
+				}
+
+				return { backdrop, logo: await logoPromise, primaryBackdrop, usedThumb };
 			}
 
 			function queuePreload() {
@@ -581,7 +601,7 @@
 
 				try {
 					const syncUrl = artwork.backdrop
-						? (artwork.primaryBackdrop ? itemImageUrls(item).primary : itemImageUrls(item).backdrop)
+						? (artwork.primaryBackdrop ? itemImageUrls(item).primary : (artwork.usedThumb ? itemImageUrls(item).thumb : itemImageUrls(item).backdrop))
 						: null;
 					if (syncUrl) {
 						window.parent.postMessage({ type: 'abyss-spotlight', action: 'backdrop-sync', url: syncUrl }, window.location.origin);

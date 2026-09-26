@@ -501,3 +501,37 @@ class TestNfoRepair:
 
     def test_missing_file_not_flagged(self, tmp_path):
         assert nfo_needs_repair(str(tmp_path / "nope.nfo")) is False
+
+    def test_generate_fallback_backdrop_hd_dimensions(self, tmp_path):
+        import sys, types
+        from unittest.mock import MagicMock
+        pg = sys.modules.setdefault("pyrogram", types.ModuleType("pyrogram"))
+        pg.__path__ = []
+        pg.Client = MagicMock()
+        pg.filters = MagicMock()
+        for sub in ("raw", "raw.functions", "raw.types", "enums", "types"):
+            mod = types.ModuleType(f"pyrogram.{sub}")
+            mod.ChatType = MagicMock()
+            mod.Message = MagicMock()
+            sys.modules[f"pyrogram.{sub}"] = mod
+        err_mod = types.ModuleType("pyrogram.errors")
+        err_mod.FloodWait = type("FloodWait", (Exception,), {})
+        err_mod.RPCError = type("RPCError", (Exception,), {})
+        err_mod.AuthKeyDuplicated = type("AuthKeyDuplicated", (Exception,), {})
+        sys.modules["pyrogram.errors"] = err_mod
+
+        from tg_streamer import _generate_fallback_backdrop
+        from PIL import Image
+
+        poster = tmp_path / "poster.jpg"
+        backdrop = tmp_path / "backdrop.jpg"
+
+        # Create a mock poster
+        img = Image.new("RGB", (600, 900), color=(180, 40, 40))
+        img.save(str(poster), "JPEG")
+
+        assert _generate_fallback_backdrop(str(poster), str(backdrop)) is True
+        assert backdrop.exists()
+
+        with Image.open(str(backdrop)) as out_img:
+            assert out_img.size == (1920, 1080)

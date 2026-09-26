@@ -1210,26 +1210,39 @@ async def _download_image(session, url, save_path):
 def _generate_fallback_backdrop(poster_path: str, backdrop_path: str) -> bool:
     """Generate a crisp 1920x1080 cinematic backdrop from poster when TMDB lacks one."""
     try:
-        from PIL import Image, ImageFilter, ImageEnhance
+        from PIL import Image
         if not os.path.exists(poster_path) or os.path.getsize(poster_path) < 1000:
             return False
         with Image.open(poster_path) as img:
             img = img.convert("RGB")
             target_w, target_h = 1920, 1080
+            # Scale poster to fill 1920x1080 while keeping crisp 1080p resolution
             bg_scale = max(target_w / img.width, target_h / img.height)
-            bg = img.resize((int(img.width * bg_scale), int(img.height * bg_scale)), Image.Resampling.LANCZOS)
-            left = (bg.width - target_w) // 2
-            top = (bg.height - target_h) // 2
+            new_w = int(img.width * bg_scale)
+            new_h = int(img.height * bg_scale)
+            bg = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            # Center-crop focused on the upper-mid area (faces & action art)
+            left = (new_w - target_w) // 2
+            top = max(0, int((new_h - target_h) * 0.25))
+            if top + target_h > new_h:
+                top = new_h - target_h
             bg = bg.crop((left, top, left + target_w, top + target_h))
-            bg = bg.filter(ImageFilter.GaussianBlur(radius=30))
-            enhancer = ImageEnhance.Brightness(bg)
-            bg = enhancer.enhance(0.4)
-            p_h = int(target_h * 0.9)
-            p_w = int(img.width * (p_h / img.height))
-            p_resized = img.resize((p_w, p_h), Image.Resampling.LANCZOS)
-            bg.paste(p_resized, ((target_w - p_w) // 2, (target_h - p_h) // 2))
-            bg.save(backdrop_path, "JPEG", quality=95)
-            logger.info(f"[ARTWORK] Generated 1080p fallback backdrop: {backdrop_path}")
+
+            # Apply a smooth cinematic vignette on the left 40% so hero UI text is legible
+            mask = Image.new("L", (target_w, target_h), 255)
+            mask_data = []
+            for y in range(target_h):
+                for x in range(target_w):
+                    if x < 800:
+                        val = int(140 + (x / 800.0) * 115)
+                    else:
+                        val = 255
+                    mask_data.append(val)
+            mask.putdata(mask_data)
+            dark_bg = Image.new("RGB", (target_w, target_h), (12, 12, 16))
+            composite = Image.composite(bg, dark_bg, mask)
+            composite.save(backdrop_path, "JPEG", quality=96)
+            logger.info(f"[ARTWORK] Generated crisp 1080p cinematic backdrop: {backdrop_path}")
             return True
     except Exception as exc:
         logger.warning(f"[ARTWORK] Fallback backdrop error: {exc}")
@@ -1464,10 +1477,11 @@ async def _enrich_media_metadata(entry):
             return False
 
         tmdb_id = hit.get("id")
+        img_lang_param = "en,null,hi,ta,te,ml,bn,mr,kn,pa"
         if is_tv:
-            detail = await _tmdb_get(f"/tv/{tmdb_id}", {"append_to_response": f"images,season/{int(entry.get('season') or 1)}"})
+            detail = await _tmdb_get(f"/tv/{tmdb_id}", {"append_to_response": f"images,season/{int(entry.get('season') or 1)}", "include_image_language": img_lang_param})
         else:
-            detail = await _tmdb_get(f"/movie/{tmdb_id}", {"append_to_response": "images"})
+            detail = await _tmdb_get(f"/movie/{tmdb_id}", {"append_to_response": "images", "include_image_language": img_lang_param})
 
         if not detail:
             logger.info(f"[TMDB] No detail for tmdb_id={tmdb_id} ({query})")
@@ -1508,17 +1522,19 @@ async def _enrich_media_metadata(entry):
         async with aiohttp.ClientSession(connector=connector) as session:
 
             def _best_image(detail_key):
-                base = detail.get(detail_key)
-                if not base:
-                    images_data = detail.get("images") or {}
-                    img_type = "backdrops" if "backdrop" in detail_key else "posters"
-                    img_list = images_data.get(img_type) or []
-                    if img_list:
-                        best = max(img_list, key=lambda x: (x.get("width", 0), x.get("vote_average", 0)))
-                        base = best.get("file_path")
-                if not base:
-                    return None
-                return f"https://image.tmdb.org/t/p/original{base}"
+                images_data = detail.get("images") or {}
+                img_type = "backdrops" if "backdrop" in detail_key else "posters"
+                img_list = list(images_data.get(img_type) or [])
+                top_path = detail.get(detail_key)
+                if top_path and not any(x.get("file_path") == top_path for x in img_list):
+                    img_list.append({"file_path": top_path, "width": 1280, "vote_average": 0})
+                if img_list:
+                    # Choose highest resolution (1080p, 4K) image, breaking ties with vote_average
+                    best = max(img_list, key=lambda x: (x.get("width", 0), x.get("vote_average", 0)))
+                    base = best.get("file_path")
+                    if base:
+                        return f"https://image.tmdb.org/t/p/original{base}"
+                return None
 
             art_dir = show_root if is_tv else target_dir
 
@@ -3893,11 +3909,27 @@ async def _reconcile_and_upgrade_library():
                 continue
 
             backdrop = os.path.join(target_dir, "backdrop.jpg")
+            thumb = os.path.join(target_dir, "thumb.jpg")
+            landscape = os.path.join(target_dir, "landscape.jpg")
+            fanart = os.path.join(target_dir, "fanart.jpg")
             logo = os.path.join(target_dir, "logo.png")
             poster = os.path.join(target_dir, "poster.jpg")
+
+            # Mirror backdrop to thumb/landscape/fanart if backdrop is already HD
+            if os.path.exists(backdrop) and os.path.getsize(backdrop) >= 100000:
+                for extra in (fanart, landscape, thumb):
+                    if not os.path.exists(extra):
+                        try:
+                            with open(backdrop, "rb") as s, open(extra, "wb") as d:
+                                d.write(s.read())
+                        except OSError:
+                            pass
+
             needs_hd = (
                 not os.path.exists(backdrop)
                 or os.path.getsize(backdrop) < 300000
+                or not os.path.exists(thumb)
+                or not os.path.exists(landscape)
                 or not os.path.exists(logo)
                 or not os.path.exists(poster)
                 or os.path.getsize(poster) < 80000

@@ -3317,12 +3317,21 @@ header.MuiAppBar-root [class*="serverName"],
     display: none !important;
 }
 
-/* 12. Crisp Card & Image Rendering */
+/* 12. Crisp Card & Image Rendering - True HD Smooth Filtering */
 .cardImage,
 .cardContent,
-.cardImageContainer {
-    image-rendering: -webkit-optimize-contrast;
-    image-rendering: crisp-edges;
+.cardImageContainer,
+.cardScalable,
+.cardPadder,
+.cardBox,
+.card-withdetails,
+.innerCardContainer,
+.backdropImage {
+    image-rendering: auto !important;
+    image-rendering: high-quality !important;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    transform: translateZ(0);
 }
 
 /* 13. Android & Mobile Perfection */
