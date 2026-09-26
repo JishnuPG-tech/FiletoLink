@@ -947,13 +947,19 @@ async def _tmdb_search(media_type, query, year=None):
 
 
 _AI_TITLE_SYSTEM = (
-    "You are a release-filename parser. Given a movie/series release filename, "
-    "return a strict JSON object {\"title\": string|null, \"year\": int|null}. "
-    "Strip ALL release junk: extensions (.mkv/.mp4), codecs (DD+5.1, DTS-MA, "
-    "1080p, 720p, x264, x265, WEB-DL), OTT brands (JioHotstar, Hotstar, "
-    "JioCinema, SonyLiv, Zee5, MXPlayer), group tags, languages, and channel "
-    "indicators. Only the true series/movie title and its release year. "
-    "No explanation, no markdown fences, only the JSON object."
+    "You resolve the REAL official title of movies and TV series from Telegram "
+    "release filenames, including Indian (Malayalam, Tamil, Telugu, Hindi, "
+    "Kannada) and international OTT releases. Strip ALL release junk: "
+    "extensions (.mkv/.mp4), codecs (DD+5.1, DTS-MA, 1080p, x264, x265, WEB-DL), "
+    "resolution/channel/sample markers, OTT brands (JioHotstar, Hotstar, "
+    "JioCinema, SonyLiv, Zee5, MXPlayer), uploader group tags, languages, and "
+    "trailing jabber. Then use your knowledge of films to recover the exact "
+    "official title even when the release name is mangled or abbreviated "
+    "(e.g. \"Mollywood Times Jhs\" -> \"Mollywood Times\"; \"Obsession 6CH\" "
+    "-> \"Obsession\"). Return the title exactly as TMDB/IMDb list it, with the "
+    "real release year. Return a strict JSON object "
+    "{\"title\": string|null, \"year\": int|null}. Only the JSON object, no "
+    "explanations, no markdown fences."
 )
 
 
@@ -1093,24 +1099,97 @@ async def _enrich_media_metadata(entry):
             if hit:
                 break
         # AI-tier-2 fallback: rule parsing + TMDB all missed; ask the LLM to
-        # pull the canonical title (it handles ANY format/OTT junk), then retry
-        # TMDB once before giving up.
+        # resolve the canonical title (it knows real-world films and handles ANY
+        # release junk), then retry TMDB — single-type first, then multi-search —
+        # dropping the year if a year-filtered search comes back empty.
+        ai_title = ai_year = None
         if not hit:
             ai_title, ai_year = await _ai_extract_title(
                 entry.get("file_name") or entry.get("raw_name") or entry.get("title")
             )
             if ai_title and ai_title != used_query:
                 year_hint = ai_year or entry.get("year")
-                try:
-                    results = await _tmdb_search(media_type, ai_title, year_hint)
-                except Exception as _exc:
-                    results = []
-                hit = best_tmdb_match(results, ai_title, media_type, year_hint)
+                while year_hint:
+                    try:
+                        results = await _tmdb_search(media_type, ai_title, year_hint)
+                    except Exception as _exc:
+                        results = []
+                    hit = best_tmdb_match(results, ai_title, media_type, year_hint)
+                    if hit:
+                        break
+                    try:
+                        mres = await _tmdb_get(
+                            "/search/multi",
+                            {"query": ai_title, "include_adult": "false"},
+                        )
+                    except Exception as _exc:
+                        mres = None
+                    results = mres.get("results") or [] if mres else []
+                    hit = best_tmdb_match(results, ai_title, media_type, year_hint)
+                    if hit or not year_hint:
+                        break
+                    year_hint = None
                 if hit:
                     used_query = ai_title
                     logger.info(f"[AI-TITLE] '{entry.get('title')}' -> '{ai_title}' (tmdb_id={hit.get('id')})")
-        query = used_query
+        query = used_query or ai_title or ""
+        # AI-tier-3: parsing + TMDB all failed but the AI resolved a canonical
+        # title. Publish a minimal NFO so Jellyfin shows the correct name instead
+        # of the release-junk folder name; posters are written only when TMDB
+        # data exists.
         if not hit:
+            if ai_title and target_dir:
+                os.makedirs(target_dir, exist_ok=True)
+                base_date = f"{ai_year}-01-01" if ai_year else ""
+                minimal = {
+                    "title": ai_title,
+                    "original_title": ai_title,
+                    "release_date": base_date,
+                    "vote_average": "",
+                    "vote_count": "",
+                    "runtime": "",
+                    "overview": "",
+                    "tagline": "",
+                    "imdb_id": "",
+                    "id": "",
+                    "genres": [],
+                    "production_countries": [],
+                }
+                if is_tv:
+                    nfo_root = show_root or target_dir
+                    os.makedirs(nfo_root, exist_ok=True)
+                    nfo_path = os.path.join(nfo_root, "tvshow.nfo")
+                    if not os.path.exists(nfo_path):
+                        with open(nfo_path, "w", encoding="utf-8") as f:
+                            f.write(build_tvshow_nfo({
+                                **minimal,
+                                "name": ai_title,
+                                "original_name": ai_title,
+                                "first_air_date": base_date,
+                                "episode_run_time": [],
+                            }))
+                else:
+                    nfo_path = os.path.join(
+                        target_dir, f"{entry.get('strm_base', strm_base(entry))}.nfo"
+                    )
+                    if not os.path.exists(nfo_path):
+                        with open(nfo_path, "w", encoding="utf-8") as f:
+                            f.write(build_movie_nfo(minimal))
+                prev = FILE_ID_CACHE.get(key)
+                if isinstance(prev, dict):
+                    prev["tmdb_title"] = ai_title
+                    prev["tmdb_year"] = ai_year
+                    FILE_ID_CACHE[key] = prev
+                    await save_cache_async()
+                logger.info(f"[AI-FALLBACK] Published canonical title '{ai_title}' (no TMDB match)")
+                try:
+                    if entry.get("strm_path"):
+                        asyncio.create_task(refresh_jellyfin_item_by_path(entry.get("strm_path")))
+                    else:
+                        asyncio.create_task(request_jellyfin_scan())
+                except Exception as scan_exc:
+                    logger.warning(f"[TMDB] Metadata published but Jellyfin refresh failed: {scan_exc}")
+                return True
             logger.warning(
                 f"[TMDB] No match for '{query}' (tv={is_tv}, year={entry.get('year')}); "
                 "verify the filename/title or add a TMDB title hint in the caption."

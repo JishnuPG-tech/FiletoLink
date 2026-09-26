@@ -202,6 +202,12 @@ _ISO_LANG_CODES = {
     "ja", "zh", "es", "fr", "de", "ru", "ar", "pt", "id", "it",
 }
 
+# Audio channel markers ("6CH", "5.1", "2Ch", "DD5.1CH" -> "5 1 ch"). After
+# `_strip_noise` these become "6ch", "5 1 ch"; a bare "NCH" token is never part
+# of a real film title and must be removed from search queries ("Obsession
+# 2025 1080p 6CH x265" -> "Obsession").
+_CHANNEL_TOKEN_RE = re.compile(r"(?i)^\d{1,2}(?:\.\d)?ch$")
+
 # TRUE audio/codec channel anchors. A trailing run is only dropped when it
 # contains one of these, so quality tokens ("1080p", "x264") or a lone digit
 # never eat a real number in a title ("K.G.F. Chapter 2", "Room 237").
@@ -234,11 +240,16 @@ def _strip_audio_lang_tail(text: str) -> str:
     while i >= 0:
         tok = parts[i].lower().lstrip("-_.")
         npfx, dash, mark = tok.partition("-ma")
-        is_anchor = tok in _AUDIO_WORDS or (dash and npfx in _AUDIO_WORDS)
+        is_channel = bool(_CHANNEL_TOKEN_RE.match(tok))
+        is_anchor = (
+            tok in _AUDIO_WORDS
+            or (dash and npfx in _AUDIO_WORDS)
+            or is_channel
+        )
         is_ma = tok == "ma"
         is_digit = bool(re.fullmatch(r"\d[\d.]*", tok.strip(".-_")))
         is_short = (len(tok) == 1 and tok.isalpha()) or tok in _ISO_LANG_CODES
-        is_word_junk = tok in _TAIL_RUN_WORDS or is_ma or is_short
+        is_word_junk = tok in _TAIL_RUN_WORDS or is_ma or is_short or is_channel
         if not (is_anchor or is_digit or is_word_junk):
             break
         run.append((tok, is_anchor))
@@ -273,6 +284,7 @@ def _clean_search_title(text: str) -> str:
     # still present to anchor the trailing pattern.
     text = _strip_audio_lang_tail(text)
     text = _remove_tokens(text, _ALL_STOP)
+    text = " ".join(t for t in text.split() if not _CHANNEL_TOKEN_RE.match(t))
     text = _drop_group_tags(text)
     return " ".join(text.lower().split())
 
@@ -283,6 +295,8 @@ def _significant_token_stream(text: str):
     stop_tokens = _ALL_STOP
     for tok in re.findall(r"[a-z0-9]+", (text or "").lower()):
         if tok in stop_tokens or (tok.isdigit() and len(tok) != 4):
+            continue
+        if _CHANNEL_TOKEN_RE.match(tok):
             continue
         # Drop ambiguous fragments ripped off a release token ("1080p"->"p",
         # "DTS-MA"->"ma", "WEB-DL"->"dl") that add no matching value and only

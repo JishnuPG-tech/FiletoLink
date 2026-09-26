@@ -135,6 +135,24 @@ class TestParseMediaMeta:
         assert meta["year"] == 2022
         assert meta["search_title"] == "k g f chapter 2"
 
+    def test_channel_marker_stripped(self):
+        meta = parse_media_meta(
+            "Obsession.2025.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+        )
+        assert meta["is_tv"] is False
+        assert meta["year"] == 2025
+        assert meta["search_title"] == "obsession"
+        assert "6ch" not in meta["search_title"]
+
+    def test_channel_marker_lower_and_glued(self):
+        meta = parse_media_meta("Thudakkam.2026.720p.WEB-DL.DD+5.1.5.1ch.mkv")
+        assert meta["search_title"] == "thudakkam"
+        assert "ch" not in meta["search_title"].split()
+
+    def test_channel_marker_mid_run(self):
+        meta = parse_media_meta("Movie.2024.1080p.6CH.HEVC.mkv")
+        assert meta["search_title"] == "movie"
+
     def test_codec_ma_tail_stripped(self):
         meta = parse_media_meta("Interstellar (2014) 1080p DTS-MA Hindi.mkv")
         assert meta["year"] == 2014
