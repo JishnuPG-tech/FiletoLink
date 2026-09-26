@@ -30,6 +30,45 @@ router = APIRouter(tags=["Ops"])
 JELLYFIN_ROOT = "/data/jellyfin"
 APEX_ROOT = "/data/apex"
 
+def _jellyfin_auth_header() -> dict:
+    """Build a MediaBrowser Authorization header accepted by Jellyfin 12+.
+
+    Uses the APEX_JELLYFIN_API_KEY secret first, then any active row from the
+    server's api_keys table. Returns {} when no key is available.
+    """
+    key = os.environ.get("APEX_JELLYFIN_API_KEY", "").strip().strip('"')
+    if not key:
+        for db in ("/opt/jellyfin-local/data/data/jellyfin.db", os.path.join(JELLYFIN_ROOT, "data", "data", "jellyfin.db")):
+            if os.path.exists(db):
+                try:
+                    import sqlite3
+                    with sqlite3.connect(db, timeout=5) as conn:
+                        cur = conn.cursor()
+                        cur.execute("PRAGMA table_info('api_keys')")
+                        columns = [r[1] for r in cur.fetchall()]
+                        if "AccessToken" in columns:
+                            if "IsActive" in columns:
+                                cur.execute("SELECT AccessToken FROM api_keys WHERE IsActive IS NOT 0 ORDER BY DateCreated DESC LIMIT 1")
+                            else:
+                                cur.execute("SELECT AccessToken FROM api_keys ORDER BY DateCreated DESC LIMIT 1")
+                            row = cur.fetchone()
+                            if row and row[0]:
+                                key = str(row[0]).strip()
+                                break
+                except Exception as e:
+                    logger.warning(f"[JELLYFIN] Could not read api_keys table from {db}: {e}")
+    if not key:
+        logger.warning("[JELLYFIN] No API key available for library refresh.")
+        return {}
+    return {
+        "Authorization": (
+            'MediaBrowser Client="ApexOps", Device="Gateway", '
+            'DeviceId="apex-ops", Version="12.1.0", '
+            f'Token="{key}"'
+        ),
+        "Accept": "application/json",
+    }
+
 INITIAL_DIRS = [
     os.path.join(JELLYFIN_ROOT, "data"),
     os.path.join(JELLYFIN_ROOT, "config"),
@@ -212,7 +251,11 @@ async def ops_jellyfin_scan(request: Request):
         return _denied()
     import aiohttp
 
-    async with aiohttp.ClientSession() as session:
+    headers = _jellyfin_auth_header()
+    if not headers:
+        return JSONResponse({"ok": False, "error": "No Jellyfin API key available"}, status_code=503)
+
+    async with aiohttp.ClientSession(headers=headers) as session:
         for attempt in range(6):
             if attempt:
                 logger.info(f"Retrying Jellyfin scan (attempt {attempt + 1})...")
