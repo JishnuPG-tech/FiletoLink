@@ -265,3 +265,97 @@ async def ops_jellyfin_scan(request: Request):
             except Exception:
                 await asyncio.sleep(5)
     return JSONResponse({"ok": False, "error": "Jellyfin not reachable after retries"}, status_code=502)
+
+
+# Netflix-style community skin for the Jellyfin web UI. Injected through the
+# server's own System/Configuration CustomCss field so it applies server-wide
+# and survives restarts (it is persisted in the /data/jellyfin/config volume).
+JELLYFIN_THEME_CSS = (
+    '@import url("https://raw.githubusercontent.com/Automationxperts/jellyflix/main/default.css");\n'
+    '@import url("https://raw.githubusercontent.com/Automationxperts/jellyflix/main/Logo.css");\n'
+    "/* App bar / sidebar logo */\n"
+    ".imgLogoIcon {\n"
+    "content: url('https://raw.githubusercontent.com/Automationxperts/jellyflix/main/img/logo.png') !important; }\n"
+    "/* Main Drawer Mobile Logo */\n"
+    ".adminDrawerLogo img {\n"
+    "content: url('https://raw.githubusercontent.com/Automationxperts/jellyflix/main/img/logo.png') !important; }\n"
+    "/* Home Page Logo */\n"
+    ".pageTitleWithLogo {\n"
+    "background-image: url('https://raw.githubusercontent.com/Automationxperts/jellyflix/main/img/logo.png') !important; }\n"
+)
+
+_JELLYFIN_BASE = "http://127.0.0.1:8096"
+
+
+@router.post("/apex/ops/jellyfin/theme")
+async def ops_jellyfin_theme(request: Request):
+    """Apply (or clear) the server-wide custom-CSS skin on the Jellyfin web UI.
+
+    Body: {"css": "<custom css>"}          -> replace; omit/empty to clear
+          {"action": "status"}              -> report current value only
+    The CSS is written through the Jellyfin API (System/Configuration) so it is
+    persisted by the server inside the /data/jellyfin/config volume and thus
+    survives every container restart.
+    """
+    if not _is_admin(request):
+        return _denied()
+    import aiohttp
+
+    headers = _jellyfin_auth_header()
+    if not headers:
+        return JSONResponse({"ok": False, "error": "No Jellyfin API key available"}, status_code=503)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    async with aiohttp.ClientSession(headers=headers) as session:
+        try:
+            async with session.get(f"{_JELLYFIN_BASE}/System/Configuration", timeout=10) as resp:
+                if resp.status != 200:
+                    return JSONResponse({"ok": False, "error": f"GET System/Configuration -> {resp.status}"}, status_code=502)
+                cfg = await resp.json()
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"GET System/Configuration failed: {exc}"}, status_code=502)
+
+        current = str(cfg.get("CustomCss") or "")
+
+        if str(payload.get("action") or "").lower() == "status":
+            return JSONResponse({
+                "ok": True,
+                "applied": bool(current.strip()),
+                "css_len": len(current),
+                "css": current,
+            })
+
+        css = str(payload.get("css") or "").strip()
+        if not css:
+            css = JELLYFIN_THEME_CSS
+
+        changed = current != css
+        cfg["CustomCss"] = css
+        try:
+            async with session.post(f"{_JELLYFIN_BASE}/System/Configuration", json=cfg, timeout=10) as resp:
+                if resp.status not in (200, 204):
+                    return JSONResponse({"ok": False, "error": f"POST System/Configuration -> {resp.status}"}, status_code=502)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"POST System/Configuration failed: {exc}"}, status_code=502)
+
+        # Confirm the server actually persisted it (unknown XML fields are ignored).
+        confirmed = False
+        try:
+            async with session.get(f"{_JELLYFIN_BASE}/System/Configuration", timeout=10) as resp:
+                if resp.status == 200:
+                    confirmed = str((await resp.json()).get("CustomCss") or "").strip() == css
+        except Exception:
+            pass
+
+        return JSONResponse({
+            "ok": True,
+            "changed": changed,
+            "confirmed": confirmed,
+            "theme": "JellyFlix",
+            "prev_css_len": len(current),
+            "new_css_len": len(css),
+        })
