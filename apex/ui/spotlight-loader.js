@@ -407,9 +407,71 @@
       } catch (e) {}
     }
 
+    function isSettingsRoute() {
+      var hash = (window.location.hash || "").toLowerCase();
+      if (
+        hash === "" ||
+        hash === "#/" ||
+        hash.startsWith("#/home") ||
+        hash.startsWith("#/movies") ||
+        hash.startsWith("#/tv") ||
+        hash.startsWith("#/music") ||
+        hash.startsWith("#/item") ||
+        hash.startsWith("#/details") ||
+        hash.startsWith("#/search") ||
+        hash.startsWith("#/video") ||
+        hash.startsWith("#/favorites")
+      ) {
+        return false;
+      }
+      return (
+        hash.includes("dashboard") ||
+        hash.includes("settings") ||
+        hash.includes("preference") ||
+        hash.includes("configuration") ||
+        hash.includes("wizard") ||
+        hash.includes("userprofile") ||
+        hash.includes("useredit") ||
+        hash.includes("devices") ||
+        hash.includes("apikeys") ||
+        hash.includes("notifications") ||
+        hash.includes("activity") ||
+        hash.includes("logs") ||
+        Boolean(document.querySelector("#dashboardPage, .pageWithSidebar, .adminDrawerLogo, .dashboardSection"))
+      );
+    }
+
+    function syncSettingsTheme() {
+      var isSettings = isSettingsRoute();
+      var themeLink = document.querySelector('link[data-abyss-theme]');
+      if (themeLink && themeLink.disabled !== isSettings) {
+        themeLink.disabled = isSettings;
+      }
+      var customCss = document.getElementById("customCss");
+      if (customCss && customCss.disabled !== isSettings) {
+        customCss.disabled = isSettings;
+      }
+      if (isSettings) {
+        document.documentElement.classList.add("jellyfin-default-settings");
+        document.documentElement.classList.remove("abyss-theme-active");
+        clearSpotlightBackdrop();
+        if (currentIframe) {
+          currentIframe.style.display = "none";
+        }
+      } else {
+        document.documentElement.classList.remove("jellyfin-default-settings");
+        document.documentElement.classList.add("abyss-theme-active");
+      }
+    }
+
     var installScheduled = false;
 
     var scheduleInstall = function () {
+      syncSettingsTheme();
+      if (isSettingsRoute()) {
+        replaceServerNameText();
+        return;
+      }
       ensureDarkTheme();
       replaceServerNameText();
       var alreadyGood =
@@ -435,12 +497,17 @@
       }
     };
 
+    syncSettingsTheme();
     ensureDarkTheme();
     replaceServerNameText();
+    window.addEventListener("hashchange", syncSettingsTheme);
     if (typeof MutationObserver === "function") {
       safe(function () {
         if (document.documentElement) {
-          var themeObserver = new MutationObserver(ensureDarkTheme);
+          var themeObserver = new MutationObserver(function () {
+            syncSettingsTheme();
+            if (!isSettingsRoute()) ensureDarkTheme();
+          });
           themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
         }
         if (document.body) {
@@ -456,6 +523,7 @@
     // visibility sync every 2s, so stale SPA navigation state self-corrects
     // without needing a hard refresh.
     setInterval(function () {
+      syncSettingsTheme();
       scheduleInstall();
       replaceServerNameText();
       if (currentSync) safe(currentSync);

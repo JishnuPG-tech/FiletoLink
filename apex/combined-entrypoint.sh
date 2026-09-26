@@ -220,6 +220,14 @@ PY
     echo "[JELLYFIN] Configured server name as Apex in $SYSTEM_XML"
 fi
 
+# Ensure custom CSS in branding.xml does not force theme into admin pages
+for bcfg in "$LOCAL_ROOT/config/branding.xml" "/data/jellyfin/config/branding.xml"; do
+    if [ -f "$bcfg" ]; then
+        sed -i 's|<CustomCss>[^<]*abyss[^<]*</CustomCss>|<CustomCss></CustomCss>|g' "$bcfg" 2>/dev/null || true
+        sed -i 's|<CustomCss>[^<]*ElegantFin[^<]*</CustomCss>|<CustomCss></CustomCss>|g' "$bcfg" 2>/dev/null || true
+    fi
+done
+
 echo "[HEALTH] Jellyfin starting in background (local datadir)..."
 launch_jellyfin
 

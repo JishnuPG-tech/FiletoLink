@@ -655,21 +655,7 @@ html[data-theme="dark"] .MuiDialog-paper {
     backdrop-filter: blur(var(--abyss-glass-blur));
 }
 
-html[data-theme="dark"] .MuiDrawer-paper {
-    background-color: #141416 !important;
-    border-radius: 20px !important;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
-    border: solid 1px rgba(255, 255, 255, 0.12) !important;
-    left: 16px;
-    top: 16px;
-    bottom: 16px;
-    padding: 16px 0;
-    max-height: calc(100vh - 32px);
-    width: 280px !important;
-    max-width: 85vw !important;
-    -webkit-backdrop-filter: blur(20px);
-    backdrop-filter: blur(20px);
-}
+
 
 html[data-theme="dark"] .MuiDrawer-paper .MuiDivider-root {
     display: none;
@@ -801,21 +787,7 @@ html.abyss-spotlight-visible[data-theme="dark"] .MuiAppBar-root+div[aria-hidden=
 
 
 
-/* Navigation / drawer */
-.editPageSidebar,
-.mainDrawer {
-    background-color: #141416 !important;
-    margin: 16px 0;
-    border-radius: 20px !important;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-    border: solid 1px rgba(255, 255, 255, 0.12) !important;
-    width: 280px !important;
-    max-width: 85vw !important;
-}
 
-.mainDrawer.drawer-open {
-    margin: 24px;
-}
 
 .sidebarHeader {
     margin: 0.9em 0 0.2em;
@@ -2012,30 +1984,7 @@ body:has(#videoOsdPage) .skinHeader .MuiTypography-root.MuiTypography-body1 {
 }
 
 
-/* 9. DASHBOARD & ADMIN */
 
-.dashboardSection h3 {
-    margin: .5em 0em .5em .5em;
-}
-
-.dashboardSection .sectionTitleTextButton>.material-icons.material-icons {
-    margin-top: .5em;
-    margin-bottom: .5em;
-    margin-right: .2em;
-}
-
-#dashboardPage .playbackProgress>div {
-    background-color: rgba(var(--abyss-accent), 0.75) !important;
-}
-
-#dashboardPage .transcodingProgress>div {
-    background-color: rgba(var(--abyss-accent), 0.35) !important;
-}
-
-.navMenuOption-selected {
-    background: rgb(var(--abyss-accent)) !important;
-    color: #121212 !important;
-}
 
 
 /* 10. ITEM DETAIL PAGE */
@@ -2538,10 +2487,7 @@ body:has(#videoOsdPage) .skinHeader .MuiTypography-root.MuiTypography-body1 {
         font-size: 2em;
     }
 
-    .MuiDrawer-paper {
-        width: 280px !important;
-        max-width: 85vw !important;
-    }
+
 }
 
 @media screen and (max-height: 26em) and (orientation: landscape) {
