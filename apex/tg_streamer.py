@@ -2520,7 +2520,8 @@ async def _sync_configured_channel_once():
     results = []
     for chat_id in targets:
         try:
-            await _scan_chat_history(chat_id, limit=25, indexed_list=results)
+            sync_limit = int(os.environ.get("SYNC_HISTORY_LIMIT", "1000" if (tg_user and getattr(tg_user, "is_connected", False)) else "100"))
+            await _scan_chat_history(chat_id, limit=sync_limit, indexed_list=results)
         except FloodWait as exc:
             logger.info(f"[SYNC] FloodWait for {chat_id}; retrying after {exc.value}s")
             await asyncio.sleep(exc.value)
