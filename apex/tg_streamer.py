@@ -85,7 +85,10 @@ API_ID = get_env(
 API_HASH = get_env(
     "JELLYFIN_API_HASH", "TELEGRAM_API_HASH", "TG_API_HASH", "API_HASH"
 )
-BOT_TOKEN = get_env("TELEGRAM_BOT_TOKEN", "TG_BOT_TOKEN")
+BOT_TOKEN = get_env("TELEGRAM_BOT_TOKEN", "TG_BOT_TOKEN", "BOT_TOKEN")
+USER_SESSION_STRING = get_env(
+    "USER_SESSION_STRING", "SESSION_STRING", "TG_SESSION_STRING", "STRING_SESSION", default=""
+)
 RAW_CHANNEL_ID = get_env("TELEGRAM_ALLOWED_CHAT_IDS", "TG_CHANNEL_ID", default="")
 TMDB_API_KEY = get_env("TMDB_API_KEY")
 
@@ -325,46 +328,78 @@ async def _warm_channel_peer(client, chat_id):
 
 
 async def _refresh_file_reference(client, chat_id, message_id):
-    """Re-resolve a fresh media file reference through `client`.
+    """Re-resolve a fresh media file reference.
 
     Telegram file references are short-lived tokens, so on FILE_REFERENCE_EXPIRED
     the source message must be re-fetched via get_messages() and the fresh
-    file_id / file_size written back into FILE_ID_CACHE. Each pool client runs
-    this through its own connection so a refresh is never shared across bots.
-    Returns (file_id, file_size) or None when this client cannot re-resolve it.
+    file_id / file_size written back into FILE_ID_CACHE.
+    Tries through `client` first. If `client` lacks channel access (e.g. an extra
+    bot not added as an administrator to the channel) or fails, falls back to
+    `tg_app` (the primary bot) or other available pool clients so that expired
+    references can be recovered without requiring manual reforwarding.
+    Returns (file_id, file_size) or None when no client can re-resolve it.
     """
-    try:
-        message = await client.get_messages(chat_id, message_id)
-    except Exception as e:
-        logger.warning(
-            f"[REFRESH] get_messages({chat_id}, {message_id}) failed: {type(e).__name__}: {e}"
-        )
-        # Pyrogram's get_peer_type() rejects channel ids wider than the legacy
-        # signed-int32 range ("Peer id invalid"), so a fresh client cannot
-        # resolve the chat. Warm the client's peer cache via raw
-        # channels.GetChannels, then retry once.
-        if not (isinstance(e, ValueError) and await _warm_channel_peer(client, chat_id)):
+    async def _try_fetch(c):
+        if not c:
             return None
         try:
-            message = await client.get_messages(chat_id, message_id)
-        except Exception as e2:
+            msg = await c.get_messages(chat_id, message_id)
+        except Exception as e:
             logger.warning(
-                f"[REFRESH] get_messages({chat_id}, {message_id}) retry failed: "
-                f"{type(e2).__name__}: {e2}"
+                f"[REFRESH] get_messages({chat_id}, {message_id}) failed on {getattr(c, 'name', '?')}: {type(e).__name__}: {e}"
             )
-            return None
-    media = (
-        (message.video or message.document or message.audio or message.animation)
-        if message else None
-    )
-    file_id = getattr(media, "file_id", None) if media else None
-    if not file_id:
-        logger.warning(
-            f"[REFRESH] message {chat_id}:{message_id} no longer carries fresh media "
-            f"(media={type(media).__name__ if media else None})"
+            if not (isinstance(e, ValueError) and await _warm_channel_peer(c, chat_id)):
+                return None
+            try:
+                msg = await c.get_messages(chat_id, message_id)
+            except Exception as e2:
+                logger.warning(
+                    f"[REFRESH] get_messages({chat_id}, {message_id}) retry failed on {getattr(c, 'name', '?')}: "
+                    f"{type(e2).__name__}: {e2}"
+                )
+                return None
+        m = (
+            (msg.video or msg.document or msg.audio or msg.animation)
+            if msg else None
         )
-        return None
-    return file_id, int(getattr(media, "file_size", 0) or 0)
+        f_id = getattr(m, "file_id", None) if m else None
+        if not f_id:
+            return None
+        return f_id, int(getattr(m, "file_size", 0) or 0)
+
+    # 1. Primary candidate: the requesting client
+    res = await _try_fetch(client)
+    if res is not None:
+        return res
+
+    # 2. High-priority fallback: primary bot client (tg_app)
+    tg_app_client = globals().get("tg_app")
+    if tg_app_client is not None and tg_app_client is not client and getattr(tg_app_client, "is_connected", False):
+        res = await _try_fetch(tg_app_client)
+        if res is not None:
+            logger.info(f"[REFRESH] recovered fresh reference {chat_id}:{message_id} via primary bot client")
+            return res
+
+    # 3. Fallback: user client (tg_user) if present
+    tg_user_client = globals().get("tg_user")
+    if tg_user_client is not None and tg_user_client is not client and getattr(tg_user_client, "is_connected", False):
+        res = await _try_fetch(tg_user_client)
+        if res is not None:
+            logger.info(f"[REFRESH] recovered fresh reference {chat_id}:{message_id} via user client")
+            return res
+
+    # 4. Fallback: any other connected extra clients
+    for _, extra_c in globals().get("extra_clients", []):
+        if extra_c is not client and extra_c is not tg_app_client and getattr(extra_c, "is_connected", False):
+            res = await _try_fetch(extra_c)
+            if res is not None:
+                logger.info(f"[REFRESH] recovered fresh reference {chat_id}:{message_id} via extra client {getattr(extra_c, 'name', '?')}")
+                return res
+
+    logger.warning(
+        f"[REFRESH] message {chat_id}:{message_id} no longer carries fresh media on any client"
+    )
+    return None
 
 
 def _is_expired_reference(exc):
@@ -852,6 +887,24 @@ if tg_app:
         is_channel_post = bool(message.chat and message.chat.type == ChatType.CHANNEL)
         await process_telegram_media(message, is_channel_post)
     logger.info("[PYROGRAM] Message & channel-post media handlers registered.")
+
+# Optional Pyrogram User Account Client (bypasses bot restrictions on reading past channel history)
+tg_user = None
+if API_ID and API_HASH and USER_SESSION_STRING:
+    try:
+        tg_user = Client(
+            "tg_user_session",
+            api_id=int(API_ID),
+            api_hash=API_HASH,
+            session_string=USER_SESSION_STRING,
+            workdir=DATA_DIR,
+            in_memory=True,
+            no_updates=True,
+            max_concurrent_transmissions=APEX_CFG.telegram_max_concurrent,
+        )
+        logger.info("[PYROGRAM] Pyrogram user account client initialized.")
+    except Exception as e:
+        logger.error(f"[PYROGRAM] Error initializing Pyrogram user client: {e}")
 
 logger.info(
     "[CONFIG] Jellyfin Telegram primary bot: api_id=%s api_hash=%s bot_token=%s "
@@ -2335,43 +2388,117 @@ async def register_webhook_route(request):
     return web.json_response({"ok": ok, "url": url, "description": desc, "purpose": "activate bot connection"})
 
 
-async def _scan_chat_history(chat_id, limit, indexed_list):
-    """Scan one chat's history and re-ingest every media message into FILE_ID_CACHE + .strm."""
+async def _process_and_index_message(message, chat_id):
+    """Ingest a single Pyrogram message into FILE_ID_CACHE and create .strm."""
+    if not message or getattr(message, "empty", False):
+        return False, False
+    media = message.video or message.document or message.audio or message.animation
+    if not media or not getattr(media, "file_id", None):
+        return False, False
+    chat = message.chat
+    msg_chat_id = chat.id if chat else chat_id
+    if msg_chat_id is None or not allowed_chat(chat):
+        return False, False
+    msg_id = message.id
+    existing = _cache_lookup(msg_id, msg_chat_id)
+    if isinstance(existing, dict) and existing.get("file_id") == media.file_id:
+        return False, True
+    file_name = media_file_name(message, media)
+    if subtitle_is_document(file_name, getattr(media, "mime_type", None)):
+        placed = await _place_subtitle(msg_id, msg_chat_id, media.file_id, file_name)
+        logger.info(f"[REINDEX] Subtitle handled: {file_name} placed={placed}")
+        return False, True
+    entry = _meta_to_entry(msg_chat_id, msg_id, media.file_id, media.file_size or 0, file_name)
+    if _is_unknown_media(entry):
+        return False, True
+    FILE_ID_CACHE[_cache_key(msg_chat_id, msg_id)] = entry
+    strm_name = await create_strm_file_async(entry)
+    logger.info(f"[REINDEX] Re-ingested '{strm_name}' (msg {msg_id}, chat {msg_chat_id})")
+    return True, False
+
+
+async def _scan_chat_history(chat_id, limit, indexed_list, from_id=None, to_id=None):
+    """Scan one chat's history and re-ingest every media message into FILE_ID_CACHE + .strm.
+
+    Supports:
+    1. User account client (tg_user) which has unrestricted access to full channel history.
+    2. Explicit ID range scan (from_id to to_id) via get_messages().
+    3. Standard get_chat_history() with automatic fallback to sequential ID scanning for bots.
+    """
     indexed = 0
     skipped = 0
-    async for message in tg_app.get_chat_history(chat_id, limit=limit):
-        media = message.video or message.document or message.audio or message.animation
-        if not media or not getattr(media, "file_id", None):
-            continue
-        chat = message.chat
-        msg_chat_id = chat.id if chat else chat_id
-        if msg_chat_id is None or not allowed_chat(chat):
-            continue
-        msg_id = message.id
-        existing = _cache_lookup(msg_id, msg_chat_id)
-        if isinstance(existing, dict) and existing.get("file_id") == media.file_id:
-            skipped += 1
-            continue
-        file_name = media_file_name(message, media)
-        if subtitle_is_document(file_name, getattr(media, "mime_type", None)):
-            placed = await _place_subtitle(msg_id, msg_chat_id, media.file_id, file_name)
-            logger.info(f"[REINDEX] Subtitle handled: {file_name} placed={placed}")
-            skipped += 1
-            continue
-        entry = _meta_to_entry(msg_chat_id, msg_id, media.file_id, media.file_size or 0, file_name)
-        if _is_unknown_media(entry):
-            skipped += 1
-            continue
-        FILE_ID_CACHE[_cache_key(msg_chat_id, msg_id)] = entry
-        strm_name = await create_strm_file_async(entry)
-        logger.info(f"[REINDEX] Re-ingested '{strm_name}' (msg {msg_id}, chat {msg_chat_id})")
-        indexed += 1
+    scanner = tg_user if ("tg_user" in globals() and tg_user and getattr(tg_user, "is_connected", False)) else tg_app
+    if not scanner:
+        indexed_list.append({"chat_id": chat_id, "indexed": 0, "skipped": 0})
+        return
+
+    # Mode 1: Explicit ID range scan (e.g. from_id=1 to_id=500)
+    if from_id is not None and to_id is not None:
+        start_id = min(int(from_id), int(to_id))
+        end_id = max(int(from_id), int(to_id))
+        all_ids = list(range(start_id, end_id + 1))
+        for i in range(0, len(all_ids), 50):
+            batch_ids = all_ids[i:i + 50]
+            try:
+                msgs = await scanner.get_messages(chat_id, batch_ids)
+                if not isinstance(msgs, list):
+                    msgs = [msgs]
+                for msg in msgs:
+                    did_idx, did_skp = await _process_and_index_message(msg, chat_id)
+                    if did_idx:
+                        indexed += 1
+                    elif did_skp:
+                        skipped += 1
+            except Exception as e:
+                logger.warning(f"[REINDEX] ID range batch {batch_ids[0]}..{batch_ids[-1]} failed on {chat_id}: {e}")
+            await asyncio.sleep(0.05)
+        indexed_list.append({"chat_id": chat_id, "indexed": indexed, "skipped": skipped, "range": f"{start_id}..{end_id}"})
+        return
+
+    # Mode 2: get_chat_history (works for user accounts, or channels with bot history rights)
+    try:
+        async for message in scanner.get_chat_history(chat_id, limit=limit):
+            did_idx, did_skp = await _process_and_index_message(message, chat_id)
+            if did_idx:
+                indexed += 1
+            elif did_skp:
+                skipped += 1
+    except Exception as exc:
+        detail = f"{type(exc).__name__}: {exc}"
+        if "BOT_METHOD_INVALID" in detail or "GetHistory" in detail:
+            # Standard Telegram bots cannot call GetHistory, but admin bots CAN call get_messages by ID!
+            known_ids = [
+                int(e.get("message_id") or e.get("msg_id"))
+                for e in FILE_ID_CACHE.values()
+                if str(e.get("chat_id")) == str(chat_id) and (e.get("message_id") or e.get("msg_id"))
+            ]
+            max_id = max(known_ids) if known_ids else max(50, limit)
+            min_id = max(1, max_id - limit)
+            logger.info(f"[REINDEX] Bot history fallback: checking IDs {min_id}..{max_id} via get_messages()")
+            all_ids = list(range(min_id, max_id + 1))
+            for i in range(0, len(all_ids), 50):
+                batch_ids = all_ids[i:i + 50]
+                try:
+                    msgs = await scanner.get_messages(chat_id, batch_ids)
+                    if not isinstance(msgs, list):
+                        msgs = [msgs]
+                    for msg in msgs:
+                        did_idx, did_skp = await _process_and_index_message(msg, chat_id)
+                        if did_idx:
+                            indexed += 1
+                        elif did_skp:
+                            skipped += 1
+                except Exception as be:
+                    logger.debug(f"[REINDEX] Batch ID scan error on {chat_id}: {be}")
+                await asyncio.sleep(0.05)
+        else:
+            raise
     indexed_list.append({"chat_id": chat_id, "indexed": indexed, "skipped": skipped})
 
 
 async def _sync_configured_channel_once():
     """Recover recent channel posts when webhook delivery is delayed or missed."""
-    if not tg_app or not tg_app.is_connected:
+    if (not tg_app or not tg_app.is_connected) and (not tg_user or not getattr(tg_user, "is_connected", False)):
         return
     targets = []
     for raw in (RAW_CHANNEL_ID or "").split(","):
@@ -2478,13 +2605,15 @@ async def reindex_route(request):
     """
     if not _is_review_admin(request):
         return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
-    if not tg_app or not tg_app.is_connected:
+    if (not tg_app or not tg_app.is_connected) and (not tg_user or not getattr(tg_user, "is_connected", False)):
         return web.json_response({"ok": False, "error": "Pyrogram client not connected"}, status=503)
     try:
         limit = int(request.query.get("limit", "200"))
     except (TypeError, ValueError):
         limit = 200
     explicit = request.query.get("chat_id")
+    from_id = request.query.get("from_id")
+    to_id = request.query.get("to_id")
 
     try:
         targets = await _resolve_reindex_targets(explicit)
@@ -2498,12 +2627,12 @@ async def reindex_route(request):
     failures = []
     for chat_id in targets:
         try:
-            await _scan_chat_history(chat_id, limit, results)
+            await _scan_chat_history(chat_id, limit, results, from_id=from_id, to_id=to_id)
         except FloodWait as e:
             logger.info(f"[REINDEX] FloodWait on chat {chat_id}: sleeping {e.value}s")
             await asyncio.sleep(e.value)
             try:
-                await _scan_chat_history(chat_id, limit, results)
+                await _scan_chat_history(chat_id, limit, results, from_id=from_id, to_id=to_id)
             except Exception as e2:
                 logger.warning(f"[REINDEX] chat {chat_id} retry failed: {e2}")
                 failures.append({"chat_id": chat_id, "error": f"{type(e2).__name__}: {e2}"})
@@ -3091,6 +3220,13 @@ async def start_pyrogram():
             logger.info(f"[PYROGRAM] Pyrogram Client started successfully! Bot: @{getattr(me, 'username', '?')} (id={getattr(me, 'id', '?')})")
             await _register_main_client()
             await _start_extra_clients()
+            if "tg_user" in globals() and tg_user and not getattr(tg_user, "is_connected", False):
+                try:
+                    await tg_user.start()
+                    user_me = await tg_user.get_me()
+                    logger.info(f"[PYROGRAM] Pyrogram User Account client started! (id={getattr(user_me, 'id', '?')})")
+                except Exception as ue:
+                    logger.warning(f"[PYROGRAM] User Account client failed to start: {ue}")
             await restore_cached_strm_files()
             webhook_ok, webhook_url, webhook_detail = await register_telegram_webhook()
             if webhook_ok:
@@ -3158,6 +3294,11 @@ async def stop_pyrogram():
                 await client.stop()
         except Exception as e:
             logger.warning(f"[PYROGRAM] shutdown extra {idx}: {e}")
+    if "tg_user" in globals() and tg_user and getattr(tg_user, "is_connected", False):
+        try:
+            await tg_user.stop()
+        except Exception as e:
+            logger.warning(f"[PYROGRAM] shutdown user client: {e}")
 
 async def start_background_tasks(app):
     async def _reconciliation_loop():

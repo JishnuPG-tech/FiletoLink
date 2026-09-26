@@ -548,3 +548,25 @@ def test_stream_file_chunks_cross_dc_flood_propagates(tc):
     assert asyncio_run(main()) == 1720
     assert client.export_calls == 1  # only the one attempt
     assert 5 not in client.media_sessions
+
+
+def test_refresh_fallback_to_primary_client(tc):
+    """When the active client has empty media (e.g. extra bot not in private channel),
+    _refresh_file_reference falls back to primary client tg_app."""
+    class EmptyMediaClient(FakeClient):
+        async def get_messages(self, chat_id, message_id):
+            return types.SimpleNamespace(empty=True, video=None, document=None, audio=None, animation=None)
+
+    class PrimaryClient(FakeClient):
+        is_connected = True
+
+    extra_client = EmptyMediaClient()
+    primary = PrimaryClient()
+    tc["tg_app"] = primary
+
+    async def drain():
+        return await tc["_refresh_file_reference"](extra_client, -1003907801136, 9)
+
+    f_id, f_size = asyncio_run(drain())
+    assert f_id == "NEW:9"
+    assert f_size == FILE_SIZE
