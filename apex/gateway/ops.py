@@ -246,13 +246,17 @@ async def ops_jellyfin_db_query(request: Request):
 
 @router.post("/apex/ops/jellyfin/db/repair-libraries")
 async def ops_jellyfin_db_repair_libraries(request: Request):
-    """Re-point the two Jellyfin library (CollectionFolder) rows from their stale
-    data/root/default/... paths to the real /data/jellyfin/media/... locations.
+    """Heal the two Jellyfin library (CollectionFolder) rows so ItemId /
+    LibraryOptions resolve again.
 
-    This heals the 'library has no valid item id' state: Jellyfin can then resolve
-    the collection folders by path, populate ItemId / LibraryOptions, and accept
-    library settings updates. A sqlite backup is taken first and the before/after
-    rows are returned so the change is fully reversible.
+    Jellyfin enumerates virtual folders from the DefaultUserViewsPath
+    directory on disk (~/root/default/<Name>) and matches the item whose
+    BaseItems.Path equals that directory. Rows left over from an earlier
+    datadir layout have stale data/root paths, so the lookup fails and
+    library settings cannot be read/updated. This re-points each row's Path
+    to its views directory, keeps PhysicalLocationsList on the real media
+    path, and restores PhysicalFolderIds. A sqlite backup is taken first and
+    the before/after rows are returned so the change is fully reversible.
     """
     if not _is_admin(request):
         return _denied()
@@ -261,10 +265,16 @@ async def ops_jellyfin_db_repair_libraries(request: Request):
     if not os.path.exists(db):
         return JSONResponse({"ok": False, "error": f"no jellyfin.db at {db}"}, status_code=404)
 
-    # name -> (item id, current stale path prefix -> real media location)
+    # name -> (item id, views-dir path, real media location, physical folder item id)
+    #
+    # ItemId/LibraryOptions in /Library/VirtualFolders only resolve when the
+    # CollectionFolder row's Path EXACTLY matches the DefaultUserViewsPath
+    # subdirectory that Jellyfin enumerates on disk (~/root/default/<Name>),
+    # where the .mblink shortcut + options.xml live. The stale data/root paths
+    # from an earlier datadir layout break that lookup.
     LIBRARIES = {
-        "Movies": ("F137A2DD-21BB-C1B9-9AA5-C0F6BF02A805", "/data/jellyfin/data/root/default/Movies", "/data/jellyfin/media/Movies"),
-        "TV Shows": ("767BFFE4-F11C-93EF-34B8-05451A696A4E", "/data/jellyfin/data/root/default/TV Shows", "/data/jellyfin/media/TV Shows"),
+        "Movies": ("F137A2DD-21BB-C1B9-9AA5-C0F6BF02A805", "/opt/jellyfin-local/data/root/default/Movies", "/data/jellyfin/media/Movies", "4A909B35-F30D-3CD1-2E3B-26D3F8381922"),
+        "TV Shows": ("767BFFE4-F11C-93EF-34B8-05451A696A4E", "/opt/jellyfin-local/data/root/default/TV Shows", "/data/jellyfin/media/TV Shows", "0FDE567D-59EF-5D9F-D289-2A9F7CF53918"),
     }
 
     try:
@@ -283,7 +293,7 @@ async def ops_jellyfin_db_repair_libraries(request: Request):
         try:
             conn.execute("BEGIN IMMEDIATE")
             cur = conn.cursor()
-            for name, (item_id, stale_path, media_path) in LIBRARIES.items():
+            for name, (item_id, views_path, media_path, folder_id) in LIBRARIES.items():
                 cur.execute("SELECT Id, Path, Data FROM BaseItems WHERE Id = ?", (item_id,))
                 row = cur.fetchone()
                 if not row:
@@ -297,19 +307,19 @@ async def ops_jellyfin_db_repair_libraries(request: Request):
                     except Exception:
                         data = {}
                 new_data = dict(data)
-                locs = list(new_data.get("PhysicalLocationsList") or [])
-                locs = [ln for ln in locs if ln != stale_path]
+                locs = [ln for ln in (new_data.get("PhysicalLocationsList") or []) if "/data/root/" not in ln]
                 if media_path not in locs:
                     locs.insert(0, media_path)
                 new_data["PhysicalLocationsList"] = locs
+                new_data["PhysicalFolderIds"] = [folder_id]
                 now = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
                 new_data["DateLastSaved"] = now
                 cur.execute(
                     "UPDATE BaseItems SET Path = ?, Data = ?, DateModified = ? WHERE Id = ?",
-                    (media_path, json.dumps(new_data), now, row_id),
+                    (views_path, json.dumps(new_data), now, row_id),
                 )
                 before[name] = {"path": row_path, "locations": list(locs)}
-                after[name] = {"path": media_path, "locations": locs}
+                after[name] = {"path": views_path, "locations": locs}
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")
