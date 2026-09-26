@@ -429,7 +429,7 @@ header.MuiAppBar-root>.MuiToolbar-root {
     position: relative;
 }
 
-header.MuiAppBar-root>.MuiToolbar-root>.MuiStack-root:first-of-type {
+body:not(.jellyfin-settings-page):not(:has(.MuiDrawer-docked)):not(:has(#dashboardPage)):not(:has([data-testid*="ArrowBack"])) header.MuiAppBar-root>.MuiToolbar-root>.MuiStack-root:first-of-type {
     position: absolute;
     left: 45%;
     transform: translateX(-45%);
@@ -474,7 +474,7 @@ header.MuiAppBar-root>.MuiToolbar-root:nth-child(2)>.MuiBox-root>.MuiChip-root {
 }
 
 
-header.MuiAppBar-root>.MuiToolbar-root:has(> .MuiStack-root:first-of-type)>.MuiBox-root:last-child {
+body:not(.jellyfin-settings-page):not(:has(.MuiDrawer-docked)):not(:has(#dashboardPage)):not(:has([data-testid*="ArrowBack"])) header.MuiAppBar-root>.MuiToolbar-root:has(> .MuiStack-root:first-of-type)>.MuiBox-root:last-child {
     order: -1;
     margin-right: auto;
 }
@@ -2872,88 +2872,100 @@ html[data-theme="dark"] .MuiDrawer-root *,
 }
 
 /* ==========================================================================
-   PURE ABYSS 100%: COMPLETE DASHBOARD, SETTINGS & MOBILE THEME
+   PURE ABYSS 100%: COMPLETE DASHBOARD & SETTINGS (ALL INTERIOR & REACT PAGES)
    ========================================================================== */
 
-/* 1. Global Page Backgrounds on Settings/Admin */
-#dashboardPage,
+/* 1. Global Backgrounds for ALL Settings, Dashboard, and Interior Pages */
+html.jellyfin-settings-page,
+.type-interior,
 .pageWithSidebar,
+.settingsContainer,
+#dashboardPage,
+body:has(.MuiDrawer-docked),
+body:has(#dashboardPage),
+body:has(.pageWithSidebar),
 div[data-role="page"]:has(.dashboardSection),
-.dashboardSection,
-.dashboardContent,
-.dashboardColumn,
-.settingsContainer {
+div[data-role="page"]:has(.content-primary),
+main.MuiBox-root,
+.MuiBox-root:has(.MuiDrawer-docked) {
     background-color: #0b0b0e !important;
     color: rgb(var(--abyss-accent)) !important;
-    font-family: "Google Sans", sans-serif !important;
+    font-family: "Google Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
 }
 
+/* Hide backdrops on settings and interior pages */
+html.jellyfin-settings-page #abyss-spotlight-backdrop,
+body:has(.type-interior) #abyss-spotlight-backdrop,
 body:has(#dashboardPage) #abyss-spotlight-backdrop,
+body:has(.MuiDrawer-docked) #abyss-spotlight-backdrop,
 body:has(.pageWithSidebar) #abyss-spotlight-backdrop,
+html.jellyfin-settings-page .backdropContainer,
+body:has(.type-interior) .backdropContainer,
 body:has(#dashboardPage) .backdropContainer,
+body:has(.MuiDrawer-docked) .backdropContainer,
 body:has(.pageWithSidebar) .backdropContainer {
     display: none !important;
     opacity: 0 !important;
 }
 
-/* 2. Docked Admin Sidebar (Desktop & Tablet) - NEVER overlaps content */
-@media (min-width: 960px) {
-    .MuiDrawer-docked,
-    .MuiDrawer-docked .MuiDrawer-paper {
-        position: relative !important;
-        width: 260px !important;
-        min-width: 260px !important;
-        max-width: 260px !important;
-        background-color: #111114 !important;
-        border: none !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
-        border-radius: 0 !important;
-        box-shadow: none !important;
-        margin: 0 !important;
-        top: 0 !important;
-        left: 0 !important;
-        bottom: 0 !important;
-        height: 100vh !important;
-        overflow-y: auto !important;
-    }
-
-    .pageWithSidebar {
-        display: flex !important;
-        flex-direction: row !important;
-    }
-
-    .pageWithSidebar .content-primary,
-    .pageWithSidebar .dashboardContent {
-        flex: 1 !important;
-        max-width: calc(100% - 260px) !important;
-        padding: 24px 32px !important;
-    }
+/* 2. Top Navigation Bar on Settings / Dashboard (No overlap, clean alignment) */
+html.jellyfin-settings-page header.MuiAppBar-root,
+body:has(.MuiDrawer-docked) header.MuiAppBar-root,
+body:has(#dashboardPage) header.MuiAppBar-root,
+body:has(.pageWithSidebar) header.MuiAppBar-root {
+    background: rgba(11, 11, 14, 0.85) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: none !important;
 }
 
-/* 3. Mobile / Slide-Out Drawer (Android & Touch screens) */
-@media (max-width: 959px) {
-    .MuiDrawer-modal .MuiDrawer-paper,
-    .mainDrawer {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        bottom: 0 !important;
-        width: 280px !important;
-        max-width: 80vw !important;
-        background: rgba(17, 17, 21, 0.96) !important;
-        backdrop-filter: blur(25px) !important;
-        -webkit-backdrop-filter: blur(25px) !important;
-        border: none !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 0 24px 24px 0 !important;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7) !important;
-        z-index: 1300 !important;
-    }
+html.jellyfin-settings-page header.MuiAppBar-root > .MuiToolbar-root > .MuiStack-root:first-of-type,
+body:has(.MuiDrawer-docked) header.MuiAppBar-root > .MuiToolbar-root > .MuiStack-root:first-of-type,
+body:has(#dashboardPage) header.MuiAppBar-root > .MuiToolbar-root > .MuiStack-root:first-of-type,
+body:has(.pageWithSidebar) header.MuiAppBar-root > .MuiToolbar-root > .MuiStack-root:first-of-type,
+header.MuiAppBar-root:has([data-testid*="ArrowBack"]) > .MuiToolbar-root > .MuiStack-root:first-of-type {
+    position: static !important;
+    left: auto !important;
+    transform: none !important;
 }
 
-/* 4. Sidebar Navigation Items - Abyss Frosted Glass Pills */
-.MuiDrawer-paper .MuiListItemButton-root,
-.mainDrawer .navMenuOption {
+html.jellyfin-settings-page header.MuiAppBar-root > .MuiToolbar-root > .MuiBox-root:last-child,
+body:has(.MuiDrawer-docked) header.MuiAppBar-root > .MuiToolbar-root > .MuiBox-root:last-child,
+body:has(#dashboardPage) header.MuiAppBar-root > .MuiToolbar-root > .MuiBox-root:last-child,
+body:has(.pageWithSidebar) header.MuiAppBar-root > .MuiToolbar-root > .MuiBox-root:last-child,
+header.MuiAppBar-root:has([data-testid*="ArrowBack"]) > .MuiToolbar-root > .MuiBox-root:last-child {
+    order: initial !important;
+    margin-right: initial !important;
+}
+
+/* 3. Natural Page & Content Alignment (Zero top blank space, Zero scroll offset) */
+.pageWithSidebar {
+    display: block !important;
+}
+
+.pageWithSidebar .content-primary,
+.type-interior .content-primary,
+main.MuiBox-root,
+div[role="main"] {
+    padding-top: 14px !important;
+    max-width: 1400px;
+}
+
+/* 4. Pure Abyss Sidebar / Drawer (MUI & Legacy) */
+.mainDrawer,
+.mainDrawer-scrollContainer,
+.MuiDrawer-docked,
+.MuiDrawer-paper {
+    background-color: #111114 !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: none !important;
+    color: rgba(var(--abyss-accent), 0.8) !important;
+}
+
+/* Navigation items in sidebar (Frosted glass pills) */
+.mainDrawer .navMenuOption,
+.MuiDrawer-paper .MuiListItemButton-root {
     border-radius: 50px !important;
     margin: 4px 12px !important;
     padding: 10px 18px !important;
@@ -2963,14 +2975,14 @@ body:has(.pageWithSidebar) .backdropContainer {
     font-weight: 500 !important;
 }
 
-.MuiDrawer-paper .MuiListItemButton-root:hover,
-.mainDrawer .navMenuOption:hover {
+.mainDrawer .navMenuOption:hover,
+.MuiDrawer-paper .MuiListItemButton-root:hover {
     background-color: rgba(255, 255, 255, 0.08) !important;
     color: #ffffff !important;
 }
 
-.MuiDrawer-paper .MuiListItemButton-root.Mui-selected,
-.mainDrawer .navMenuOption-selected {
+.mainDrawer .navMenuOption-selected,
+.MuiDrawer-paper .MuiListItemButton-root.Mui-selected {
     background: rgba(255, 255, 255, 0.15) !important;
     color: #ffffff !important;
     font-weight: 700 !important;
@@ -2978,11 +2990,16 @@ body:has(.pageWithSidebar) .backdropContainer {
     border: 1px solid rgba(255, 255, 255, 0.15) !important;
 }
 
+.mainDrawer .navMenuOptionIcon,
 .MuiDrawer-paper .MuiListItemIcon-root {
-    min-width: 36px !important;
+    background: transparent !important;
     color: inherit !important;
+    padding: 0 !important;
+    min-width: 36px !important;
+    margin-right: 12px !important;
 }
 
+.mainDrawer .sidebarHeader,
 .MuiDrawer-paper .MuiListSubheader-root {
     background: transparent !important;
     color: rgba(var(--abyss-accent), 0.45) !important;
@@ -2992,82 +3009,180 @@ body:has(.pageWithSidebar) .backdropContainer {
     text-transform: uppercase !important;
     letter-spacing: 0.08em !important;
     padding-left: 24px !important;
+    margin: 16px 0 6px !important;
 }
 
-/* 5. Dashboard Cards, Widgets & Containers */
-.dashboardSection,
-.dashboardColumn,
-#dashboardPage .cardBox,
-#dashboardPage .paperList,
-.readOnlyContent {
+/* 5. 100% Pure Abyss Cards & Widgets Across ALL Settings Pages */
+.MuiPaper-root:not(header):not(.MuiDrawer-paper):not(.MuiMenu-paper):not(.MuiPopover-paper),
+.MuiCard-root,
+.type-interior .cardBox,
+.type-interior .paperList,
+.type-interior .visualCardBox,
+.type-interior .readOnlyContent,
+.type-interior .dashboardSection,
+.type-interior .dashboardColumn,
+.type-interior .userCard,
+.type-interior .card.squareCard,
+.type-interior .card.portraitCard,
+.type-interior .card.backdropCard,
+.type-interior .cardContent,
+.settingsContainer .cardBox,
+.settingsContainer .paperList {
     background: rgba(22, 22, 26, 0.75) !important;
     border: 1px solid rgba(255, 255, 255, 0.08) !important;
     border-radius: 16px !important;
     backdrop-filter: blur(20px) !important;
     -webkit-backdrop-filter: blur(20px) !important;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
-    padding: 20px !important;
-    margin-bottom: 20px !important;
     color: rgb(var(--abyss-accent)) !important;
 }
 
-/* Server info table */
-.readOnlyContent table,
-.readOnlyContent tr,
-.readOnlyContent td {
-    border-color: rgba(255, 255, 255, 0.06) !important;
+/* Section titles */
+.type-interior .sectionTitle,
+.settingsContainer .sectionTitle,
+.MuiTypography-h4,
+.MuiTypography-h5,
+.MuiTypography-h6 {
     font-family: "Google Sans", sans-serif !important;
-    padding: 10px 8px !important;
+    font-weight: 700 !important;
+    color: #ffffff !important;
 }
 
-/* 6. Action Buttons in Admin & Settings */
-.dashboardSection button,
-#dashboardPage button.raised,
-.button-submit,
-.emby-button.raised {
+/* 6. Device Cards (Override default teal #00607a background) */
+.MuiCard-root:has([data-testid*="Computer"]),
+.MuiCard-root:has([data-testid*="Phone"]),
+.MuiCard-root:has([data-testid*="Tv"]),
+.MuiCard-root:has([data-testid*="Cast"]),
+.MuiCard-root:has(svg[data-testid]),
+[class*="deviceCard"],
+[class*="DeviceCard"] {
+    background: rgba(25, 25, 32, 0.85) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 16px !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+}
+
+/* 7. Activity Log List & Bell Icons (Override default cyan #00a4dc circles) */
+.MuiListItem-root:has(.MuiAvatar-root),
+.type-interior .listItem,
+.type-interior .paperList .listItem,
+.activityLogList .listItem {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 12px !important;
+    margin-bottom: 8px !important;
+    padding: 12px 16px !important;
+    transition: background 0.2s ease, border-color 0.2s ease !important;
+}
+
+.MuiListItem-root:has(.MuiAvatar-root):hover,
+.type-interior .listItem:hover,
+.activityLogList .listItem:hover {
+    background: rgba(255, 255, 255, 0.07) !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.MuiListItemAvatar-root .MuiAvatar-root,
+.MuiAvatar-root:has(svg),
+.activityLogList .listItemIcon,
+.type-interior .listItemIcon {
+    background-color: rgba(255, 255, 255, 0.12) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 50px !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* 8. User Cards (Users page) */
+.MuiCard-root:has([data-testid*="MoreVert"]),
+.type-interior .card.squareCard.userCard,
+.type-interior .card.squareCard,
+.userCard {
+    background: rgba(22, 22, 26, 0.8) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 16px !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease !important;
+}
+
+.MuiCard-root:has([data-testid*="MoreVert"]):hover,
+.type-interior .card.squareCard:hover {
+    transform: translateY(-4px) !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* 9. Action Buttons Across ALL Settings & Dashboard */
+.MuiButton-contained,
+.MuiButton-containedPrimary,
+.type-interior button.raised:not([class*="delete"]):not([class*="cancel"]):not([class*="warn"]):not([class*="restart"]):not([class*="shutdown"]):not([class*="button-flat"]),
+.type-interior .button-submit,
+.settingsContainer button.raised {
+    background: rgba(255, 255, 255, 0.95) !important;
+    color: #0e0e11 !important;
     border-radius: 50px !important;
     font-family: "Google Sans", sans-serif !important;
     font-weight: 600 !important;
     padding: 0.6em 1.6em !important;
     letter-spacing: 0.02em !important;
     border: none !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3) !important;
     transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease !important;
 }
 
-/* Scan all libraries (Primary action) */
-#dashboardPage button.raised:not([class*="delete"]):not([class*="cancel"]):not([class*="warn"]) {
-    background: rgba(255, 255, 255, 0.95) !important;
-    color: #0e0e11 !important;
-}
-
-#dashboardPage button.raised:hover {
+.MuiButton-contained:hover,
+.type-interior button.raised:hover {
     transform: translateY(-2px) !important;
-    box-shadow: 0 4px 16px rgba(255, 255, 255, 0.15) !important;
+    box-shadow: 0 4px 16px rgba(255, 255, 255, 0.2) !important;
 }
 
 /* Restart button */
+.MuiButton-root:has([data-testid*="Restart"]),
 button[id*="Restart"],
 button:has([data-testid*="Restart"]),
 .button-restart {
     background: rgba(255, 255, 255, 0.1) !important;
     color: #ffffff !important;
     border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 50px !important;
+    font-weight: 600 !important;
 }
 
 /* Shutdown button */
+.MuiButton-root:has([data-testid*="Power"]),
 button[id*="Shutdown"],
 button:has([data-testid*="Power"]),
 .button-shutdown {
     background: rgba(235, 87, 87, 0.15) !important;
     color: #ff6b6b !important;
     border: 1px solid rgba(235, 87, 87, 0.3) !important;
+    border-radius: 50px !important;
+    font-weight: 600 !important;
 }
 
-/* 7. Inputs, Dropdowns, Checkboxes & Forms */
+/* Add / Fab button */
+.MuiFab-root,
+.MuiButtonBase-root:has([data-testid*="Add"]) {
+    background: rgba(255, 255, 255, 0.15) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 50px !important;
+    transition: transform 0.2s ease, background 0.2s ease !important;
+}
+
+.MuiFab-root:hover,
+.MuiButtonBase-root:has([data-testid*="Add"]):hover {
+    background: rgba(255, 255, 255, 0.25) !important;
+    transform: scale(1.05) !important;
+}
+
+/* 10. Inputs, Dropdowns, Checkboxes & Forms */
+.MuiOutlinedInput-root,
+.MuiFilledInput-root,
+.MuiInputBase-root:not(.MuiTablePagination-input),
 .emby-input,
 .emby-select,
 .emby-textarea,
-.MuiInputBase-root,
 input[type="text"],
 input[type="number"],
 input[type="password"] {
@@ -3081,17 +3196,16 @@ input[type="password"] {
     transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
 }
 
+.MuiOutlinedInput-root.Mui-focused,
+.MuiInputBase-root.Mui-focused,
 .emby-input:focus,
 .emby-select:focus,
-.emby-textarea:focus,
-.MuiInputBase-root.Mui-focused {
+.emby-textarea:focus {
     border-color: rgba(255, 255, 255, 0.6) !important;
     box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08) !important;
     outline: none !important;
 }
 
-/* Switches & Toggles */
-.emby-checkbox:checked + span + .checkboxOutline,
 .checkboxOutline {
     border-radius: 6px !important;
 }
@@ -3100,30 +3214,7 @@ input[type="password"] {
     border-radius: 50px !important;
 }
 
-/* 8. Activity Log Items */
-#dashboardPage .listItem,
-.activityLogList .listItem {
-    background: rgba(255, 255, 255, 0.03) !important;
-    border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    border-radius: 12px !important;
-    margin-bottom: 8px !important;
-    padding: 12px 16px !important;
-    transition: background 0.2s ease !important;
-}
-
-#dashboardPage .listItem:hover,
-.activityLogList .listItem:hover {
-    background: rgba(255, 255, 255, 0.06) !important;
-}
-
-.activityLogList .listItemIcon,
-#dashboardPage .listItemIcon {
-    background: rgba(255, 255, 255, 0.1) !important;
-    border-radius: 50px !important;
-    color: #ffffff !important;
-}
-
-/* 9. Top Navigation Bar: Hide server switch warning pill */
+/* 11. Top Navigation Bar: Hide server switch warning pill & raw name */
 header.MuiAppBar-root .MuiStack-root:first-of-type > .MuiButtonBase-root:has(svg[data-testid*="Warning"]),
 header.MuiAppBar-root .MuiStack-root:first-of-type > .MuiButtonBase-root:has(svg[data-testid*="Dns"]),
 header.MuiAppBar-root .MuiStack-root:first-of-type > [class*="MuiChip"]:has(svg[data-testid*="Warning"]),
@@ -3134,7 +3225,7 @@ header.MuiAppBar-root [class*="serverName"],
     display: none !important;
 }
 
-/* 10. Crisp Card & Image Rendering */
+/* 12. Crisp Card & Image Rendering */
 .cardImage,
 .cardContent,
 .cardImageContainer {
@@ -3142,31 +3233,49 @@ header.MuiAppBar-root [class*="serverName"],
     image-rendering: crisp-edges;
 }
 
-/* 11. Android / Mobile Perfection */
+/* 13. Android & Mobile Perfection */
+@media (max-width: 959px) {
+    .MuiDrawer-modal .MuiDrawer-paper,
+    .mainDrawer {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        width: 280px !important;
+        max-width: 80vw !important;
+        background: rgba(17, 17, 21, 0.98) !important;
+        backdrop-filter: blur(25px) !important;
+        -webkit-backdrop-filter: blur(25px) !important;
+        border: none !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7) !important;
+        z-index: 1300 !important;
+    }
+}
+
 @media (max-width: 600px) {
-    /* Touch-friendly minimum target size */
     button,
     .button-flat,
     .emby-button,
-    .cardOverlayButton {
+    .cardOverlayButton,
+    .MuiIconButton-root,
+    .MuiButton-root {
         min-height: 44px;
         min-width: 44px;
     }
 
-    /* Clean mobile header */
     .skinHeader {
         padding: 8px 12px !important;
     }
 
-    /* 2-column mobile poster grid */
     .itemsContainer.padded-left.padded-right {
         padding-left: 12px !important;
         padding-right: 12px !important;
     }
 
-    /* Mobile settings padding */
     .content-primary,
-    .dashboardContent {
+    .dashboardContent,
+    main.MuiBox-root {
         padding: 16px 12px !important;
     }
 }
