@@ -2948,8 +2948,9 @@ header.MuiAppBar-root:has([data-testid*="ArrowBack"]) > .MuiToolbar-root > .MuiB
 .type-interior .content-primary,
 main.MuiBox-root,
 div[role="main"] {
-    padding-top: 14px !important;
+    padding-top: 76px !important;
     max-width: 1400px;
+    box-sizing: border-box !important;
 }
 
 /* 4. Pure Abyss Sidebar / Drawer (MUI & Legacy) */
@@ -3176,34 +3177,125 @@ button:has([data-testid*="Power"]),
     transform: scale(1.05) !important;
 }
 
-/* 10. Inputs, Dropdowns, Checkboxes & Forms */
-.MuiOutlinedInput-root,
-.MuiFilledInput-root,
-.MuiInputBase-root:not(.MuiTablePagination-input),
-.emby-input,
-.emby-select,
-.emby-textarea,
-input[type="text"],
-input[type="number"],
-input[type="password"] {
-    background: rgba(255, 255, 255, 0.04) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    border-radius: 12px !important;
-    color: #ffffff !important;
-    font-family: "Google Sans", sans-serif !important;
-    padding: 10px 14px !important;
-    box-shadow: none !important;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+/* 10. Inputs, Dropdowns, Checkboxes & Forms (Pixel-Perfect Abyss Alignment) */
+.MuiFilledInput-root::before,
+.MuiFilledInput-root::after,
+.MuiFilledInput-underline::before,
+.MuiFilledInput-underline::after,
+.MuiInput-underline::before,
+.MuiInput-underline::after,
+.MuiInputBase-root::before,
+.MuiInputBase-root::after {
+    display: none !important;
+    border-bottom: none !important;
+    content: none !important;
 }
 
+.MuiFormControl-root {
+    margin-bottom: 18px !important;
+    width: 100% !important;
+}
+
+.MuiFilledInput-root,
+.MuiOutlinedInput-root,
+.emby-select,
+.emby-textarea {
+    position: relative !important;
+    background-color: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 14px !important;
+    color: #ffffff !important;
+    font-family: "Google Sans", sans-serif !important;
+    box-shadow: none !important;
+    transition: border-color 0.25s var(--abyss-ease), background-color 0.25s var(--abyss-ease), box-shadow 0.25s var(--abyss-ease) !important;
+}
+
+.MuiFilledInput-root {
+    padding: 24px 16px 8px 16px !important;
+    min-height: 56px !important;
+    box-sizing: border-box !important;
+}
+
+.MuiFilledInput-root:hover,
+.MuiOutlinedInput-root:hover,
+.emby-select:hover,
+.emby-textarea:hover {
+    background-color: rgba(255, 255, 255, 0.07) !important;
+    border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+.MuiFilledInput-root.Mui-focused,
 .MuiOutlinedInput-root.Mui-focused,
-.MuiInputBase-root.Mui-focused,
-.emby-input:focus,
 .emby-select:focus,
 .emby-textarea:focus {
+    background-color: rgba(255, 255, 255, 0.08) !important;
     border-color: rgba(255, 255, 255, 0.6) !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1) !important;
     outline: none !important;
+}
+
+.MuiFilledInput-input,
+.MuiOutlinedInput-input {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    font-family: "Google Sans", sans-serif !important;
+    font-size: 0.95rem !important;
+    font-weight: 500 !important;
+    color: #ffffff !important;
+    height: auto !important;
+    line-height: 1.4 !important;
+    box-shadow: none !important;
+}
+
+.MuiFormLabel-root,
+.MuiInputLabel-root {
+    font-family: "Google Sans", sans-serif !important;
+    color: rgba(var(--abyss-accent), 0.55) !important;
+    font-size: 0.9rem !important;
+    pointer-events: none !important;
+}
+
+.MuiInputLabel-filled {
+    transform: translate(16px, 17px) scale(1) !important;
+    transform-origin: top left !important;
+    transition: color 0.2s cubic-bezier(0.0, 0, 0.2, 1) 0ms, transform 0.2s cubic-bezier(0.0, 0, 0.2, 1) 0ms !important;
+}
+
+.MuiInputLabel-filled.MuiInputLabel-shrink {
+    transform: translate(16px, 7px) scale(0.75) !important;
+    color: rgba(var(--abyss-accent), 0.75) !important;
+    font-weight: 600 !important;
+}
+
+.MuiInputLabel-root.Mui-focused {
+    color: #ffffff !important;
+}
+
+.MuiFormHelperText-root {
+    font-family: "Google Sans", sans-serif !important;
+    color: rgba(var(--abyss-accent), 0.48) !important;
+    font-size: 0.8rem !important;
+    line-height: 1.4 !important;
+    margin-top: 6px !important;
+    padding-left: 4px !important;
+}
+
+.MuiCheckbox-root {
+    color: rgba(var(--abyss-accent), 0.5) !important;
+    border-radius: 8px !important;
+    transition: color 0.2s ease, transform 0.2s ease !important;
+}
+
+.MuiCheckbox-root.Mui-checked {
+    color: #ffffff !important;
+}
+
+.MuiFormControlLabel-label {
+    font-family: "Google Sans", sans-serif !important;
+    font-size: 0.95rem !important;
+    font-weight: 500 !important;
+    color: rgb(var(--abyss-accent)) !important;
 }
 
 .checkboxOutline {
