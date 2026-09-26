@@ -238,7 +238,7 @@ for bcfg in "$LOCAL_ROOT/config/branding.xml" "/data/jellyfin/config/branding.xm
     fi
 done
 
-# Configure encoding.xml for direct play / stream remuxing (prevents CPU-heavy video transcode)
+# Configure encoding.xml for direct play / stream remuxing and video playback
 ENCODING_XML="$LOCAL_ROOT/config/encoding.xml"
 python3 - "$ENCODING_XML" <<'PY'
 import sys
@@ -253,7 +253,7 @@ content = """<?xml version="1.0" encoding="utf-8"?>
   <EnableThrottling>true</EnableThrottling>
   <ThrottleDelaySeconds>180</ThrottleDelaySeconds>
   <HardwareAccelerationType>none</HardwareAccelerationType>
-  <EnableVideoEncoding>false</EnableVideoEncoding>
+  <EnableVideoEncoding>true</EnableVideoEncoding>
   <EnableAudioEncoding>true</EnableAudioEncoding>
   <AllowVideoStreamCopy>true</AllowVideoStreamCopy>
   <AllowAudioStreamCopy>true</AllowAudioStreamCopy>
@@ -263,7 +263,8 @@ path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text(content.strip(), encoding="utf-8")
 PY
 cp -f "$ENCODING_XML" "/data/jellyfin/config/encoding.xml" 2>/dev/null || true
-echo "[JELLYFIN] Configured zero-CPU video encoding & direct stream remux in $ENCODING_XML"
+sed -i 's|<EnableVideoEncoding>false</EnableVideoEncoding>|<EnableVideoEncoding>true</EnableVideoEncoding>|g' "$ENCODING_XML" "/data/jellyfin/config/encoding.xml" 2>/dev/null || true
+echo "[JELLYFIN] Configured high-performance video encoding & direct stream remux in $ENCODING_XML"
 
 echo "[HEALTH] Jellyfin starting in background (local datadir)..."
 launch_jellyfin

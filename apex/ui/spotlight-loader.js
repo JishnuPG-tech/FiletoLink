@@ -49,7 +49,6 @@
         els[i].setAttribute(BACKDROP_MARK_ATTR, "true");
         els[i].style.backgroundImage = 'url("' + url + '")';
         els[i].style.imageRendering = 'auto';
-        els[i].style.transform = 'translateZ(0)';
       }
     });
   }

@@ -3325,13 +3325,28 @@ header.MuiAppBar-root [class*="serverName"],
 .cardPadder,
 .cardBox,
 .card-withdetails,
-.innerCardContainer,
-.backdropImage {
+.innerCardContainer {
     image-rendering: auto !important;
     image-rendering: high-quality !important;
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
     transform: translateZ(0);
+}
+
+.backdropImage {
+    image-rendering: auto !important;
+    image-rendering: high-quality !important;
+}
+
+/* Ensure video player elements always render on top without backdrop interference */
+#videoOsdPage,
+.videoPlayerContainer,
+.htmlvideoplayer {
+    z-index: 99999 !important;
+}
+body:has(#videoOsdPage) #abyss-spotlight-backdrop,
+body.videoPlayerContainerVisible #abyss-spotlight-backdrop {
+    display: none !important;
 }
 
 /* 13. Android & Mobile Perfection */

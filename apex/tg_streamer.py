@@ -59,6 +59,7 @@ from apex_stream.organize import (
     tv_show_root,
 )
 from apex_stream.tmdb_meta import (
+    _search_candidates,
     best_tmdb_match,
     build_episode_nfo,
     build_movie_nfo,
