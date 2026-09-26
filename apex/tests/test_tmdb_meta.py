@@ -7,6 +7,7 @@ from apex_stream.tmdb_meta import (
     build_episode_nfo,
     build_movie_nfo,
     build_tvshow_nfo,
+    nfo_needs_repair,
     parse_media_meta,
     tmdb_image_url,
 )
@@ -299,3 +300,32 @@ class TestNfoBuilders:
     def test_image_url(self):
         assert tmdb_image_url("/abc123.jpg") == "https://image.tmdb.org/t/p/w500/abc123.jpg"
         assert tmdb_image_url(None) is None
+
+
+class TestNfoRepair:
+    def test_healthy_nfo_is_not_flagged(self, tmp_path):
+        nfo = tmp_path / "movie.nfo"
+        nfo.write_text(
+            '<movie><title>Mollywood Times</title><originaltitle>മോളിവുഡ് ടൈംസ്</originaltitle></movie>',
+            encoding="utf-8",
+        )
+        assert nfo_needs_repair(str(nfo)) is False
+
+    def test_malformed_originaltitle_is_flagged(self, tmp_path):
+        nfo = tmp_path / "movie.nfo"
+        nfo.write_text(
+            '<movie><title>Mollywood Times</title><originaltitle>?????</originaltitle></movie>',
+            encoding="utf-8",
+        )
+        assert nfo_needs_repair(str(nfo)) is True
+
+    def test_malformed_tvshow_original_name_is_flagged(self, tmp_path):
+        nfo = tmp_path / "tvshow.nfo"
+        nfo.write_text(
+            '<tvshow><name>Test</name><original_name>??????</original_name></tvshow>',
+            encoding="utf-8",
+        )
+        assert nfo_needs_repair(str(nfo)) is True
+
+    def test_missing_file_not_flagged(self, tmp_path):
+        assert nfo_needs_repair(str(tmp_path / "nope.nfo")) is False

@@ -29,6 +29,24 @@ TPL_BASE = "https://image.tmdb.org/t/p"
 
 YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
 
+_NFO_BAD_TITLE_RE = re.compile(
+    r"<\s*(?:originaltitle|original_name)\s*>[^<]*\?{2,}[^<]*<", re.IGNORECASE
+)
+
+
+def nfo_needs_repair(nfo_path) -> bool:
+    """True when an existing NFO's original title looks malformed (non-ASCII
+    script collapsed into a run of '?'), so enrichment re-fetches and rewrites
+    it instead of treating the NFO as already-cached."""
+    if not nfo_path or not os.path.isfile(nfo_path):
+        return False
+    try:
+        with open(nfo_path, "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read(0x4000)
+    except OSError:
+        return False
+    return bool(_NFO_BAD_TITLE_RE.search(text))
+
 # TV patterns, in priority order. All return (show_name, season, episode) or None.
 _SX_E = re.compile(r"(?i)\bS(\d{1,2})\s*(?:\.|\s|_|-)+\s*E(\d{1,3})\b")
 _SX_EX = re.compile(r"(?i)\bS(\d{1,2})\s*E(\d{1,3})\b")

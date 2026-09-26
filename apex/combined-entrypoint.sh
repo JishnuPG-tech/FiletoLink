@@ -185,7 +185,7 @@ sync_jellyfin_back &
 SYNC_PID=$!
 
 echo "[HEALTH] Telegram streamer starting in background..."
-python3 /opt/apex/tg_streamer.py &
+PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python3 /opt/apex/tg_streamer.py &
 TG_STREAMER_PID=$!
 
 echo "[HEALTH] FastAPI Gateway starting..."
@@ -213,7 +213,7 @@ while true; do
 
     if [ -n "$TG_STREAMER_PID" ] && ! kill -0 $TG_STREAMER_PID 2>/dev/null; then
         echo "[CRITICAL] TG Streamer process died! Restarting..."
-        python3 /opt/apex/tg_streamer.py &
+        PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python3 /opt/apex/tg_streamer.py &
         TG_STREAMER_PID=$!
     fi
 

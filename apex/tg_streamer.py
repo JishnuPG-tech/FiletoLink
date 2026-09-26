@@ -48,6 +48,7 @@ from apex_stream.tmdb_meta import (
     build_episode_nfo,
     build_movie_nfo,
     build_tvshow_nfo,
+    nfo_needs_repair,
     parse_media_meta,
 )
 
@@ -1045,13 +1046,15 @@ async def _download_image(session, url, save_path):
     return False
 
 
+def _nfo_needs_repair(nfo_path):
+    """True when an existing NFO's original title looks malformed (non-ASCII
+    script collapsed into a run of '?'), so enrichment re-fetches and rewrites
+    it instead of treating the NFO as cached."""
+    return nfo_needs_repair(nfo_path)
+
+
 async def _enrich_media_metadata(entry):
     """Fetch full TMDB details for a cache entry and write nfo + poster/backdrop.
-
-    Writes:
-      - movies: <target_dir>/{strm_base}.nfo + poster.jpg + backdrop.jpg
-      - tv:     <show_root>/tvshow.nfo + <show_root>/poster.jpg + <show_root>/backdrop.jpg
-                + <target_dir>/{strm_base}.nfo (episodedetails)
 
     Idempotent: skips when the .nfo + poster already exist so restarts don't
     hammer the API. Updates the cache entry's tmdb_id/tmdb fields.
@@ -1068,15 +1071,19 @@ async def _enrich_media_metadata(entry):
             return False
 
         # Idempotency gate: if the metadata is already on disk, avoid re-hitting
-        # the TMDB API on every restart.
+        # the TMDB API on every restart. A malformed NFO (e.g. non-ASCII
+        # original titles written as a run of '?') is NOT treated as cached so
+        # it gets re-fetched and repaired.
         if is_tv and show_root:
-            if os.path.exists(os.path.join(show_root, "tvshow.nfo")) and os.path.exists(os.path.join(show_root, "poster.jpg")):
+            tv_nfo = os.path.join(show_root, "tvshow.nfo")
+            if os.path.exists(tv_nfo) and os.path.exists(os.path.join(show_root, "poster.jpg")) and not _nfo_needs_repair(tv_nfo):
                 return True
         elif not is_tv:
             movie_nfo = os.path.join(
                 target_dir, f"{entry.get('strm_base', strm_base(entry))}.nfo"
             )
-            if os.path.exists(movie_nfo) and os.path.exists(os.path.join(target_dir, "poster.jpg")):
+            if (os.path.exists(movie_nfo) and os.path.exists(os.path.join(target_dir, "poster.jpg"))
+                    and not _nfo_needs_repair(movie_nfo)):
                 return True
 
         query = entry.get("search_title") or entry.get("show_name") or entry.get("title")
@@ -1259,7 +1266,7 @@ async def _enrich_media_metadata(entry):
                 nfo_path = os.path.join(show_root, "tvshow.nfo")
                 poster_path = os.path.join(show_root, "poster.jpg")
                 backdrop_path = os.path.join(show_root, "backdrop.jpg")
-                if not os.path.exists(nfo_path):
+                if not os.path.exists(nfo_path) or _nfo_needs_repair(nfo_path):
                     with open(nfo_path, "w", encoding="utf-8") as f:
                         f.write(build_tvshow_nfo(detail))
                 poster_url = _best_image("poster_path")
@@ -1288,16 +1295,14 @@ async def _enrich_media_metadata(entry):
                             break
                     if ep_detail:
                         ep_nfo = os.path.join(target_dir, f"{entry.get('strm_base', strm_base(entry))}.nfo")
-                        if not os.path.exists(ep_nfo):
-                            with open(ep_nfo, "w", encoding="utf-8") as f:
-                                f.write(build_episode_nfo(ep_detail))
+                        with open(ep_nfo, "w", encoding="utf-8") as f:
+                            f.write(build_episode_nfo(ep_detail))
             else:
                 nfo_path = os.path.join(
                     target_dir, f"{entry.get('strm_base', strm_base(entry))}.nfo"
                 )
-                if not os.path.exists(nfo_path):
-                    with open(nfo_path, "w", encoding="utf-8") as f:
-                        f.write(build_movie_nfo(detail))
+                with open(nfo_path, "w", encoding="utf-8") as f:
+                    f.write(build_movie_nfo(detail))
                 poster_url = _best_image("poster_path")
                 if poster_url and not os.path.exists(os.path.join(target_dir, "poster.jpg")):
                     await _download_image(session, _resize_tmdb_image(poster_url), os.path.join(target_dir, "poster.jpg"))
