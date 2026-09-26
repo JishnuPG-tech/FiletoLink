@@ -244,6 +244,45 @@ async def ops_jellyfin_init(request: Request):
     return JSONResponse({"ok": True, "created": created, "base": INITIAL_DIRS})
 
 
+@router.get("/apex/ops/jellyfin/items")
+async def ops_jellyfin_items(request: Request, searchTerm: str = "", limit: int = 50):
+    """Diagnostic: query Jellyfin Movies (server-side auth) to verify items/share paths."""
+    if not _is_admin(request):
+        return _denied()
+    import aiohttp
+    import urllib.parse
+
+    headers = _jellyfin_auth_header()
+    if not headers:
+        return JSONResponse({"ok": False, "error": "No Jellyfin API key available"}, status_code=503)
+    qs = urllib.parse.urlencode({
+        "recursive": "true",
+        "includeItemTypes": "Movie",
+        "fields": "Path,SortName,OriginalTitle",
+        "limit": limit,
+    })
+    url = f"http://127.0.0.1:8096/Items?{qs}"
+    if searchTerm:
+        url += f"&searchTerm={urllib.parse.quote(searchTerm)}"
+    try:
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.get(url, timeout=15) as resp:
+                if resp.status != 200:
+                    return JSONResponse({"ok": False, "status": resp.status, "text": await resp.text()}, status_code=502)
+                j = await resp.json()
+                items = []
+                for i in j.get("Items", []):
+                    items.append({
+                        "Id": i.get("Id"),
+                        "Name": i.get("Name"),
+                        "Path": i.get("Path"),
+                        "OriginalTitleCP": [ord(c) for c in (i.get("OriginalTitle") or "")],
+                    })
+                return JSONResponse({"ok": True, "TotalRecordCount": j.get("TotalRecordCount"), "items": items})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=502)
+
+
 @router.post("/apex/ops/jellyfin/scan")
 async def ops_jellyfin_scan(request: Request):
     """Trigger a Jellyfin library refresh once the media server is up."""
