@@ -177,6 +177,44 @@ async def ops_read(path: str, tail: int = 0, lines: int = 200, request: Request 
     return JSONResponse({"ok": True, "path": normalized, "size": size, "content": text})
 
 
+@router.get("/apex/ops/tmdb_probe")
+async def ops_tmdb_probe(tmdb_id: int = 1248251, request: Request = None):
+    """Diagnostic: fetch a TMDB movie detail the same way tg_streamer does and
+    return the raw bytes + decoded original_title so encoding divergence between
+    the Space runtime and local dev can be pinned down."""
+    if not _is_admin(request):
+        return _denied()
+    import aiohttp
+    import socket
+    import urllib.parse
+
+    tmdb_key = os.environ.get("TMDB_API_KEY", "").strip().strip('"')
+    if not tmdb_key:
+        tmdb_key = os.environ.get("APEX_TMDB_API_KEY", "").strip().strip('"')
+    if not tmdb_key:
+        return JSONResponse({"ok": False, "error": "no TMDB_API_KEY in env"})
+    qs = urllib.parse.urlencode({"api_key": tmdb_key})
+    url = f"https://api.themoviedb.org/3/movie/{tmdb_id}?{qs}"
+    try:
+        connector = aiohttp.TCPConnector(family=socket.AF_INET)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.get(url, timeout=15) as resp:
+                raw = await resp.read()
+                j = await resp.json()
+                return JSONResponse({
+                    "ok": True,
+                    "status": resp.status,
+                    "content_type": resp.headers.get("Content-Type"),
+                    "raw_hex_head": raw[:512].hex(),
+                    "raw_head": raw[:512].decode("utf-8", errors="replace"),
+                    "title": j.get("title"),
+                    "original_title": j.get("original_title"),
+                    "original_title_repr": repr(j.get("original_title")),
+                })
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
 @router.post("/apex/ops/jellyfin/reset")
 async def ops_jellyfin_reset(request: Request):
     """Remove everything under /data/jellyfin and lay down a clean directory skeleton."""
