@@ -104,6 +104,8 @@ async def route_catch_all(path: str, request: Request):
     if req_path == "/jellyfin" or req_path.startswith("/jellyfin/"):
         logger.info(f"[ROUTER] {req_path} -> Jellyfin ({JELLYFIN_PORT})")
         sub_p = "/" if req_path == "/jellyfin" else raw_path[len("/jellyfin"):]
+        if sub_p.startswith("/ui/"):
+            sub_p = f"/web{sub_p}"
         return await proxy_http_request(f"http://127.0.0.1:{JELLYFIN_PORT}{sub_p}", request, default_prefix="/jellyfin", extra_headers={"X-Forwarded-Prefix": "/jellyfin"})
     
     if req_path in ("/tg-stream", "/tg_stream") or req_path.startswith("/tg-stream/") or req_path.startswith("/tg_stream/"):
@@ -127,6 +129,15 @@ async def route_catch_all(path: str, request: Request):
     if req_path == "/health/live":
         return JSONResponse({"status": "live"})
         
+    if req_path.startswith("/ui/"):
+        logger.info(f"[ROUTER] {req_path} (Jellyfin Web UI Asset) -> Jellyfin ({JELLYFIN_PORT})")
+        return await proxy_http_request(
+            f"http://127.0.0.1:{JELLYFIN_PORT}/web{raw_path}",
+            request,
+            default_prefix="/jellyfin",
+            extra_headers={"X-Forwarded-Prefix": "/jellyfin"},
+        )
+
     # Jellyfin Plugins and root-relative endpoints:
     # Plugins like SkinManager (/api/SkinManager/Resource) and InPlayerPreview (/InPlayerPreview/ClientScript)
     # emit root-relative fetch/script URLs without the /jellyfin prefix.
@@ -140,6 +151,7 @@ async def route_catch_all(path: str, request: Request):
         "/themesongs",
         "/playbackreporting",
         "/reports",
+        "/ui/",
     )
     referer = request.headers.get("referer", "").lower()
     is_jellyfin_call = any(req_path.startswith(p) for p in JELLYFIN_PLUGIN_PREFIXES) or (
@@ -149,8 +161,11 @@ async def route_catch_all(path: str, request: Request):
 
     if is_jellyfin_call:
         logger.info(f"[ROUTER] {req_path} (Jellyfin Plugin/Referer) -> Jellyfin ({JELLYFIN_PORT})")
+        target_path = raw_path
+        if req_path.startswith("/ui/"):
+            target_path = f"/web{raw_path}"
         return await proxy_http_request(
-            f"http://127.0.0.1:{JELLYFIN_PORT}{raw_path}",
+            f"http://127.0.0.1:{JELLYFIN_PORT}{target_path}",
             request,
             default_prefix="/jellyfin",
             extra_headers={"X-Forwarded-Prefix": "/jellyfin"},

@@ -62,3 +62,31 @@ async def test_filetolink_fallback_routes_correctly():
         call_args = mock_proxy.call_args[0]
         target_url = call_args[0]
         assert "8081" in target_url, f"Expected port 8081 for FileToLink watch path, got {target_url}"
+
+@pytest.mark.asyncio
+async def test_ui_assets_route_to_jellyfin_web():
+    with patch("gateway.main.proxy_http_request", new_callable=AsyncMock) as mock_proxy:
+        request = AsyncMock()
+        request.url.path = "/ui/spotlight.html"
+        request.headers = Headers({})
+        
+        await route_catch_all("ui/spotlight.html", request)
+        
+        assert mock_proxy.called
+        target_url = mock_proxy.call_args[0][0]
+        assert "8096" in target_url
+        assert "/web/ui/spotlight.html" in target_url
+
+@pytest.mark.asyncio
+async def test_jellyfin_ui_assets_rewrite_to_web():
+    with patch("gateway.main.proxy_http_request", new_callable=AsyncMock) as mock_proxy:
+        request = AsyncMock()
+        request.url.path = "/jellyfin/ui/abyss.css"
+        request.headers = Headers({})
+        
+        await route_catch_all("jellyfin/ui/abyss.css", request)
+        
+        assert mock_proxy.called
+        target_url = mock_proxy.call_args[0][0]
+        assert "8096" in target_url
+        assert "/web/ui/abyss.css" in target_url

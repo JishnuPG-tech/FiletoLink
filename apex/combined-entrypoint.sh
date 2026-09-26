@@ -67,10 +67,37 @@ restore_jellyfin_local() {
     fi
 
 
-    # Clean up any custom css files and restore stock index.html
-    rm -f /usr/share/jellyfin/web/netflix-dark.css /usr/share/jellyfin/web/pitch-black.css 2>/dev/null || true
-    if [ -f "/usr/share/jellyfin/web/index.html" ]; then
-        sed -i 's|<link rel="stylesheet" href="[^"]*css"></head>|</head>|g' /usr/share/jellyfin/web/index.html 2>/dev/null || true
+    # Install Abyss Theme & Spotlight Add-on
+    mkdir -p /usr/share/jellyfin/web/ui
+    if [ -d "/opt/apex/ui" ]; then
+        cp -a -f /opt/apex/ui/. /usr/share/jellyfin/web/ui/ 2>/dev/null || true
+    fi
+
+    INDEX_FILE="/usr/share/jellyfin/web/index.html"
+    if [ -f "$INDEX_FILE" ]; then
+        # Ensure <html> has data-theme="dark"
+        if ! grep -q 'data-theme="dark"' "$INDEX_FILE"; then
+            sed -i 's|<html|<html data-theme="dark"|g' "$INDEX_FILE" 2>/dev/null || true
+        fi
+
+        # Remove any old css/spotlight injections to avoid duplicates
+        sed -i 's|<link [^>]*data-abyss-theme[^>]*>||g' "$INDEX_FILE" 2>/dev/null || true
+        sed -i 's|<link [^>]*href="ui/abyss.css"[^>]*>||g' "$INDEX_FILE" 2>/dev/null || true
+        sed -i 's|<script [^>]*data-abyss-spotlight[^>]*></script>||g' "$INDEX_FILE" 2>/dev/null || true
+        sed -i 's|<script [^>]*src="ui/spotlight-loader.js"[^>]*></script>||g' "$INDEX_FILE" 2>/dev/null || true
+
+        # Clean legacy CSS if present
+        rm -f /usr/share/jellyfin/web/netflix-dark.css /usr/share/jellyfin/web/pitch-black.css 2>/dev/null || true
+        sed -i 's|<link rel="stylesheet" href="[^"]*netflix-dark.css"></head>|</head>|g' "$INDEX_FILE" 2>/dev/null || true
+        sed -i 's|<link rel="stylesheet" href="[^"]*pitch-black.css"></head>|</head>|g' "$INDEX_FILE" 2>/dev/null || true
+
+        # Inject Abyss CSS into <head>
+        sed -i 's|</head>|<link rel="stylesheet" href="ui/abyss.css" data-abyss-theme></head>|g' "$INDEX_FILE" 2>/dev/null || true
+
+        # Inject Spotlight loader before </body>
+        sed -i 's|</body>|<script src="ui/spotlight-loader.js" data-abyss-spotlight></script></body>|g' "$INDEX_FILE" 2>/dev/null || true
+
+        echo "[JELLYFIN] Abyss theme & Spotlight hero banner installed into web assets."
     fi
 
     echo "[JELLYFIN] Local datadir ready. Metadata redirected to fast local disk."
