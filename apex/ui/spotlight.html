@@ -261,8 +261,11 @@
 			}
 
 			function imageUrl(itemId, type, index = null) {
-				const { width, height } = imageDimensions(type);
 				const suffix = index == null ? '' : `/${index}`;
+				if (type === 'Backdrop') {
+					return `${base}/Items/${itemId}/Images/${type}${suffix}?quality=100`;
+				}
+				const { width, height } = imageDimensions(type);
 				return `${base}/Items/${itemId}/Images/${type}${suffix}?quality=96&maxWidth=${width}&maxHeight=${height}`;
 			}
 

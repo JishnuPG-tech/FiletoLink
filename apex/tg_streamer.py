@@ -1212,14 +1212,18 @@ async def _enrich_media_metadata(entry):
         # it gets re-fetched and repaired.
         if is_tv and show_root:
             tv_nfo = os.path.join(show_root, "tvshow.nfo")
-            if os.path.exists(tv_nfo) and os.path.exists(os.path.join(show_root, "poster.jpg")) and not _nfo_needs_repair(tv_nfo):
+            tv_backdrop = os.path.join(show_root, "backdrop.jpg")
+            has_hd_backdrop = os.path.exists(tv_backdrop) and os.path.getsize(tv_backdrop) >= 250000
+            if os.path.exists(tv_nfo) and os.path.exists(os.path.join(show_root, "poster.jpg")) and has_hd_backdrop and not _nfo_needs_repair(tv_nfo):
                 return True
         elif not is_tv:
             movie_nfo = os.path.join(
                 target_dir, f"{entry.get('strm_base', strm_base(entry))}.nfo"
             )
+            movie_backdrop = os.path.join(target_dir, "backdrop.jpg")
+            has_hd_backdrop = os.path.exists(movie_backdrop) and os.path.getsize(movie_backdrop) >= 250000
             if (os.path.exists(movie_nfo) and os.path.exists(os.path.join(target_dir, "poster.jpg"))
-                    and not _nfo_needs_repair(movie_nfo)):
+                    and has_hd_backdrop and not _nfo_needs_repair(movie_nfo)):
                 return True
 
         query = entry.get("search_title") or entry.get("show_name") or entry.get("title")
@@ -1468,15 +1472,15 @@ async def _enrich_media_metadata(entry):
                             except OSError:
                                 pass
                 backdrop_url = _best_image("backdrop_path")
-                if backdrop_url and not os.path.exists(backdrop_path):
+                needs_hd_backdrop = not os.path.exists(backdrop_path) or os.path.getsize(backdrop_path) < 250000
+                if backdrop_url and needs_hd_backdrop:
                     if await _download_image(session, _resize_tmdb_image(backdrop_url, "original"), backdrop_path):
                         fanart_path = os.path.join(show_root, "fanart.jpg")
-                        if not os.path.exists(fanart_path):
-                            try:
-                                with open(backdrop_path, "rb") as src, open(fanart_path, "wb") as dst:
-                                    dst.write(src.read())
-                            except OSError:
-                                pass
+                        try:
+                            with open(backdrop_path, "rb") as src, open(fanart_path, "wb") as dst:
+                                dst.write(src.read())
+                        except OSError:
+                            pass
 
                 season_detail = None
                 season_number = int(entry.get("season") or 1)
@@ -1525,15 +1529,15 @@ async def _enrich_media_metadata(entry):
                                 pass
                 backdrop_url = _best_image("backdrop_path")
                 movie_backdrop = os.path.join(target_dir, "backdrop.jpg")
-                if backdrop_url and not os.path.exists(movie_backdrop):
+                needs_hd_backdrop = not os.path.exists(movie_backdrop) or os.path.getsize(movie_backdrop) < 250000
+                if backdrop_url and needs_hd_backdrop:
                     if await _download_image(session, _resize_tmdb_image(backdrop_url, "original"), movie_backdrop):
                         fanart_path = os.path.join(target_dir, "fanart.jpg")
-                        if not os.path.exists(fanart_path):
-                            try:
-                                with open(movie_backdrop, "rb") as src, open(fanart_path, "wb") as dst:
-                                    dst.write(src.read())
-                            except OSError:
-                                pass
+                        try:
+                            with open(movie_backdrop, "rb") as src, open(fanart_path, "wb") as dst:
+                                dst.write(src.read())
+                        except OSError:
+                            pass
 
         prev = FILE_ID_CACHE.get(key)
         if isinstance(prev, dict):
