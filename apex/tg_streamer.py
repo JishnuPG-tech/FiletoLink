@@ -1202,6 +1202,35 @@ async def _download_image(session, url, save_path):
     return False
 
 
+def _generate_fallback_backdrop(poster_path: str, backdrop_path: str) -> bool:
+    """Generate a crisp 1920x1080 cinematic backdrop from poster when TMDB lacks one."""
+    try:
+        from PIL import Image, ImageFilter, ImageEnhance
+        if not os.path.exists(poster_path) or os.path.getsize(poster_path) < 1000:
+            return False
+        with Image.open(poster_path) as img:
+            img = img.convert("RGB")
+            target_w, target_h = 1920, 1080
+            bg_scale = max(target_w / img.width, target_h / img.height)
+            bg = img.resize((int(img.width * bg_scale), int(img.height * bg_scale)), Image.Resampling.LANCZOS)
+            left = (bg.width - target_w) // 2
+            top = (bg.height - target_h) // 2
+            bg = bg.crop((left, top, left + target_w, top + target_h))
+            bg = bg.filter(ImageFilter.GaussianBlur(radius=30))
+            enhancer = ImageEnhance.Brightness(bg)
+            bg = enhancer.enhance(0.4)
+            p_h = int(target_h * 0.9)
+            p_w = int(img.width * (p_h / img.height))
+            p_resized = img.resize((p_w, p_h), Image.Resampling.LANCZOS)
+            bg.paste(p_resized, ((target_w - p_w) // 2, (target_h - p_h) // 2))
+            bg.save(backdrop_path, "JPEG", quality=95)
+            logger.info(f"[ARTWORK] Generated 1080p fallback backdrop: {backdrop_path}")
+            return True
+    except Exception as exc:
+        logger.warning(f"[ARTWORK] Fallback backdrop error: {exc}")
+        return False
+
+
 def _nfo_needs_repair(nfo_path):
     """True when an existing NFO's original title looks malformed (non-ASCII
     script collapsed into a run of '?'), so enrichment re-fetches and rewrites
@@ -1212,8 +1241,8 @@ def _nfo_needs_repair(nfo_path):
 async def _enrich_media_metadata(entry):
     """Fetch full TMDB details for a cache entry and write nfo + poster/backdrop.
 
-    Idempotent: skips when the .nfo + poster already exist so restarts don't
-    hammer the API. Updates the cache entry's tmdb_id/tmdb fields.
+    Idempotent: skips when the .nfo + poster already exist and have valid tmdb_id
+    so restarts don't hammer the API. Updates the cache entry's tmdb_id/tmdb fields.
     """
     if not TMDB_API_KEY or not isinstance(entry, dict) or not entry.get("title"):
         return False
@@ -1226,28 +1255,33 @@ async def _enrich_media_metadata(entry):
             logger.info(f"[TMDB] No target_dir for '{entry.get('title')}' - skipping enrich")
             return False
 
-        # Idempotency gate: if the metadata is already on disk, avoid re-hitting
-        # the TMDB API on every restart. A malformed NFO (e.g. non-ASCII
-        # original titles written as a run of '?') is NOT treated as cached so
-        # it gets re-fetched and repaired.
-        if is_tv and show_root:
-            tv_nfo = os.path.join(show_root, "tvshow.nfo")
-            tv_backdrop = os.path.join(show_root, "backdrop.jpg")
-            has_hd_backdrop = os.path.exists(tv_backdrop) and os.path.getsize(tv_backdrop) >= 300000
-            if os.path.exists(tv_nfo) and os.path.exists(os.path.join(show_root, "poster.jpg")) and has_hd_backdrop and not _nfo_needs_repair(tv_nfo):
-                return True
-        elif not is_tv:
-            movie_nfo = os.path.join(
-                target_dir, f"{entry.get('strm_base', strm_base(entry))}.nfo"
-            )
-            movie_backdrop = os.path.join(target_dir, "backdrop.jpg")
-            has_hd_backdrop = os.path.exists(movie_backdrop) and os.path.getsize(movie_backdrop) >= 300000
-            if (os.path.exists(movie_nfo) and os.path.exists(os.path.join(target_dir, "poster.jpg"))
-                    and has_hd_backdrop and not _nfo_needs_repair(movie_nfo)):
-                return True
+        # Idempotency gate: if metadata is on disk AND has valid tmdb_id,
+        # avoid re-hitting the TMDB API on restart.
+        has_tmdb = bool(entry.get("tmdb_id") or (isinstance(FILE_ID_CACHE.get(key), dict) and FILE_ID_CACHE[key].get("tmdb_id")))
+        if has_tmdb:
+            if is_tv and show_root:
+                tv_nfo = os.path.join(show_root, "tvshow.nfo")
+                tv_backdrop = os.path.join(show_root, "backdrop.jpg")
+                has_hd_backdrop = os.path.exists(tv_backdrop) and os.path.getsize(tv_backdrop) >= 300000
+                if os.path.exists(tv_nfo) and os.path.exists(os.path.join(show_root, "poster.jpg")) and has_hd_backdrop and not _nfo_needs_repair(tv_nfo):
+                    return True
+            elif not is_tv:
+                movie_nfo = os.path.join(
+                    target_dir, f"{entry.get('strm_base', strm_base(entry))}.nfo"
+                )
+                movie_backdrop = os.path.join(target_dir, "backdrop.jpg")
+                has_hd_backdrop = os.path.exists(movie_backdrop) and os.path.getsize(movie_backdrop) >= 300000
+                if (os.path.exists(movie_nfo) and os.path.exists(os.path.join(target_dir, "poster.jpg"))
+                        and has_hd_backdrop and not _nfo_needs_repair(movie_nfo)):
+                    return True
 
         query = entry.get("search_title") or entry.get("show_name") or entry.get("title")
-        candidates = entry.get("search_candidates") or []
+        candidates = list(entry.get("search_candidates") or [])
+        if not candidates or len(candidates) <= 1:
+            raw_cand = entry.get("file_name") or entry.get("raw_name") or query or ""
+            for fc in _search_candidates(raw_cand):
+                if fc not in candidates:
+                    candidates.append(fc)
         if query and query not in candidates:
             candidates.insert(0, query)
         if not candidates:
@@ -1284,12 +1318,12 @@ async def _enrich_media_metadata(entry):
                 logger.info(
                     f"[TMDB-ID] '{entry.get('title')}' resolved via {imdb_id} (tmdb_id={hit.get('id')})"
                 )
-        # Tier-1: text search against the cleaned-title candidates, biased with
-        # the release's detected language when we have a code for it.
+        # Tier-1: text search against candidates in English / default so Latin query
+        # matches TMDB's Latin titles, with language affinity applied in best_tmdb_match.
         if not hit:
             for cand in candidates:
                 try:
-                    results = await _tmdb_search(media_type, cand, entry.get("year"), language=lang_code)
+                    results = await _tmdb_search(media_type, cand, entry.get("year"), language="en-US")
                 except Exception as _exc:
                     results = []
                 hit = best_tmdb_match(results, cand, media_type, entry.get("year"), language=lang_code)
@@ -1300,7 +1334,7 @@ async def _enrich_media_metadata(entry):
         # probe candidates in the release's own language so native-script and
         # transliterated titles ("Aadu 3 Part 1" Malayalam) still resolve.
         if not hit and lang_code and lang_code != "en":
-            for cand in candidates[:2]:
+            for cand in candidates[:3]:
                 try:
                     results = await _tmdb_search(media_type, cand, entry.get("year"), language=lang_code)
                 except Exception as _exc:
@@ -1463,6 +1497,13 @@ async def _enrich_media_metadata(entry):
             def _best_image(detail_key):
                 base = detail.get(detail_key)
                 if not base:
+                    images_data = detail.get("images") or {}
+                    img_type = "backdrops" if "backdrop" in detail_key else "posters"
+                    img_list = images_data.get(img_type) or []
+                    if img_list:
+                        best = max(img_list, key=lambda x: (x.get("width", 0), x.get("vote_average", 0)))
+                        base = best.get("file_path")
+                if not base:
                     return None
                 return f"https://image.tmdb.org/t/p/original{base}"
 
@@ -1502,7 +1543,7 @@ async def _enrich_media_metadata(entry):
                         f.write(build_tvshow_nfo(detail))
                 poster_url = _best_image("poster_path")
                 if poster_url and (not os.path.exists(poster_path) or os.path.getsize(poster_path) < 80000):
-                    if await _download_image(session, _resize_tmdb_image(poster_url, "w780"), poster_path):
+                    if await _download_image(session, _resize_tmdb_image(poster_url, "original"), poster_path):
                         folder_path = os.path.join(show_root, "folder.jpg")
                         if not os.path.exists(folder_path):
                             try:
@@ -1514,12 +1555,22 @@ async def _enrich_media_metadata(entry):
                 needs_hd_backdrop = not os.path.exists(backdrop_path) or os.path.getsize(backdrop_path) < 300000
                 if backdrop_url and needs_hd_backdrop:
                     if await _download_image(session, _resize_tmdb_image(backdrop_url, "original"), backdrop_path):
-                        fanart_path = os.path.join(show_root, "fanart.jpg")
-                        try:
-                            with open(backdrop_path, "rb") as src, open(fanart_path, "wb") as dst:
-                                dst.write(src.read())
-                        except OSError:
-                            pass
+                        for extra in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
+                            art_path = os.path.join(show_root, extra)
+                            try:
+                                with open(backdrop_path, "rb") as src, open(art_path, "wb") as dst:
+                                    dst.write(src.read())
+                            except OSError:
+                                pass
+                elif not os.path.exists(backdrop_path) and os.path.exists(poster_path):
+                    if _generate_fallback_backdrop(poster_path, backdrop_path):
+                        for extra in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
+                            art_path = os.path.join(show_root, extra)
+                            try:
+                                with open(backdrop_path, "rb") as src, open(art_path, "wb") as dst:
+                                    dst.write(src.read())
+                            except OSError:
+                                pass
 
                 season_detail = None
                 season_number = int(entry.get("season") or 1)
@@ -1558,7 +1609,7 @@ async def _enrich_media_metadata(entry):
                 poster_url = _best_image("poster_path")
                 movie_poster = os.path.join(target_dir, "poster.jpg")
                 if poster_url and (not os.path.exists(movie_poster) or os.path.getsize(movie_poster) < 80000):
-                    if await _download_image(session, _resize_tmdb_image(poster_url, "w780"), movie_poster):
+                    if await _download_image(session, _resize_tmdb_image(poster_url, "original"), movie_poster):
                         folder_path = os.path.join(target_dir, "folder.jpg")
                         if not os.path.exists(folder_path):
                             try:
@@ -1571,12 +1622,22 @@ async def _enrich_media_metadata(entry):
                 needs_hd_backdrop = not os.path.exists(movie_backdrop) or os.path.getsize(movie_backdrop) < 300000
                 if backdrop_url and needs_hd_backdrop:
                     if await _download_image(session, _resize_tmdb_image(backdrop_url, "original"), movie_backdrop):
-                        fanart_path = os.path.join(target_dir, "fanart.jpg")
-                        try:
-                            with open(movie_backdrop, "rb") as src, open(fanart_path, "wb") as dst:
-                                dst.write(src.read())
-                        except OSError:
-                            pass
+                        for extra in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
+                            art_path = os.path.join(target_dir, extra)
+                            try:
+                                with open(movie_backdrop, "rb") as src, open(art_path, "wb") as dst:
+                                    dst.write(src.read())
+                            except OSError:
+                                pass
+                elif not os.path.exists(movie_backdrop) and os.path.exists(movie_poster):
+                    if _generate_fallback_backdrop(movie_poster, movie_backdrop):
+                        for extra in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
+                            art_path = os.path.join(target_dir, extra)
+                            try:
+                                with open(movie_backdrop, "rb") as src, open(art_path, "wb") as dst:
+                                    dst.write(src.read())
+                            except OSError:
+                                pass
 
         prev = FILE_ID_CACHE.get(key)
         if isinstance(prev, dict):
@@ -1790,6 +1851,7 @@ def _meta_to_entry(msg_id, chat_id, file_id, file_size, file_name):
         "title": meta["title"],
         "clean_title": meta["clean_title"],
         "search_title": meta["search_title"],
+        "search_candidates": meta.get("search_candidates") or [],
         "is_tv": meta["is_tv"],
         "show_name": meta["show_name"],
         "season": meta["season"],
@@ -3765,35 +3827,51 @@ async def _reconcile_and_upgrade_library():
                 or not os.path.exists(logo)
                 or not os.path.exists(poster)
                 or os.path.getsize(poster) < 80000
+                or not data.get("tmdb_id")
             )
 
-            # Check if this item had a suspicious match (e.g. Indian language matched Portuguese)
+            # Check if this item had a suspicious match or mismatched NFO on disk
             lang = (data.get("language") or "").lower()
             tmdb_title = (data.get("tmdb_title") or "").lower()
+            nfo_file = os.path.join(target_dir, f"{data.get('strm_base', strm_base(data))}.nfo")
+            movie_nfo = os.path.join(target_dir, "movie.nfo")
+            nfo_text = ""
+            for nf in (nfo_file, movie_nfo):
+                if os.path.exists(nf):
+                    try:
+                        with open(nf, "r", encoding="utf-8", errors="ignore") as fh:
+                            nfo_text = fh.read(2048).lower()
+                            break
+                    except OSError:
+                        pass
+
             suspicious = False
             if lang in ("tamil", "malayalam", "telugu", "hindi", "kannada"):
-                for foreign_pfx in ("a vingança", "el ", "le ", "die ", "der "):
-                    if tmdb_title.startswith(foreign_pfx):
+                for foreign_pfx in ("a vingança", "vingança", "el ", "le ", "die ", "der "):
+                    if foreign_pfx in tmdb_title or foreign_pfx in nfo_text:
                         suspicious = True
                         break
 
             entry = dict(data)
             entry["_cache_key"] = key
+            raw_cand = data.get("file_name") or data.get("raw_name") or data.get("clean_title") or data.get("title") or ""
+            entry["search_candidates"] = _search_candidates(raw_cand)
+
             if suspicious:
+                logger.info(f"[RECONCILE] Purging mismatched foreign metadata for '{entry.get('title')}'")
                 entry.pop("tmdb_id", None)
                 entry.pop("tmdb_title", None)
                 entry.pop("tmdb_year", None)
                 data.pop("tmdb_id", None)
                 data.pop("tmdb_title", None)
                 data.pop("tmdb_year", None)
-                for wrong_file in ("movie.nfo", "poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "logo.png", "clearlogo.png"):
+                for wrong_file in ("movie.nfo", "poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg", "logo.png", "clearlogo.png"):
                     wf = os.path.join(target_dir, wrong_file)
                     if os.path.exists(wf):
                         try:
                             os.remove(wf)
                         except OSError:
                             pass
-                nfo_file = os.path.join(target_dir, f"{data.get('strm_base', strm_base(data))}.nfo")
                 if os.path.exists(nfo_file):
                     try:
                         os.remove(nfo_file)

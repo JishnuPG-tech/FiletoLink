@@ -443,5 +443,26 @@ class TestNfoRepair:
         )
         assert nfo_needs_repair(str(nfo)) is True
 
+    def test_foreign_portuguese_nfo_is_flagged(self, tmp_path):
+        nfo = tmp_path / "movie.nfo"
+        nfo.write_text(
+            '<movie><title>A Vingança de Dhurandhar</title><originaltitle>A Vingança</originaltitle></movie>',
+            encoding="utf-8",
+        )
+        assert nfo_needs_repair(str(nfo)) is True
+
+    def test_dhurandhar_candidates_strip_tagline(self):
+        meta = parse_media_meta("Dhurandhar The Revenge 2026 Tamil HQ HDRip - 1080p - x264 -.mkv")
+        cands = meta["search_candidates"]
+        assert "dhurandhar" in cands
+        assert "dhurandhar the revenge" in cands
+
+    def test_vishwanath_candidates_include_amp(self):
+        meta = parse_media_meta("Vishwanath and Sons 2026 Tamil HQ HDRip.mkv")
+        cands = meta["search_candidates"]
+        assert "vishwanath & sons" in cands
+        assert "vishwanath" in cands
+
+
     def test_missing_file_not_flagged(self, tmp_path):
         assert nfo_needs_repair(str(tmp_path / "nope.nfo")) is False

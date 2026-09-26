@@ -13,6 +13,7 @@ The async aiohttp calls live in tg_streamer.py; everything here is pure.
 
 import os
 import re
+import unicodedata
 from typing import Dict, List, Optional
 
 from xml.sax.saxutils import escape as xml_escape
@@ -70,12 +71,15 @@ def _norm_tok(tok: str) -> str:
 _NFO_BAD_TITLE_RE = re.compile(
     r"<\s*(?:originaltitle|original_name)\s*>[^<]*\?{2,}[^<]*<", re.IGNORECASE
 )
+_NFO_FOREIGN_PUDDLE_RE = re.compile(
+    r"(?i)<\s*(?:title|originaltitle|original_name)\s*>[^<]*(?:vingan[cç]a|a\s+vingan[cç]a)[^<]*<"
+)
 
 
 def nfo_needs_repair(nfo_path) -> bool:
-    """True when an existing NFO's original title looks malformed (non-ASCII
-    script collapsed into a run of '?'), so enrichment re-fetches and rewrites
-    it instead of treating the NFO as already-cached."""
+    """True when an existing NFO's title looks malformed, has a mismatched foreign
+    title (e.g. Portuguese vingan[cç]a), or is missing a valid TMDB id, so
+    enrichment re-fetches and rewrites it."""
     if not nfo_path or not os.path.isfile(nfo_path):
         return False
     try:
@@ -83,7 +87,11 @@ def nfo_needs_repair(nfo_path) -> bool:
             text = fh.read(0x4000)
     except OSError:
         return False
-    return bool(_NFO_BAD_TITLE_RE.search(text))
+    if _NFO_BAD_TITLE_RE.search(text) or _NFO_FOREIGN_PUDDLE_RE.search(text):
+        return True
+    if "<tmdbid></tmdbid>" in text or "<tmdbid/>" in text or "<tmdbid>0</tmdbid>" in text:
+        return True
+    return False
 
 # TV patterns, in priority order. All return (show_name, season, episode) or None.
 _SX_E = re.compile(r"(?i)\bS(\d{1,2})\s*(?:\.|\s|_|-)+\s*E(\d{1,3})\b")
@@ -164,11 +172,20 @@ def _drop_dotted_group_tail(text: Optional[str]) -> str:
 
 
 def _sig_tokens(text: str) -> set:
+    if not text:
+        return set()
+    norm_text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
     toks = {
         _norm_tok(t)
-        for t in re.findall(r"[a-z0-9]+", text.lower())
+        for t in re.findall(r"[a-z0-9]+", norm_text.lower())
         if t not in _ALL_STOP
     }
+    if not toks:
+        toks = {
+            _norm_tok(t)
+            for t in re.findall(r"\w+", text.lower())
+            if t not in _ALL_STOP
+        }
     # A lone 4-digit token is a numeric title (e.g. the film "2018"), not a year.
     if len(toks) == 1 and next(iter(toks)).isdigit() and len(next(iter(toks))) == 4:
         return toks
@@ -381,6 +398,16 @@ def _significant_token_stream(text: str):
             yield _norm_tok(tok)
 
 
+_TAGLINE_PATTERNS = re.compile(
+    r"(?i)\b(?:"
+    r"the\s+revenge|the\s+conclusion|the\s+beginning|the\s+final\s+chapter|"
+    r"chapter\s*\d+|part\s*\d+|vol(?:ume)?\s*\d+|"
+    r"returns|reloaded|rises|reborn|unrated|uncut|extended|"
+    r"first\s+look|teaser|trailer|special\s+edition"
+    r")\b"
+)
+
+
 def _search_candidates(raw: Optional[str]) -> List[str]:
     """Ordered candidate search queries for a raw Telegram file name.
 
@@ -399,9 +426,17 @@ def _search_candidates(raw: Optional[str]) -> List[str]:
     cleaned = _clean_search_title(raw)
     if cleaned:
         cands.append(cleaned)
+        tagless = _TAGLINE_PATTERNS.sub(" ", cleaned)
+        tagless = re.sub(r"\s+", " ", tagless).strip()
+        if tagless and tagless != cleaned and tagless not in cands:
+            cands.append(tagless)
+        if "and" in cleaned.split():
+            with_amp = re.sub(r"\band\b", "&", cleaned)
+            if with_amp not in cands:
+                cands.append(with_amp)
     toks = list(_significant_token_stream(raw))
     full_toks = " ".join(toks[:12])
-    if full_toks and full_toks != cleaned:
+    if full_toks and full_toks != cleaned and full_toks not in cands:
         cands.append(full_toks)
     for n in (1, 2, 3, 4):
         prefix = " ".join(toks[:n])
@@ -582,11 +617,11 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
             if hit_lang == lang:
                 score += 0.2
             elif is_indian and hit_lang in _INDIAN_LANG_CODES:
-                score += 0.05
+                score += 0.15
             elif is_indian and hit_lang not in _INDIAN_LANG_CODES and hit_lang not in {"en", ""}:
-                score -= 0.4
+                score -= 0.85
             elif not is_indian and lang == "en" and hit_lang not in {"en", ""}:
-                score -= 0.15
+                score -= 0.25
 
         if score > best_score:
             best, best_score = r, score
