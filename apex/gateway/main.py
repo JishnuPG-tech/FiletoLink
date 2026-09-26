@@ -127,6 +127,35 @@ async def route_catch_all(path: str, request: Request):
     if req_path == "/health/live":
         return JSONResponse({"status": "live"})
         
+    # Jellyfin Plugins and root-relative endpoints:
+    # Plugins like SkinManager (/api/SkinManager/Resource) and InPlayerPreview (/InPlayerPreview/ClientScript)
+    # emit root-relative fetch/script URLs without the /jellyfin prefix.
+    JELLYFIN_PLUGIN_PREFIXES = (
+        "/api/",
+        "/inplayerpreview",
+        "/skinmanager",
+        "/introskipper",
+        "/jellyscrub",
+        "/mediabar",
+        "/themesongs",
+        "/playbackreporting",
+        "/reports",
+    )
+    referer = request.headers.get("referer", "").lower()
+    is_jellyfin_call = any(req_path.startswith(p) for p in JELLYFIN_PLUGIN_PREFIXES) or (
+        "/jellyfin" in referer
+        and not any(req_path.startswith(p) for p in ("/watch/", "/f/", "/filetolink", "/tg-stream", "/tg_stream", "/status", "/health"))
+    )
+
+    if is_jellyfin_call:
+        logger.info(f"[ROUTER] {req_path} (Jellyfin Plugin/Referer) -> Jellyfin ({JELLYFIN_PORT})")
+        return await proxy_http_request(
+            f"http://127.0.0.1:{JELLYFIN_PORT}{raw_path}",
+            request,
+            default_prefix="/jellyfin",
+            extra_headers={"X-Forwarded-Prefix": "/jellyfin"},
+        )
+
     logger.info(f"[ROUTER] {req_path} -> FileToLink fallback ({FILETOLINK_PORT})")
     sub_p = request.url.path
     return await proxy_http_request(

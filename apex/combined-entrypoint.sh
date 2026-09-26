@@ -66,23 +66,6 @@ restore_jellyfin_local() {
         mkdir -p /data/jellyfin/data/metadata.snapshot
     fi
 
-    # Ensure branding is completely reset to stock Jellyfin default
-    for b_path in "$LOCAL_ROOT/config/branding.xml" "/data/jellyfin/config/branding.xml"; do
-        if [ -f "$b_path" ]; then
-            python3 -c "
-import xml.etree.ElementTree as ET
-try:
-    tree = ET.parse('$b_path')
-    root = tree.getroot()
-    css_node = root.find('CustomCss')
-    if css_node is not None and css_node.text:
-        css_node.text = ''
-        tree.write('$b_path', encoding='utf-8', xml_declaration=True)
-except Exception:
-    pass
-" 2>/dev/null || true
-        fi
-    done
 
     # Clean up any custom css files and restore stock index.html
     rm -f /usr/share/jellyfin/web/netflix-dark.css /usr/share/jellyfin/web/pitch-black.css 2>/dev/null || true
