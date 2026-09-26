@@ -74,6 +74,7 @@ _STOP_TOKENS = {
     "10bit", "8bit", "avc", "xvid", "divx", "wmv", "flac", "mp3", "dual",
     "audio", "multi", "subs", "proper", "repack", "extended", "uncut",
     "unrated", "remux", "2160p", "1440p", "1080p", "720p", "480p", "360p",
+    "fullmovie",
 }
 
 

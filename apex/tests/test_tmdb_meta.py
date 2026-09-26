@@ -463,6 +463,41 @@ class TestNfoRepair:
         assert "vishwanath & sons" in cands
         assert "vishwanath" in cands
 
+    def test_patriot_movie_2026_malayalam_parsed_cleanly(self):
+        meta = parse_media_meta("Patriot Movie 2026 malayalam.mkv")
+        assert meta["clean_title"] == "Patriot"
+        assert meta["search_title"] == "patriot"
+        assert meta["year"] == 2026
+        assert meta["language"] == "Malayalam"
+
+    def test_patriot_2026_rejects_mel_gibson_2000(self):
+        results = [
+            {
+                "id": 2108,
+                "title": "The Patriot",
+                "original_title": "The Patriot",
+                "release_date": "2000-06-28",
+                "original_language": "en",
+            }
+        ]
+        # Must strictly reject 26-year gap and English movie for Malayalam release
+        hit = best_tmdb_match(results, "patriot", "movie", 2026, language="ml")
+        assert hit is None
+
+    def test_patriot_no_year_rejects_generic_english_for_malayalam(self):
+        results = [
+            {
+                "id": 2108,
+                "title": "The Patriot",
+                "original_title": "The Patriot",
+                "release_date": "2000-06-28",
+                "original_language": "en",
+            }
+        ]
+        # Even without year, generic single-word English movie cannot match Malayalam
+        hit = best_tmdb_match(results, "patriot", "movie", None, language="ml")
+        assert hit is None
+
 
     def test_missing_file_not_flagged(self, tmp_path):
         assert nfo_needs_repair(str(tmp_path / "nope.nfo")) is False

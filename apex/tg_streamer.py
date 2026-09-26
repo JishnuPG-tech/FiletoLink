@@ -1114,7 +1114,11 @@ _AI_TITLE_SYSTEM = (
     "official title even when the release name is mangled or abbreviated "
     "(e.g. \"Mollywood Times Jhs\" -> \"Mollywood Times\"; \"Obsession 6CH\" "
     "-> \"Obsession\"). Return the title exactly as TMDB/IMDb list it, with the "
-    "real release year. Return a strict JSON object "
+    "real release year. CRITICAL: NEVER replace an Indian regional release "
+    "(Malayalam, Tamil, Telugu, etc.) or a modern film (2024-2026) with an "
+    "unrelated old Hollywood/English film (e.g. from the 1990s or 2000s). For example, "
+    "'Patriot Movie 2026 malayalam' is the 2026 Malayalam movie 'Patriot', NEVER the "
+    "2000 movie 'The Patriot'. Return a strict JSON object "
     "{\"title\": string|null, \"year\": int|null}. Only the JSON object, no "
     "explanations, no markdown fences."
 )
@@ -1356,27 +1360,35 @@ async def _enrich_media_metadata(entry):
                 entry.get("file_name") or entry.get("raw_name") or entry.get("title")
             )
             if ai_title and ai_title != used_query:
-                year_hint = ai_year or entry.get("year")
-                while year_hint:
+                orig_year = entry.get("year")
+                if orig_year and ai_year and abs(orig_year - ai_year) >= 3:
+                    ai_year = orig_year
+                year_hint = ai_year or orig_year
+
+                try:
+                    results = await _tmdb_search(media_type, ai_title, year_hint, language="en-US")
+                except Exception as _exc:
+                    results = []
+                hit = best_tmdb_match(results, ai_title, media_type, year_hint, language=lang_code)
+
+                if not hit and lang_code and lang_code != "en":
                     try:
-                        results = await _tmdb_search(media_type, ai_title, year_hint)
+                        results = await _tmdb_search(media_type, ai_title, year_hint, language=lang_code)
                     except Exception as _exc:
                         results = []
-                    hit = best_tmdb_match(results, ai_title, media_type, year_hint)
-                    if hit:
-                        break
-                    try:
-                        mres = await _tmdb_get(
-                            "/search/multi",
-                            {"query": ai_title, "include_adult": "false"},
-                        )
-                    except Exception as _exc:
-                        mres = None
-                    results = mres.get("results") or [] if mres else []
-                    hit = best_tmdb_match(results, ai_title, media_type, year_hint)
-                    if hit or not year_hint:
-                        break
-                    year_hint = None
+                    hit = best_tmdb_match(results, ai_title, media_type, year_hint, language=lang_code)
+
+                if not hit and year_hint:
+                    for delta in (-1, 1):
+                        adj_year = year_hint + delta
+                        try:
+                            results = await _tmdb_search(media_type, ai_title, adj_year, language="en-US")
+                        except Exception:
+                            results = []
+                        hit = best_tmdb_match(results, ai_title, media_type, adj_year, language=lang_code)
+                        if hit:
+                            break
+
                 if hit:
                     used_query = ai_title
                     logger.info(f"[AI-TITLE] '{entry.get('title')}' -> '{ai_title}' (tmdb_id={hit.get('id')})")
@@ -3778,6 +3790,12 @@ async def _reconcile_and_upgrade_library():
                             logger.info(f"[PURGE] Removed blacklisted directory: {dn}")
                         except OSError:
                             pass
+                    if "patriot" in dn.lower() and "2000" in dn:
+                        try:
+                            shutil.rmtree(os.path.join(dirpath, dn), ignore_errors=True)
+                            logger.info(f"[PURGE] Removed misplaced Patriot 2000 directory: {dn}")
+                        except OSError:
+                            pass
 
         # Step 2: Remove blacklisted items from FILE_ID_CACHE
         keys_to_purge = []
@@ -3833,6 +3851,8 @@ async def _reconcile_and_upgrade_library():
             # Check if this item had a suspicious match or mismatched NFO on disk
             lang = (data.get("language") or "").lower()
             tmdb_title = (data.get("tmdb_title") or "").lower()
+            tmdb_year = data.get("tmdb_year")
+            file_year = data.get("year")
             nfo_file = os.path.join(target_dir, f"{data.get('strm_base', strm_base(data))}.nfo")
             movie_nfo = os.path.join(target_dir, "movie.nfo")
             nfo_text = ""
@@ -3851,6 +3871,12 @@ async def _reconcile_and_upgrade_library():
                     if foreign_pfx in tmdb_title or foreign_pfx in nfo_text:
                         suspicious = True
                         break
+                raw_name_lower = (data.get("file_name") or data.get("title") or "").lower()
+                if not suspicious and "patriot" in raw_name_lower:
+                    if data.get("tmdb_id") == 2108 or "mel gibson" in nfo_text or (tmdb_year and tmdb_year <= 2010):
+                        suspicious = True
+                if not suspicious and file_year and tmdb_year and abs(int(file_year) - int(tmdb_year)) >= 4:
+                    suspicious = True
 
             entry = dict(data)
             entry["_cache_key"] = key

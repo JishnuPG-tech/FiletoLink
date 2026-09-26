@@ -373,6 +373,12 @@ def _clean_search_title(text: str) -> str:
     text = _remove_tokens(text, _ALL_STOP)
     text = " ".join(t for t in text.split() if not _CHANNEL_TOKEN_RE.match(t))
     text = _drop_group_tags(text)
+    # Strip descriptor noise words like "movie", "film" only when other words exist
+    tokens = text.split()
+    if len(tokens) > 1:
+        non_desc = [w for w in tokens if w.lower() not in {"movie", "film", "cinema", "fullmovie", "full"}]
+        if non_desc:
+            text = " ".join(non_desc)
     return " ".join(text.lower().split())
 
 
@@ -595,33 +601,45 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
             else:
                 score += 0.15
 
+        diff = None
         date = (r.get("release_date") or r.get("first_air_date") or "")[:4]
         if year and date and date.isdigit():
             hit_year = int(date)
             diff = abs(hit_year - year)
             if diff == 0:
-                score += 0.3
+                score += 0.35
             elif diff == 1:
                 score += 0.15
             elif diff == 2:
                 score -= 0.1
             elif diff <= 5:
-                score -= 0.4
-            elif diff <= 9:
-                score -= 0.75
+                score -= 0.45
+            elif diff <= 8:
+                score -= 0.85
             else:
-                score -= 1.1
+                # 9+ year gap is an entirely different era / film!
+                # For example, The Patriot (2000) vs Patriot (2026) is 26 years apart.
+                continue
 
         hit_lang = (r.get("original_language") or "").lower()
         if lang:
             if hit_lang == lang:
-                score += 0.2
+                score += 0.25
             elif is_indian and hit_lang in _INDIAN_LANG_CODES:
                 score += 0.15
-            elif is_indian and hit_lang not in _INDIAN_LANG_CODES and hit_lang not in {"en", ""}:
-                score -= 0.85
+            elif is_indian and hit_lang == "en":
+                # An Indian regional release (Malayalam, Tamil, etc.) matching an English movie
+                # must not happen for short/generic queries or when year differs.
+                if diff is not None and diff > 1:
+                    score -= 1.5
+                elif len(q_toks) <= 2:
+                    score -= 0.8
+                else:
+                    score -= 0.3
+            elif is_indian and hit_lang not in _INDIAN_LANG_CODES:
+                score -= 1.5
             elif not is_indian and lang == "en" and hit_lang not in {"en", ""}:
-                score -= 0.25
+                score -= 0.35
 
         if score > best_score:
             best, best_score = r, score
