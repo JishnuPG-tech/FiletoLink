@@ -12,6 +12,7 @@ Authentication:
 
 import os
 import hmac
+import json
 import shutil
 import asyncio
 import logging
@@ -365,3 +366,41 @@ async def ops_jellyfin_theme(request: Request):
             "prev_css_len": len(current),
             "new_css_len": len(css),
         })
+
+
+@router.get("/apex/ops/jellyfin/api")
+async def ops_jellyfin_api(request: Request):
+    """Admin-gated passthrough to the internal Jellyfin API for diagnostics.
+
+    Query: ?path=<api path incl. query string> e.g.
+      /Items?Recursive=true&IncludeItemTypes=Movie&searchTerm=Mollywood
+    Uses the server-side API key, so it survives behind the public proxy.
+    """
+    if not _is_admin(request):
+        return _denied()
+    import aiohttp
+
+    headers = _jellyfin_auth_header()
+    if not headers:
+        return JSONResponse({"ok": False, "error": "No Jellyfin API key available"}, status_code=503)
+
+    api_path = str(request.query_params.get("path") or "").lstrip("/")
+    if not api_path:
+        return JSONResponse({"ok": False, "error": "Missing 'path' query param"}, status_code=400)
+    if "\n" in api_path or "\r" in api_path:
+        return JSONResponse({"ok": False, "error": "Invalid path"}, status_code=400)
+
+    url = f"{_JELLYFIN_BASE}/{api_path}"
+    async with aiohttp.ClientSession(headers=headers) as session:
+        try:
+            async with session.get(url, timeout=30) as resp:
+                body = await resp.text()
+                ctype = resp.headers.get("content-type", "")
+                if "application/json" in ctype:
+                    try:
+                        return JSONResponse({"ok": True, "status": resp.status, "data": json.loads(body)})
+                    except Exception:
+                        pass
+                return JSONResponse({"ok": True, "status": resp.status, "text": body[:40000]})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"Jellyfin API call failed: {exc}"}, status_code=502)
