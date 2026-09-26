@@ -159,6 +159,21 @@ def load_cache():
         except Exception as e:
             pass
 
+    # Normalize any inverted msg_id / chat_id in cached entries (e.g. from prior swapped ingestion)
+    normalized = 0
+    for key, data in list(FILE_ID_CACHE.items()):
+        if isinstance(data, dict):
+            m = data.get("msg_id")
+            c = data.get("chat_id")
+            if isinstance(m, int) and isinstance(c, int) and m < 0 and c > 0:
+                data["msg_id"] = c
+                data["chat_id"] = m
+                correct_key = _cache_key(m, c)
+                FILE_ID_CACHE[correct_key] = data
+                normalized += 1
+    if normalized:
+        logger.info(f"[CACHE] Normalized {normalized} inverted msg_id/chat_id cache entries.")
+
 def _save_cache_sync():
     try:
         tmp = f"{CACHE_FILE}.tmp"
@@ -192,10 +207,19 @@ def _cache_lookup(message_id, chat_id=None):
     composite keys when only the message id is available (legacy routes). A
     resolved legacy entry whose chat_id contradicts `chat_id` is rejected.
     """
+    try:
+        m_int = int(message_id)
+        if m_int < 0 and chat_id is not None and int(chat_id) > 0:
+            message_id, chat_id = int(chat_id), m_int
+    except (TypeError, ValueError):
+        pass
     if chat_id:
         entry = FILE_ID_CACHE.get(_cache_key(chat_id, message_id))
         if isinstance(entry, dict):
             return entry
+        alt_entry = FILE_ID_CACHE.get(_cache_key(message_id, chat_id))
+        if isinstance(alt_entry, dict):
+            return alt_entry
     legacy = FILE_ID_CACHE.get(str(message_id))
     if isinstance(legacy, dict):
         if chat_id and legacy.get("chat_id") and str(legacy.get("chat_id")) != str(chat_id):
@@ -219,7 +243,11 @@ def _split_cache_key(key):
     if isinstance(key, str) and ":" in key:
         try:
             chat_part, msg_part = key.rsplit(":", 1)
-            return int(chat_part), int(msg_part)
+            c = int(chat_part)
+            m = int(msg_part)
+            if c > 0 and m < 0:
+                c, m = m, c
+            return c, m
         except (TypeError, ValueError):
             return None, key
     return None, key
@@ -1648,6 +1676,13 @@ async def _retry_pending_subtitles():
 
 def _meta_to_entry(msg_id, chat_id, file_id, file_size, file_name):
     """Parse a file name into a full cache/strm entry (single source of truth)."""
+    try:
+        m_int = int(msg_id)
+        c_int = int(chat_id)
+        if m_int < 0 and c_int > 0:
+            msg_id, chat_id = c_int, m_int
+    except (TypeError, ValueError):
+        pass
     meta = parse_media_meta(file_name)
     return {
         "file_id": file_id,
@@ -2807,7 +2842,7 @@ async def _process_and_index_message(message, chat_id):
         placed = await _place_subtitle(msg_id, msg_chat_id, media.file_id, file_name)
         logger.info(f"[REINDEX] Subtitle handled: {file_name} placed={placed}")
         return False, True
-    entry = _meta_to_entry(msg_chat_id, msg_id, media.file_id, media.file_size or 0, file_name)
+    entry = _meta_to_entry(msg_id, msg_chat_id, media.file_id, media.file_size or 0, file_name)
     if _is_unknown_media(entry):
         return False, True
     FILE_ID_CACHE[_cache_key(msg_chat_id, msg_id)] = entry
@@ -3074,6 +3109,9 @@ def _source_path_from_request(request):
         chat_id = int(chat_id)
     except (TypeError, ValueError):
         chat_id = 0
+    # Defensive: if chat_id > 0 and message_id < 0, they were inverted in the URL path
+    if chat_id > 0 and message_id < 0:
+        chat_id, message_id = message_id, chat_id
     return chat_id, message_id
 
 
@@ -3090,10 +3128,12 @@ async def _wait_pool_ready():
 @routes.get("/stream/{message_id}")
 @routes.get("/stream/{message_id}/{filename}")
 @routes.get("/stream/{chat_id}/{message_id}/video.mp4")
+@routes.get("/stream/{chat_id}/{message_id}/{filename}")
 @routes.head("/stream_file")
 @routes.head("/stream/{message_id}")
 @routes.head("/stream/{message_id}/{filename}")
 @routes.head("/stream/{chat_id}/{message_id}/video.mp4")
+@routes.head("/stream/{chat_id}/{message_id}/{filename}")
 async def stream_file(request):
     """
     Coalescing, byte-accurate Range streamer backed by the apex_stream driver:
@@ -3112,10 +3152,17 @@ async def stream_file(request):
         except (TypeError, ValueError):
             expires, signature = 0, ""
         expected = _stream_signature(chat_id, message_id, expires)
+        alt_expected = _stream_signature(message_id, chat_id, expires)
+        sig_matches = (
+            signature and (
+                hmac.compare_digest(signature, expected) or
+                hmac.compare_digest(signature, alt_expected)
+            )
+        )
         if (REQUIRE_SIGNED_STREAMS or signature or expires) and (
             expires < int(time.time()) or
             not signature or
-            not hmac.compare_digest(signature, expected)
+            not sig_matches
         ):
             return web.Response(status=403, text="Invalid or expired stream token.")
 
