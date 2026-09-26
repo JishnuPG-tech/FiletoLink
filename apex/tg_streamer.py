@@ -1315,13 +1315,17 @@ async def _enrich_media_metadata(entry):
             if old_strm_path and os.path.exists(old_strm_path) and old_strm_path != new_strm_path:
                 os.makedirs(new_target_dir, exist_ok=True)
                 os.replace(old_strm_path, new_strm_path)
-                entry["strm_path"] = new_strm_path
-                # Remember the pre-move path so the post-enrichment item refresh
-                # can still locate the Jellyfin item while it is re-indexed.
-                entry["_prev_strm_path"] = old_strm_path
                 logger.info(
                     f"[ORGANIZE] Moved '{entry.get('title')}' to {tmdb_language} folder"
                 )
+            # Always point the entry at the new canonical path, even when the
+            # old .strm was missing (a later restore would otherwise recreate
+            # the stale-language copy). Remember the pre-move path so the
+            # post-enrichment item refresh / restore prune can still resolve
+            # the old Jellyfin item while it is re-indexed.
+            entry["strm_path"] = new_strm_path
+            if old_strm_path and old_strm_path != new_strm_path:
+                entry["_prev_strm_path"] = old_strm_path
             entry["target_dir"] = new_target_dir
             entry["show_root"] = new_show_root
             target_dir = new_target_dir
@@ -1395,6 +1399,17 @@ async def _enrich_media_metadata(entry):
                 detail.get("name") or detail.get("title") or hit.get("name") or hit.get("title")
             )
             prev["tmdb_year"] = _tmdb_year(detail)
+            if prev is not entry:
+                # Mirror organize-time fields onto the persisted object so a
+                # language/target move is never lost (restore must not recreate
+                # the stale-language copy from an un-updated cache entry).
+                for _field in (
+                    "language", "target_dir", "show_root", "strm_path",
+                    "_prev_strm_path", "strm_base",
+                ):
+                    if _field in entry:
+                        prev[_field] = entry[_field]
+            prev["canonical_key"] = _canonical_media_key(prev)
             FILE_ID_CACHE[key] = prev
             await save_cache_async()
         logger.info(f"[TMDB] ✅ Enriched {'TV' if is_tv else 'Movie'} metadata for '{query}' (tmdb_id={tmdb_id})")

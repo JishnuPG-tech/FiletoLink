@@ -425,9 +425,11 @@ async def ops_jellyfin_api(request: Request):
 async def ops_jellyfin_cleanup(request: Request):
     """Remove ghost library entries left behind by file relocations.
 
-    Body: {"folders": ["/abs/path/to/empty/dir", ...],
+    Body: {"folders": ["/abs/path/to/dir", ...],
            "item_ids": ["<jellyfin item id>", ...]}
-    A folder is only removed when it lives under /data/jellyfin and is empty.
+    A folder is only removed when it lives under /data/jellyfin. Our-streamer
+    .strm files inside the folder are deleted first (content must reference
+    the local streamer), then the directory is removed if it becomes empty.
     Each item_id is then deleted through the Jellyfin API (DELETE /Items/{id},
     best effort, tolerant of 404 when Jellyfin already dropped it).
     """
@@ -448,6 +450,8 @@ async def ops_jellyfin_cleanup(request: Request):
     item_ids = payload.get("item_ids") or []
     results = {"folders": [], "items": []}
 
+    stream_port = os.environ.get("TG_LISTEN_PORT", os.environ.get("PORT", "8080"))
+
     for folder in folders:
         folder = str(folder)
         if not folder.startswith("/data/jellyfin/"):
@@ -456,11 +460,35 @@ async def ops_jellyfin_cleanup(request: Request):
         try:
             if not os.path.isdir(folder):
                 results["folders"].append({"path": folder, "status": "not_found"})
-            elif os.listdir(folder):
-                results["folders"].append({"path": folder, "status": "not_empty", "entries": os.listdir(folder)[:20]})
+                continue
+            removed_strms = 0
+            for name in os.listdir(folder):
+                path = os.path.join(folder, name)
+                if not os.path.isfile(path) or not name.lower().endswith(".strm"):
+                    continue
+                try:
+                    with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+                        content = fh.read(256)
+                except OSError:
+                    continue
+                if (
+                    f"127.0.0.1:{stream_port}" not in content
+                    and f"{stream_port}/stream" not in content
+                ):
+                    continue
+                os.remove(path)
+                removed_strms += 1
+            remaining = os.listdir(folder)
+            if remaining:
+                results["folders"].append({
+                    "path": folder,
+                    "status": "not_empty",
+                    "removed_streamer_strms": removed_strms,
+                    "entries": remaining[:20],
+                })
             else:
                 shutil.rmtree(folder)
-                results["folders"].append({"path": folder, "status": "removed"})
+                results["folders"].append({"path": folder, "status": "removed", "removed_streamer_strms": removed_strms})
         except Exception as exc:
             results["folders"].append({"path": folder, "status": "error", "detail": str(exc)})
 
@@ -476,3 +504,73 @@ async def ops_jellyfin_cleanup(request: Request):
                 results["items"].append({"id": item_id, "status": "error", "detail": str(exc)})
 
     return JSONResponse({"ok": True, "results": results})
+
+
+@router.post("/apex/ops/jellyfin/cache/patch")
+async def ops_jellyfin_cache_patch(request: Request):
+    """Patch a single entry of the streamer's file_ids.json cache.
+
+    Body: {"key": "<chat_id>:<msg_id>", "fields": {...}}
+
+    Only safe path fields are honored (must stay under /data/jellyfin):
+    target_dir, strm_path, _prev_strm_path, show_root. Other scalar fields
+    (language, canonical_key, strm_base, year, ...) are applied verbatim.
+    The cache file is written atomically (tmp + replace) so an interrupted
+    save can never corrupt it.
+    """
+    if not _is_admin(request):
+        return _denied()
+
+    cache_path = os.path.join(JELLYFIN_ROOT, "file_ids.json")
+    if not os.path.isfile(cache_path):
+        return JSONResponse({"ok": False, "error": "cache file not found"}, status_code=404)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "body must be JSON"}, status_code=400)
+
+    key = str(payload.get("key") or "").strip()
+    fields = payload.get("fields")
+    if not key or not isinstance(fields, dict) or not fields:
+        return JSONResponse({"ok": False, "error": "key and non-empty fields required"}, status_code=400)
+
+    try:
+        with open(cache_path, "r", encoding="utf-8") as fh:
+            cache = json.load(fh)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"cache unreadable: {exc}"}, status_code=500)
+
+    if not isinstance(cache, dict) or not isinstance(cache.get(key), dict):
+        return JSONResponse({"ok": False, "error": f"no cache entry for key '{key}'"}, status_code=404)
+
+    path_fields = ("target_dir", "strm_path", "_prev_strm_path", "show_root")
+    entry = cache[key]
+    old = dict(entry)
+    for name, value in fields.items():
+        if name in path_fields:
+            if value is None or value == "":
+                entry.pop(name, None)
+                continue
+            text = str(value)
+            if not text.startswith("/data/jellyfin/"):
+                return JSONResponse(
+                    {"ok": False, "error": f"field '{name}' must stay under /data/jellyfin"},
+                    status_code=400,
+                )
+            entry[name] = text
+        else:
+            entry[name] = value
+
+    cache[key] = entry
+    tmp_path = cache_path + ".tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            json.dump(cache, fh, ensure_ascii=False, indent=2)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, cache_path)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"cache write failed: {exc}"}, status_code=500)
+
+    return JSONResponse({"ok": True, "old": old, "new": entry})
