@@ -374,6 +374,8 @@ async def ops_jellyfin_api(request: Request):
 
     Query: ?path=<api path incl. query string> e.g.
       /Items?Recursive=true&IncludeItemTypes=Movie&searchTerm=Mollywood
+    Optional: &method=GET|POST|DELETE (default GET)
+              &body=<json>      (raw JSON body for POST)
     Uses the server-side API key, so it survives behind the public proxy.
     """
     if not _is_admin(request):
@@ -384,16 +386,29 @@ async def ops_jellyfin_api(request: Request):
     if not headers:
         return JSONResponse({"ok": False, "error": "No Jellyfin API key available"}, status_code=503)
 
+    method = str(request.query_params.get("method") or "GET").upper()
+    if method not in ("GET", "POST", "DELETE"):
+        return JSONResponse({"ok": False, "error": "method must be GET, POST or DELETE"}, status_code=400)
+
     api_path = str(request.query_params.get("path") or "").lstrip("/")
     if not api_path:
         return JSONResponse({"ok": False, "error": "Missing 'path' query param"}, status_code=400)
     if "\n" in api_path or "\r" in api_path:
         return JSONResponse({"ok": False, "error": "Invalid path"}, status_code=400)
 
+    json_body = None
+    if method == "POST":
+        raw_body = request.query_params.get("body")
+        if raw_body:
+            try:
+                json_body = json.loads(raw_body)
+            except Exception:
+                return JSONResponse({"ok": False, "error": "body must be valid JSON"}, status_code=400)
+
     url = f"{_JELLYFIN_BASE}/{api_path}"
     async with aiohttp.ClientSession(headers=headers) as session:
         try:
-            async with session.get(url, timeout=30) as resp:
+            async with session.request(method, url, json=json_body, timeout=60) as resp:
                 body = await resp.text()
                 ctype = resp.headers.get("content-type", "")
                 if "application/json" in ctype:
@@ -404,3 +419,60 @@ async def ops_jellyfin_api(request: Request):
                 return JSONResponse({"ok": True, "status": resp.status, "text": body[:40000]})
         except Exception as exc:
             return JSONResponse({"ok": False, "error": f"Jellyfin API call failed: {exc}"}, status_code=502)
+
+
+@router.post("/apex/ops/jellyfin/cleanup")
+async def ops_jellyfin_cleanup(request: Request):
+    """Remove ghost library entries left behind by file relocations.
+
+    Body: {"folders": ["/abs/path/to/empty/dir", ...],
+           "item_ids": ["<jellyfin item id>", ...]}
+    A folder is only removed when it lives under /data/jellyfin and is empty.
+    Each item_id is then deleted through the Jellyfin API (DELETE /Items/{id},
+    best effort, tolerant of 404 when Jellyfin already dropped it).
+    """
+    if not _is_admin(request):
+        return _denied()
+    import aiohttp
+
+    headers = _jellyfin_auth_header()
+    if not headers:
+        return JSONResponse({"ok": False, "error": "No Jellyfin API key available"}, status_code=503)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    folders = payload.get("folders") or []
+    item_ids = payload.get("item_ids") or []
+    results = {"folders": [], "items": []}
+
+    for folder in folders:
+        folder = str(folder)
+        if not folder.startswith("/data/jellyfin/"):
+            results["folders"].append({"path": folder, "status": "skipped_not_under_data"})
+            continue
+        try:
+            if not os.path.isdir(folder):
+                results["folders"].append({"path": folder, "status": "not_found"})
+            elif os.listdir(folder):
+                results["folders"].append({"path": folder, "status": "not_empty", "entries": os.listdir(folder)[:20]})
+            else:
+                shutil.rmtree(folder)
+                results["folders"].append({"path": folder, "status": "removed"})
+        except Exception as exc:
+            results["folders"].append({"path": folder, "status": "error", "detail": str(exc)})
+
+    async with aiohttp.ClientSession(headers=headers) as session:
+        for item_id in item_ids:
+            item_id = str(item_id).strip()
+            if not item_id:
+                continue
+            try:
+                async with session.delete(f"{_JELLYFIN_BASE}/Items/{item_id}", timeout=15) as resp:
+                    results["items"].append({"id": item_id, "status": resp.status})
+            except Exception as exc:
+                results["items"].append({"id": item_id, "status": "error", "detail": str(exc)})
+
+    return JSONResponse({"ok": True, "results": results})
