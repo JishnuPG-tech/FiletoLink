@@ -244,6 +244,91 @@ async def ops_jellyfin_db_query(request: Request):
     })
 
 
+@router.post("/apex/ops/jellyfin/db/repair-libraries")
+async def ops_jellyfin_db_repair_libraries(request: Request):
+    """Re-point the two Jellyfin library (CollectionFolder) rows from their stale
+    data/root/default/... paths to the real /data/jellyfin/media/... locations.
+
+    This heals the 'library has no valid item id' state: Jellyfin can then resolve
+    the collection folders by path, populate ItemId / LibraryOptions, and accept
+    library settings updates. A sqlite backup is taken first and the before/after
+    rows are returned so the change is fully reversible.
+    """
+    if not _is_admin(request):
+        return _denied()
+
+    db = _LOCAL_DB if os.path.exists(_LOCAL_DB) else os.path.join(JELLYFIN_ROOT, "data", "data", "jellyfin.db")
+    if not os.path.exists(db):
+        return JSONResponse({"ok": False, "error": f"no jellyfin.db at {db}"}, status_code=404)
+
+    # name -> (item id, current stale path prefix -> real media location)
+    LIBRARIES = {
+        "Movies": ("F137A2DD-21BB-C1B9-9AA5-C0F6BF02A805", "/data/jellyfin/data/root/default/Movies", "/data/jellyfin/media/Movies"),
+        "TV Shows": ("767BFFE4-F11C-93EF-34B8-05451A696A4E", "/data/jellyfin/data/root/default/TV Shows", "/data/jellyfin/media/TV Shows"),
+    }
+
+    try:
+        import sqlite3
+        import datetime
+        backup = db + f".repairbackup.{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+        conn_src = sqlite3.connect(db, timeout=10)
+        try:
+            conn_src.execute("VACUUM INTO '%s'" % backup.replace("'", "''"))
+        finally:
+            conn_src.close()
+
+        before, after = {}, {}
+        conn = sqlite3.connect(db, timeout=15)
+        conn.isolation_level = None
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            cur = conn.cursor()
+            for name, (item_id, stale_path, media_path) in LIBRARIES.items():
+                cur.execute("SELECT Id, Path, Data FROM BaseItems WHERE Id = ?", (item_id,))
+                row = cur.fetchone()
+                if not row:
+                    before[name] = "MISSING"
+                    continue
+                row_id, row_path, row_data = row
+                data = {}
+                if row_data:
+                    try:
+                        data = json.loads(row_data)
+                    except Exception:
+                        data = {}
+                new_data = dict(data)
+                locs = list(new_data.get("PhysicalLocationsList") or [])
+                locs = [ln for ln in locs if ln != stale_path]
+                if media_path not in locs:
+                    locs.insert(0, media_path)
+                new_data["PhysicalLocationsList"] = locs
+                now = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                new_data["DateLastSaved"] = now
+                cur.execute(
+                    "UPDATE BaseItems SET Path = ?, Data = ?, DateModified = ? WHERE Id = ?",
+                    (media_path, json.dumps(new_data), now, row_id),
+                )
+                before[name] = {"path": row_path, "locations": list(locs)}
+                after[name] = {"path": media_path, "locations": locs}
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"repair failed: {exc}"}, status_code=500)
+
+    return JSONResponse({
+        "ok": True,
+        "db": db,
+        "backup": backup,
+        "before": before,
+        "after": after,
+        "next": "POST /System/Restart so Jellyfin reloads the healed library rows.",
+    })
+
+
 @router.post("/apex/ops/jellyfin/reset")
 async def ops_jellyfin_reset(request: Request):
     """Remove everything under /data/jellyfin and lay down a clean directory skeleton."""
