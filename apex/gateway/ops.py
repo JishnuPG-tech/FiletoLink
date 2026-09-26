@@ -368,14 +368,17 @@ async def ops_jellyfin_theme(request: Request):
         })
 
 
-@router.get("/apex/ops/jellyfin/api")
+@router.api_route("/apex/ops/jellyfin/api", methods=["GET", "POST", "DELETE"])
 async def ops_jellyfin_api(request: Request):
-    """Admin-gated passthrough to the internal Jellyfin API for diagnostics.
+    """Admin-gated passthrough to the internal Jellyfin API.
 
     Query: ?path=<api path incl. query string> e.g.
       /Items?Recursive=true&IncludeItemTypes=Movie&searchTerm=Mollywood
-    Optional: &method=GET|POST|DELETE (default GET)
-              &body=<json>      (raw JSON body for POST)
+    Optional: &method=GET|POST|DELETE (default GET) — upstream verb to use.
+              &body=<json>  (raw JSON body for POST; else the request body is used)
+    The route itself accepts GET, POST and DELETE verbs, so a normal
+    `POST /apex/ops/jellyfin/api?path=Repositories` (with a JSON request body)
+    works as well as the GET-with-query-params form.
     Uses the server-side API key, so it survives behind the public proxy.
     """
     if not _is_admin(request):
@@ -386,7 +389,7 @@ async def ops_jellyfin_api(request: Request):
     if not headers:
         return JSONResponse({"ok": False, "error": "No Jellyfin API key available"}, status_code=503)
 
-    method = str(request.query_params.get("method") or "GET").upper()
+    method = str(request.query_params.get("method") or request.method or "GET").upper()
     if method not in ("GET", "POST", "DELETE"):
         return JSONResponse({"ok": False, "error": "method must be GET, POST or DELETE"}, status_code=400)
 
@@ -399,6 +402,11 @@ async def ops_jellyfin_api(request: Request):
     json_body = None
     if method == "POST":
         raw_body = request.query_params.get("body")
+        if raw_body is None:
+            try:
+                raw_body = (await request.body()).decode("utf-8") or None
+            except Exception:
+                raw_body = None
         if raw_body:
             try:
                 json_body = json.loads(raw_body)
