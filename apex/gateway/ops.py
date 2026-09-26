@@ -268,8 +268,10 @@ async def ops_jellyfin_scan(request: Request):
 
 
 # Netflix-style community skin for the Jellyfin web UI. Injected through the
-# server's own System/Configuration CustomCss field so it applies server-wide
-# and survives restarts (it is persisted in the /data/jellyfin/config volume).
+# server's branding configuration (BrandingOptions -> branding.xml, which lives
+# on the /data/jellyfin/config volume) so it applies server-wide and survives
+# restarts. Jellyfin 10.11+ no longer supports the legacy SystemConfiguration
+# CustomCss field; the api is POST /System/Configuration/Branding.
 JELLYFIN_THEME_CSS = (
     '@import url("https://raw.githubusercontent.com/Automationxperts/jellyflix/main/default.css");\n'
     '@import url("https://raw.githubusercontent.com/Automationxperts/jellyflix/main/Logo.css");\n'
@@ -293,9 +295,9 @@ async def ops_jellyfin_theme(request: Request):
 
     Body: {"css": "<custom css>"}          -> replace; omit/empty to clear
           {"action": "status"}              -> report current value only
-    The CSS is written through the Jellyfin API (System/Configuration) so it is
-    persisted by the server inside the /data/jellyfin/config volume and thus
-    survives every container restart.
+    The CSS is written through Jellyfin's branding endpoint
+    (POST /System/Configuration/Branding, persisted to branding.xml on the
+    /data/jellyfin/config volume) so it survives every container restart.
     """
     if not _is_admin(request):
         return _denied()
@@ -312,14 +314,14 @@ async def ops_jellyfin_theme(request: Request):
 
     async with aiohttp.ClientSession(headers=headers) as session:
         try:
-            async with session.get(f"{_JELLYFIN_BASE}/System/Configuration", timeout=10) as resp:
+            async with session.get(f"{_JELLYFIN_BASE}/Branding/Configuration", timeout=10) as resp:
                 if resp.status != 200:
-                    return JSONResponse({"ok": False, "error": f"GET System/Configuration -> {resp.status}"}, status_code=502)
-                cfg = await resp.json()
+                    return JSONResponse({"ok": False, "error": f"GET Branding/Configuration -> {resp.status}"}, status_code=502)
+                branding = await resp.json()
         except Exception as exc:
-            return JSONResponse({"ok": False, "error": f"GET System/Configuration failed: {exc}"}, status_code=502)
+            return JSONResponse({"ok": False, "error": f"GET Branding/Configuration failed: {exc}"}, status_code=502)
 
-        current = str(cfg.get("CustomCss") or "")
+        current = str(branding.get("CustomCss") or "")
 
         if str(payload.get("action") or "").lower() == "status":
             return JSONResponse({
@@ -334,18 +336,22 @@ async def ops_jellyfin_theme(request: Request):
             css = JELLYFIN_THEME_CSS
 
         changed = current != css
-        cfg["CustomCss"] = css
+        branding["CustomCss"] = css
         try:
-            async with session.post(f"{_JELLYFIN_BASE}/System/Configuration", json=cfg, timeout=10) as resp:
+            async with session.post(
+                f"{_JELLYFIN_BASE}/System/Configuration/Branding",
+                json=branding,
+                timeout=10,
+            ) as resp:
                 if resp.status not in (200, 204):
-                    return JSONResponse({"ok": False, "error": f"POST System/Configuration -> {resp.status}"}, status_code=502)
+                    return JSONResponse({"ok": False, "error": f"POST System/Configuration/Branding -> {resp.status}"}, status_code=502)
         except Exception as exc:
-            return JSONResponse({"ok": False, "error": f"POST System/Configuration failed: {exc}"}, status_code=502)
+            return JSONResponse({"ok": False, "error": f"POST System/Configuration/Branding failed: {exc}"}, status_code=502)
 
-        # Confirm the server actually persisted it (unknown XML fields are ignored).
+        # Confirm the server actually persisted it in branding.xml.
         confirmed = False
         try:
-            async with session.get(f"{_JELLYFIN_BASE}/System/Configuration", timeout=10) as resp:
+            async with session.get(f"{_JELLYFIN_BASE}/Branding/Configuration", timeout=10) as resp:
                 if resp.status == 200:
                     confirmed = str((await resp.json()).get("CustomCss") or "").strip() == css
         except Exception:
