@@ -29,6 +29,44 @@ TPL_BASE = "https://image.tmdb.org/t/p"
 
 YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
 
+# Radarr-style embedded IMDb ids: "Movie.tt12345678", "{imdb-tt1234567}", "[tt1234567]".
+_IMDB_ID_RE = re.compile(r"(?i)\b(?:imdb[-_. ]?)?(tt\d{5,11})\b")
+
+# Roman-numeral suffix/parts used by sequels ("Rocky III", "Part IV") that TMDB
+# stores in Arabic form. Mapped before token matching so "III" == "3".
+_ROMAN_TO_ARABIC = {
+    "i": "1", "ii": "2", "iii": "3", "iv": "4", "v": "5", "vi": "6",
+    "vii": "7", "viii": "8", "ix": "9", "x": "10", "xi": "11", "xii": "12",
+    "xiii": "13", "xiv": "14", "xv": "15", "xvi": "16", "xvii": "17",
+    "xviii": "18", "xix": "19", "xx": "20", "xxi": "21", "xxii": "22",
+    "xxiii": "23", "xxiv": "24", "xxv": "25", "xxvi": "26", "xxvii": "27",
+    "xxviii": "28", "xxix": "29", "xxx": "30", "xl": "40", "l": "50",
+    "lx": "60", "lxx": "70", "lxxx": "80", "xc": "90", "c": "100",
+}
+
+
+def extract_imdb_id(text: Optional[str]) -> Optional[str]:
+    """Return the IMDb id embedded in a file name/caption, or None.
+
+    Radarr/Jellyfin-style releases frequently carry the id verbatim
+    ("Movie.{imdb-tt12345678}.720p", "[tt1234567]", "imdb-tt..."). When present
+    it resolves deterministically through TMDB /find instead of fuzzy
+    text search, removing every transliteration/spacing ambiguity.
+    """
+    if not text:
+        return None
+    m = _IMDB_ID_RE.search(text)
+    return m.group(1).lower() if m else None
+
+
+def _norm_tok(tok: str) -> str:
+    """Normalize a token for matching: roman numeral -> arabic, else lowercase."""
+    low = tok.lower()
+    if len(low) <= 5 and low in _ROMAN_TO_ARABIC:
+        return _ROMAN_TO_ARABIC[low]
+    return low
+
+
 _NFO_BAD_TITLE_RE = re.compile(
     r"<\s*(?:originaltitle|original_name)\s*>[^<]*\?{2,}[^<]*<", re.IGNORECASE
 )
@@ -126,7 +164,11 @@ def _drop_dotted_group_tail(text: Optional[str]) -> str:
 
 
 def _sig_tokens(text: str) -> set:
-    toks = {t for t in re.findall(r"[a-z0-9]+", text.lower()) if t not in _ALL_STOP}
+    toks = {
+        _norm_tok(t)
+        for t in re.findall(r"[a-z0-9]+", text.lower())
+        if t not in _ALL_STOP
+    }
     # A lone 4-digit token is a numeric title (e.g. the film "2018"), not a year.
     if len(toks) == 1 and next(iter(toks)).isdigit() and len(next(iter(toks))) == 4:
         return toks
@@ -326,7 +368,7 @@ def _significant_token_stream(text: str):
             continue
         if tok not in seen:
             seen.add(tok)
-            yield tok
+            yield _norm_tok(tok)
 
 
 def _search_candidates(raw: Optional[str]) -> List[str]:
@@ -461,16 +503,23 @@ def parse_media_meta(filename_or_caption: Optional[str]) -> Dict:
 
 
 def best_tmdb_match(results: List[Dict], query: str, media_type: str,
-                    year: Optional[int] = None, threshold: float = 0.5):
+                    year: Optional[int] = None, threshold: float = 0.5,
+                    language: Optional[str] = None):
     """Return the best TMDB search result for (query, year, type), or None.
 
-    Scoring: token containment of the query against the hit title, with a boost
-    when the hit's release/first-air year equals the parsed file year. Results
-    of the wrong media_type are excluded so movies never steal a series match.
+    Scoring: token overlap against the hit's title merged with its
+    original_title (TMDB search already covers original/translated/alternative
+    names, and readding the original name tightens the signal for
+    transliterated queries). Year is a SOFT signal, not a hard filter (the
+    right film usually ranks by year proximity): exact year +0.3, ±1 year +0.15,
+    >1 year off −0.15. A hit whose `original_language` matches the release's
+    detected language gets +0.1 affinity. Wrong media_type results are excluded
+    so movies never steal a series match.
     """
     q_toks = _sig_tokens(query)
     if not q_toks:
         return None
+    lang = (language or "").strip().lower()
     best, best_score = None, -1.0
     for r in results or []:
         mt = r.get("media_type")
@@ -478,6 +527,7 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
             continue
         name = r.get("title") or r.get("name") or ""
         r_toks = _sig_tokens(name)
+        r_toks |= _sig_tokens(r.get("original_title") or r.get("original_name") or "")
         if not r_toks:
             continue
         overlap = len(q_toks & r_toks)
@@ -485,10 +535,18 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
             continue
         score = overlap / max(1, min(len(q_toks), len(r_toks)))
         date = (r.get("release_date") or r.get("first_air_date") or "")[:4]
-        if year and date and int(date) == year:
-            score += 0.3
+        if year and date and date.isdigit():
+            hit_year = int(date)
+            if hit_year == year:
+                score += 0.3
+            elif abs(hit_year - year) <= 1:
+                score += 0.15
+            else:
+                score -= 0.15
         if q_toks <= r_toks:
             score += 0.3
+        if lang and lang == (r.get("original_language") or "").lower():
+            score += 0.1
         if score > best_score:
             best, best_score = r, score
     return best if best_score >= threshold else None

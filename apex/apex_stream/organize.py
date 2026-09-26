@@ -106,6 +106,23 @@ def language_name_from_code(code: Optional[str]) -> str:
     return _NAME_BY_CODE.get(normalized, "")
 
 
+# ISO 639-1 codes accepted by TMDB's `language` search parameter, keyed by the
+# canonical display names produced by `detect_language`.
+_TMDB_LANG_CODE: Dict[str, str] = {
+    "Malayalam": "ml", "Hindi": "hi", "Tamil": "ta", "Telugu": "te",
+    "Kannada": "kn", "Bengali": "bn", "Punjabi": "pa", "Marathi": "mr",
+    "Gujarati": "gu", "Urdu": "ur", "English": "en", "Korean": "ko",
+    "Japanese": "ja", "Chinese": "zh", "Spanish": "es", "French": "fr",
+    "German": "de", "Russian": "ru", "Arabic": "ar", "Portuguese": "pt",
+    "Indonesian": "id", "Italian": "it",
+}
+
+
+def tmdb_language_code(language_name: str) -> str:
+    """ISO 639-1 code for a language name, for TMDB `language` search param."""
+    return _TMDB_LANG_CODE.get(language_name or "", "")
+
+
 def safe_folder(name: str) -> str:
     """Folders/Jellyfin-safe version of a title or language name."""
     if not name:

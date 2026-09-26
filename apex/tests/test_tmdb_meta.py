@@ -7,6 +7,7 @@ from apex_stream.tmdb_meta import (
     build_episode_nfo,
     build_movie_nfo,
     build_tvshow_nfo,
+    extract_imdb_id,
     nfo_needs_repair,
     parse_media_meta,
     tmdb_image_url,
@@ -246,6 +247,94 @@ class TestBestTmdbMatch:
             [{"id": 7, "title": "Dune", "release_date": "2021-10-22"}],
             "2099", "movie",
         ) is None
+
+    def test_roman_numeral_suffix_matches_arabic(self):
+        results = [
+            {"id": 1, "title": "Rocky", "release_date": "1976-11-21"},
+            {"id": 2, "title": "Rocky 3", "release_date": "1982-05-28"},
+            {"id": 3, "title": "Rocky IV", "release_date": "1985-11-27"},
+        ]
+        # Filename used "Rocky III"; TMDB stores "Rocky 3".
+        hit = best_tmdb_match(results, "rocky iii", "movie")
+        assert hit["id"] == 2
+
+    def test_roman_numeral_picks_arabic_with_exact_year(self):
+        results = [
+            {"id": 1, "title": "Rocky", "release_date": "1976-11-21"},
+            {"id": 2, "title": "Rocky 3", "release_date": "1982-05-28"},
+            {"id": 3, "title": "Rocky IV", "release_date": "1985-11-27"},
+        ]
+        hit = best_tmdb_match(results, "rocky iii", "movie", 1982)
+        assert hit["id"] == 2
+
+    def test_original_title_merge_rescues_non_latin_hit(self):
+        # Primary title is non-Latin script (no latin tokens at all); only the
+        # merged original_title can bridge the transliterated query.
+        results = [
+            {
+                "id": 1,
+                "title": "ആട്",
+                "original_title": "Aadu",
+                "release_date": "2015-01-01",
+                "original_language": "ml",
+            },
+        ]
+        hit = best_tmdb_match(results, "aadu", "movie")
+        assert hit is not None and hit["id"] == 1
+
+    def test_original_title_merge_for_transliterated_query(self):
+        results = [
+            {
+                "id": 1,
+                "title": "Aadu 3 Part 1",
+                "original_title": "ആട് 3 പാർട്ട് 1",
+                "release_date": "2025-01-23",
+                "original_language": "ml",
+            },
+        ]
+        hit = best_tmdb_match(results, "aadu 3 part 1", "movie", 2025)
+        assert hit["id"] == 1
+
+    def test_year_proximity_beats_exact_mismatch(self):
+        # Both films share title tokens; the ±1 year film should win over a
+        # far-year film when the query year is close to one of them.
+        results = [
+            {"id": 1, "title": "Rocky", "release_date": "2001-03-15"},
+            {"id": 2, "title": "Rocky", "release_date": "1985-11-27"},
+        ]
+        hit = best_tmdb_match(results, "rocky", "movie", 1984)
+        assert hit["id"] == 2
+
+    def test_language_affinity_bonus(self):
+        results = [
+            {"id": 1, "title": "Premam", "original_title": "പ്രേമം", "release_date": "2015-05-29", "original_language": "ml"},
+            {"id": 2, "title": "Premam", "release_date": "2015-05-29", "original_language": "en"},
+        ]
+        hit = best_tmdb_match(results, "premam", "movie", 2015, language="ml")
+        assert hit["id"] == 1
+
+
+class TestExtractImdbId:
+    def test_radarr_brace_imdb(self):
+        assert extract_imdb_id("Movie.2024.720p.WEB-DL.{imdb-tt12345678}") == "tt12345678"
+
+    def test_bare_tt(self):
+        assert extract_imdb_id("Some Title (2023) [tt0987654]") == "tt0987654"
+
+    def test_dotted_imdb_prefix(self):
+        assert extract_imdb_id("Show.S01E01.1080p.imdb-tt1234567.x265") == "tt1234567"
+
+    def test_none_and_empty(self):
+        assert extract_imdb_id(None) is None
+        assert extract_imdb_id("") is None
+        assert extract_imdb_id("A completely normal title 2024.mkv") is None
+
+    def test_case_insensitive(self):
+        assert extract_imdb_id("Movie.Web-DL.TT1234567.mkv") == "tt1234567"
+
+    def test_roman_normalized_in_search_candidates(self):
+        meta = parse_media_meta("Mission Impossible III 2006 720p.mkv")
+        assert "3" in " ".join(meta["search_candidates"])
 
 
 class TestNfoBuilders:

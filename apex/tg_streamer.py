@@ -41,6 +41,7 @@ from apex_stream.organize import (
     strm_dir,
     subtitle_is_document,
     subtitle_lang_hint,
+    tmdb_language_code,
     tv_show_root,
 )
 from apex_stream.tmdb_meta import (
@@ -48,6 +49,7 @@ from apex_stream.tmdb_meta import (
     build_episode_nfo,
     build_movie_nfo,
     build_tvshow_nfo,
+    extract_imdb_id,
     nfo_needs_repair,
     parse_media_meta,
 )
@@ -924,9 +926,16 @@ async def _tmdb_get(path, params):
     return None
 
 
-async def _tmdb_search(media_type, query, year=None):
-    """Search TMDB for a movie or TV series; returns a list of candidate hits."""
+async def _tmdb_search(media_type, query, year=None, language=None):
+    """Search TMDB for a movie or TV series; returns a list of candidate hits.
+
+    `language` (ISO 639-1) biases results toward that language's originals,
+    which matters for transliterated/native-script queries ("aadu 2 2023 Malayalam"
+    without the year keeps matching the right Malayalam film).
+    """
     params = {"query": query or "", "include_adult": "false"}
+    if language:
+        params["language"] = language
     if year:
         if media_type == "tv":
             params["first_air_date_year"] = int(year)
@@ -937,14 +946,35 @@ async def _tmdb_search(media_type, query, year=None):
     # Release filenames often contain an incorrect/future year. Retry without
     # the year so a valid TMDB title can still be matched and enriched.
     if not results and year:
-        data = await _tmdb_get(
-            f"/search/{media_type}",
-            {"query": query or "", "include_adult": "false"},
-        )
+        params.pop("year", None)
+        params.pop("first_air_date_year", None)
+        data = await _tmdb_get(f"/search/{media_type}", params)
         results = data.get("results") or [] if data else []
     if results:
         return results
     return []
+
+
+async def _tmdb_find(external_id):
+    """Resolve an external id (imdb_id, tvdb_id) through TMDB /find.
+
+    Deterministic when a release filename embeds the id (Radarr-style
+    "{imdb-tt12345678}"), so no fuzzy text search is needed. Returns a list of
+    movie/tv hits tagged with their `media_type`.
+    """
+    data = await _tmdb_get(
+        f"/find/{external_id}", {"external_source": "imdb_id"}
+    )
+    results = []
+    for r in (data.get("movie_results") or []) if data else []:
+        r = dict(r)
+        r["media_type"] = "movie"
+        results.append(r)
+    for r in (data.get("tv_results") or []) if data else []:
+        r = dict(r)
+        r["media_type"] = "tv"
+        results.append(r)
+    return results
 
 
 _AI_TITLE_SYSTEM = (
@@ -1096,15 +1126,62 @@ async def _enrich_media_metadata(entry):
         hit = None
         used_query = ""
         media_type = "tv" if is_tv else "movie"
-        for cand in candidates:
+        lang_code = tmdb_language_code(entry.get("language") or DEFAULT_LANGUAGE)
+        # Tier-0: an embedded IMDb id (Radarr-style "{imdb-tt12345678}",
+        # "[tt1234567]") resolves deterministically through /find, bypassing
+        # every transliteration/spacing ambiguity of fuzzy text search.
+        imdb_id = extract_imdb_id(
+            entry.get("file_name")
+            or entry.get("raw_name")
+            or entry.get("caption")
+            or entry.get("search_title")
+            or entry.get("title")
+        )
+        if imdb_id:
             try:
-                results = await _tmdb_search(media_type, cand, entry.get("year"))
+                fresults = await _tmdb_find(imdb_id)
             except Exception as _exc:
-                results = []
-            hit = best_tmdb_match(results, cand, media_type, entry.get("year"))
-            used_query = cand
+                fresults = []
+            if fresults:
+                for fr in fresults:
+                    if fr.get("media_type") == media_type:
+                        hit = fr
+                        break
+                if not hit:
+                    hit = next(iter(fresults), None)
             if hit:
-                break
+                used_query = imdb_id
+                logger.info(
+                    f"[TMDB-ID] '{entry.get('title')}' resolved via {imdb_id} (tmdb_id={hit.get('id')})"
+                )
+        # Tier-1: text search against the cleaned-title candidates, biased with
+        # the release's detected language when we have a code for it.
+        if not hit:
+            for cand in candidates:
+                try:
+                    results = await _tmdb_search(media_type, cand, entry.get("year"), language=lang_code)
+                except Exception as _exc:
+                    results = []
+                hit = best_tmdb_match(results, cand, media_type, entry.get("year"), language=lang_code)
+                used_query = cand
+                if hit:
+                    break
+        # Tier-1b: TMDB returned nothing/below threshold in English; retry the
+        # probe candidates in the release's own language so native-script and
+        # transliterated titles ("Aadu 3 Part 1" Malayalam) still resolve.
+        if not hit and lang_code and lang_code != "en":
+            for cand in candidates[:2]:
+                try:
+                    results = await _tmdb_search(media_type, cand, entry.get("year"), language=lang_code)
+                except Exception as _exc:
+                    results = []
+                hit = best_tmdb_match(results, cand, media_type, entry.get("year"), language=lang_code)
+                used_query = cand
+                if hit:
+                    logger.info(
+                        f"[TMDB-LANG] '{entry.get('title')}' matched via language '{lang_code}'"
+                    )
+                    break
         # AI-tier-2 fallback: rule parsing + TMDB all missed; ask the LLM to
         # resolve the canonical title (it knows real-world films and handles ANY
         # release junk), then retry TMDB — single-type first, then multi-search —
@@ -1203,7 +1280,8 @@ async def _enrich_media_metadata(entry):
                     logger.warning(f"[TMDB] Metadata published but Jellyfin refresh failed: {scan_exc}")
                 return True
             logger.warning(
-                f"[TMDB] No match for '{query}' (tv={is_tv}, year={entry.get('year')}); "
+                f"[TMDB] No match for '{query}' (tv={is_tv}, year={entry.get('year')}, "
+                f"lang={entry.get('language') or '-'}, candidates={candidates}); "
                 "verify the filename/title or add a TMDB title hint in the caption."
             )
             return False
@@ -2866,6 +2944,71 @@ async def restore_cached_strm_files():
         still = sum(1 for s in SUBTITLE_CACHE.values() if isinstance(s, dict) and not s.get("placed"))
         if still:
             logger.info(f"[RESTORE] {still} subtitle(s) still awaiting a video match.")
+
+    # Improve-the-past: entries that never resolved under the previous matcher
+    # get one more pass with the new capabilities (imdb /find, roman-numeral
+    # normalization, original-title merging, language-biased search).
+    try:
+        unresolved = _unresolved_enrich_entries()
+        if unresolved:
+            asyncio.create_task(_re_enrich_unresolved(unresolved))
+    except Exception as exc:
+        logger.warning(f"[RESTORE] could not queue re-enrichment: {exc}")
+
+_RE_ENRICH_RUNNING = False
+
+
+def _unresolved_enrich_entries():
+    """Cache entries lacking any TMDB/AI resolution, worth one more match pass."""
+    entries = []
+    for key, data in FILE_ID_CACHE.items():
+        if not isinstance(data, dict) or data.get("tmdb_id") or data.get("tmdb_title"):
+            continue
+        if not (data.get("file_id") and (data.get("file_name") or data.get("title"))):
+            continue
+        _chat_from_key, msg_id = _split_cache_key(key)
+        chat_id = data.get("chat_id") or _chat_from_key
+        base_name = data.get("file_name") or data.get("title") or f"Media_{msg_id}"
+        entry = _meta_to_entry(
+            msg_id, chat_id, data.get("file_id"), data.get("file_size") or 0, base_name
+        )
+        language = data.get("language") or detect_language(base_name) or DEFAULT_LANGUAGE
+        year = data.get("year") or entry.get("year")
+        entry.update({
+            "language": language,
+            "year": year,
+            "_cache_key": key,
+        })
+        if _is_unknown_media(entry):
+            continue
+        if entry.get("is_tv"):
+            entry["show_root"] = tv_show_root(
+                SHOWS_DIR, language, entry.get("show_name") or entry.get("title"), year
+            )
+        entry["target_dir"] = strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
+        entry["strm_base"] = strm_base(entry)
+        entries.append(entry)
+        if len(entries) >= 60:
+            break
+    return entries
+
+
+async def _re_enrich_unresolved(entries):
+    """Re-attempt TMDB metadata for entries that previously never resolved."""
+    global _RE_ENRICH_RUNNING
+    if _RE_ENRICH_RUNNING or not entries:
+        return
+    _RE_ENRICH_RUNNING = True
+    try:
+        logger.info(f"[TMDB-RESYNC] Re-attempting metadata for {len(entries)} unresolved entrie(s)...")
+        for entry in entries:
+            try:
+                await enrich_media_metadata(entry)
+            except Exception as exc:
+                logger.warning(f"[TMDB-RESYNC] {entry.get('title')}: {exc}")
+            await asyncio.sleep(0.25)
+    finally:
+        _RE_ENRICH_RUNNING = False
 
 async def _client_dc_id(client):
     """Primary DC for a connected Pyrogram client, or None."""
