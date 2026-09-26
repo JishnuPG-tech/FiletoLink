@@ -11,6 +11,7 @@ Authentication:
 """
 
 import os
+import re
 import hmac
 import json
 import shutil
@@ -176,6 +177,71 @@ async def ops_read(path: str, tail: int = 0, lines: int = 200, request: Request 
         part = text.splitlines()
         text = "\n".join(part[-lines:])
     return JSONResponse({"ok": True, "path": normalized, "size": size, "content": text})
+
+
+_LOCAL_DB = "/opt/jellyfin-local/data/data/jellyfin.db"
+_DB_READONLY_RE = re.compile(r"^\s*(SELECT|PRAGMA|EXPLAIN|WITH)\b", re.IGNORECASE)
+
+
+@router.post("/apex/ops/jellyfin/db/query")
+async def ops_jellyfin_db_query(request: Request):
+    """Run a read-only SQL introspection query against the live jellyfin.db.
+
+    Only SELECT / PRAGMA / EXPLAIN / WITH statements are permitted; the
+    database is opened with SQLITE_OPEN_READONLY so nothing can be mutated.
+    Rows are capped (default 200) and bytes are hex-encoded for safety.
+    """
+    if not _is_admin(request):
+        return _denied()
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "invalid json body"}, status_code=400)
+
+    sql = str(payload.get("sql", "")).strip()
+    params = payload.get("params") or []
+    limit = max(1, min(int(payload.get("limit", 200)), 1000))
+
+    if not sql:
+        return JSONResponse({"ok": False, "error": "sql is required"}, status_code=400)
+    if ";" in sql:
+        return JSONResponse({"ok": False, "error": "single statement only"}, status_code=400)
+    if not _DB_READONLY_RE.match(sql):
+        return JSONResponse({"ok": False, "error": "read-only queries only"}, status_code=400)
+    if not isinstance(params, list) or len(params) > 20:
+        return JSONResponse({"ok": False, "error": "params must be a small list"}, status_code=400)
+
+    db = _LOCAL_DB if os.path.exists(_LOCAL_DB) else os.path.join(JELLYFIN_ROOT, "data", "data", "jellyfin.db")
+    if not os.path.exists(db):
+        return JSONResponse({"ok": False, "error": f"no jellyfin.db at {db}"}, status_code=404)
+
+    try:
+        import sqlite3
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+        try:
+            cur = conn.cursor()
+            cur.execute(sql, [str(p) for p in params])
+            columns = [d[0] for d in cur.description] if cur.description else []
+            raw_rows = cur.fetchmany(limit)
+        finally:
+            conn.close()
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"query failed: {exc}"}, status_code=500)
+
+    def _cell(v):
+        if v is None:
+            return None
+        if isinstance(v, bytes):
+            return {"bytes": v.hex()}
+        return v
+
+    return JSONResponse({
+        "ok": True,
+        "db": db,
+        "columns": columns,
+        "rows": [[_cell(c) for c in row] for row in raw_rows],
+    })
 
 
 @router.post("/apex/ops/jellyfin/reset")
