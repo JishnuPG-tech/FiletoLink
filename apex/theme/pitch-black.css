@@ -1,0 +1,163 @@
+/* ==========================================================================
+   Apex / Jellyfin — Pitch Black OLED Dark Theme
+   Clean Original Layout with 100% Pure Pitch Black Surfaces & Netflix Red
+   ========================================================================== */
+
+:root,
+:root[data-theme] {
+  /* Design Tokens */
+  --accent: #E50914 !important;
+  --accent-hover: #b80710 !important;
+  --accent-glow: rgba(229, 9, 20, 0.4) !important;
+  --accentColor: #E50914 !important;
+  --accentHoverColor: #b80710 !important;
+  --uiAccentColor: #E50914 !important;
+  --activeColor: #E50914 !important;
+  --btnSubmitColor: #E50914 !important;
+  --btnMiniPlayColor: #E50914 !important;
+  --highlightOutlineColor: #E50914 !important;
+  --cardResumeProgressColor: #E50914 !important;
+  --osdSeekBarPlayedColor: #E50914 !important;
+  --osdSeekBarThumbColor: #E50914 !important;
+
+  /* Pure OLED Pitch Black Tokens */
+  --darkerGradientPoint: #000000 !important;
+  --darkerGradientPointAlpha: rgba(0, 0, 0, 0.95) !important;
+  --lighterGradientPoint: #050505 !important;
+  --lighterGradientPointAlpha: rgba(5, 5, 5, 0.95) !important;
+  --headerColor: rgba(0, 0, 0, 0.92) !important;
+  --drawerColor: rgba(0, 0, 0, 0.98) !important;
+  --borderColor: #222222 !important;
+  --darkerBorderColor: #141414 !important;
+  --selectorBackgroundColor: #111111 !important;
+  --tableBodyColor: #050505 !important;
+  --textareaBackgroundColor: #111111 !important;
+
+  /* Jellyfin 12 MUI Tokens */
+  --jf-palette-background-default: #000000 !important;
+  --jf-palette-background-paper: #0c0c0c !important;
+  --jf-palette-AppBar-defaultBg: rgba(0, 0, 0, 0.92) !important;
+  --jf-palette-primary-main: #E50914 !important;
+  --jf-palette-secondary-main: #E50914 !important;
+  --jf-palette-action-hover: rgba(229, 9, 20, 0.12) !important;
+  --jf-palette-action-selected: rgba(229, 9, 20, 0.22) !important;
+  --jf-palette-action-focus: rgba(229, 9, 20, 0.22) !important;
+}
+
+/* --------------------------------------------------------------------------
+   1. Pure OLED Pitch Black Backgrounds (#000000) Everywhere
+   -------------------------------------------------------------------------- */
+html,
+body,
+.backgroundContainer,
+.backdropContainer,
+.mainDrawer,
+.skinHeader,
+.page,
+.view,
+.dialog,
+.actionSheet,
+.cardBox,
+.visualCardBox,
+.paperList,
+.mainDrawer-scrollContainer,
+.dashboardSection,
+.emby-tabs-slider,
+div#itemDetailPage {
+  background-color: #000000 !important;
+  color: #FFFFFF;
+}
+
+.backgroundContainer.withBackdrop {
+  background-color: rgba(0, 0, 0, 0.88) !important;
+}
+
+.backdropContainer {
+  background-color: #000000 !important;
+}
+
+/* --------------------------------------------------------------------------
+   2. Pure Pitch Black Login Page
+   -------------------------------------------------------------------------- */
+#loginPage {
+  background-color: #000000 !important;
+}
+
+#loginPage .readOnlyContent {
+  background-color: #0a0a0a !important;
+  border: 1px solid #222222 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.9) !important;
+}
+
+#loginPage .emby-input {
+  background: #161616 !important;
+  border: 1px solid #2a2a2a !important;
+  color: #FFFFFF !important;
+}
+
+#loginPage .emby-input:focus {
+  border-color: #E50914 !important;
+}
+
+#loginPage .raised.button-submit,
+#loginPage .MuiButton-containedPrimary {
+  background-color: #E50914 !important;
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
+}
+
+/* --------------------------------------------------------------------------
+   3. Netflix Red Interactive Elements & Focus
+   -------------------------------------------------------------------------- */
+::selection {
+  background: #E50914 !important;
+  color: #FFFFFF !important;
+}
+
+::-moz-selection {
+  background: #E50914 !important;
+  color: #FFFFFF !important;
+}
+
+.emby-button.show-focus:focus,
+.paper-icon-button-light.show-focus:focus {
+  background-color: #E50914 !important;
+  color: #FFFFFF !important;
+}
+
+.emby-checkbox:checked + span + .checkboxOutline {
+  background-color: #E50914 !important;
+  border-color: #E50914 !important;
+}
+
+.itemProgressBarForeground {
+  background-color: #E50914 !important;
+}
+
+.cardOverlayContainer > .cardOverlayFab-primary,
+.listItemImageButton {
+  background-color: #E50914 !important;
+  color: #FFFFFF !important;
+}
+
+/* --------------------------------------------------------------------------
+   4. Custom Dark Scrollbars
+   -------------------------------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #E50914;
+}

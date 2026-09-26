@@ -64,8 +64,25 @@ restore_jellyfin_local() {
     ln -s "$LOCAL_ROOT/data/metadata" /data/jellyfin/data/metadata 2>/dev/null || true
     if [ -d "$LOCAL_ROOT/data/metadata" ]; then
         mkdir -p /data/jellyfin/data/metadata.snapshot
-        cp -a -f "$LOCAL_ROOT/data/metadata/." /data/jellyfin/data/metadata.snapshot/ 2>/dev/null || true
     fi
+
+    # Seed and sync Pitch Black OLED dark theme branding
+    if [ -f "/opt/apex/theme/branding.xml" ]; then
+        echo "[JELLYFIN] Applying Pitch Black OLED dark theme branding..."
+        cp -f /opt/apex/theme/branding.xml "$LOCAL_ROOT/config/branding.xml"
+        mkdir -p /data/jellyfin/config
+        cp -f /opt/apex/theme/branding.xml /data/jellyfin/config/branding.xml 2>/dev/null || true
+    fi
+
+    # Pre-inject pitch-black.css into web assets for instant loading
+    if [ -f "/opt/apex/theme/pitch-black.css" ] && [ -d "/usr/share/jellyfin/web" ]; then
+        cp -f /opt/apex/theme/pitch-black.css /usr/share/jellyfin/web/pitch-black.css 2>/dev/null || true
+        if [ -f "/usr/share/jellyfin/web/index.html" ] && ! grep -q "pitch-black.css" /usr/share/jellyfin/web/index.html; then
+            sed -i 's|</head>|<link rel="stylesheet" href="pitch-black.css"></head>|' /usr/share/jellyfin/web/index.html 2>/dev/null || true
+            echo "[JELLYFIN] Pitch Black OLED theme injected into web index.html."
+        fi
+    fi
+
     echo "[JELLYFIN] Local datadir ready. Metadata redirected to fast local disk."
 }
 
