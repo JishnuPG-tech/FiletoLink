@@ -6,6 +6,7 @@ import glob
 import logging
 import asyncio
 import socket
+import struct
 import urllib.parse
 import time
 import hmac
@@ -1259,7 +1260,7 @@ async def _enrich_media_metadata(entry):
             logger.info(f"[TMDB] No target_dir for '{entry.get('title')}' - skipping enrich")
             return False
 
-        # Idempotency gate: if metadata is on disk AND has valid tmdb_id,
+# Idempotency gate: if metadata is on disk AND has valid tmdb_id,
         # avoid re-hitting the TMDB API on restart.
         has_tmdb = bool(entry.get("tmdb_id") or (isinstance(FILE_ID_CACHE.get(key), dict) and FILE_ID_CACHE[key].get("tmdb_id")))
         if has_tmdb:
@@ -1267,7 +1268,7 @@ async def _enrich_media_metadata(entry):
                 tv_nfo = os.path.join(show_root, "tvshow.nfo")
                 tv_backdrop = os.path.join(show_root, "backdrop.jpg")
                 has_hd_backdrop = os.path.exists(tv_backdrop) and os.path.getsize(tv_backdrop) >= 300000
-                if os.path.exists(tv_nfo) and os.path.exists(os.path.join(show_root, "poster.jpg")) and has_hd_backdrop and not _nfo_needs_repair(tv_nfo):
+                if os.path.exists(tv_nfo) and _poster_art_ok(show_root) and has_hd_backdrop and not _nfo_needs_repair(tv_nfo):
                     return True
             elif not is_tv:
                 movie_nfo = os.path.join(
@@ -1275,7 +1276,7 @@ async def _enrich_media_metadata(entry):
                 )
                 movie_backdrop = os.path.join(target_dir, "backdrop.jpg")
                 has_hd_backdrop = os.path.exists(movie_backdrop) and os.path.getsize(movie_backdrop) >= 300000
-                if (os.path.exists(movie_nfo) and os.path.exists(os.path.join(target_dir, "poster.jpg"))
+                if (os.path.exists(movie_nfo) and _poster_art_ok(target_dir)
                         and has_hd_backdrop and not _nfo_needs_repair(movie_nfo)):
                     return True
 
@@ -1554,18 +1555,16 @@ async def _enrich_media_metadata(entry):
                     with open(nfo_path, "w", encoding="utf-8") as f:
                         f.write(build_tvshow_nfo(detail))
                 poster_url = _best_image("poster_path")
-                if poster_url and (not os.path.exists(poster_path) or os.path.getsize(poster_path) < 80000):
+                if poster_url and not _image_is_hd(poster_path, _POSTER_MIN_WIDTH):
                     if await _download_image(session, _resize_tmdb_image(poster_url, "original"), poster_path):
                         folder_path = os.path.join(show_root, "folder.jpg")
-                        if not os.path.exists(folder_path):
-                            try:
-                                with open(poster_path, "rb") as src, open(folder_path, "wb") as dst:
-                                    dst.write(src.read())
-                            except OSError:
-                                pass
+                        try:
+                            with open(poster_path, "rb") as src, open(folder_path, "wb") as dst:
+                                dst.write(src.read())
+                        except OSError:
+                            pass
                 backdrop_url = _best_image("backdrop_path")
-                needs_hd_backdrop = not os.path.exists(backdrop_path) or os.path.getsize(backdrop_path) < 300000
-                if backdrop_url and needs_hd_backdrop:
+                if backdrop_url and not _image_is_hd(backdrop_path, _BACKDROP_MIN_WIDTH):
                     if await _download_image(session, _resize_tmdb_image(backdrop_url, "original"), backdrop_path):
                         for extra in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
                             art_path = os.path.join(show_root, extra)
@@ -1574,7 +1573,7 @@ async def _enrich_media_metadata(entry):
                                     dst.write(src.read())
                             except OSError:
                                 pass
-                elif not os.path.exists(backdrop_path) and os.path.exists(poster_path):
+                elif not _image_is_hd(backdrop_path, _BACKDROP_MIN_WIDTH):
                     if _generate_fallback_backdrop(poster_path, backdrop_path):
                         for extra in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
                             art_path = os.path.join(show_root, extra)
@@ -1583,6 +1582,8 @@ async def _enrich_media_metadata(entry):
                                     dst.write(src.read())
                             except OSError:
                                 pass
+                if not _image_is_hd(poster_path, _POSTER_MIN_WIDTH):
+                    _mark_art_best_effort(show_root)
 
                 season_detail = None
                 season_number = int(entry.get("season") or 1)
@@ -1612,27 +1613,24 @@ async def _enrich_media_metadata(entry):
                 with open(nfo_path, "w", encoding="utf-8") as f:
                     f.write(build_movie_nfo(detail))
                 movie_nfo = os.path.join(target_dir, "movie.nfo")
-                if not os.path.exists(movie_nfo):
-                    try:
-                        with open(nfo_path, "rb") as src, open(movie_nfo, "wb") as dst:
-                            dst.write(src.read())
-                    except OSError:
-                        pass
+                try:
+                    with open(nfo_path, "rb") as src, open(movie_nfo, "wb") as dst:
+                        dst.write(src.read())
+                except OSError:
+                    pass
                 poster_url = _best_image("poster_path")
                 movie_poster = os.path.join(target_dir, "poster.jpg")
-                if poster_url and (not os.path.exists(movie_poster) or os.path.getsize(movie_poster) < 80000):
+                if poster_url and not _image_is_hd(movie_poster, _POSTER_MIN_WIDTH):
                     if await _download_image(session, _resize_tmdb_image(poster_url, "original"), movie_poster):
                         folder_path = os.path.join(target_dir, "folder.jpg")
-                        if not os.path.exists(folder_path):
-                            try:
-                                with open(movie_poster, "rb") as src, open(folder_path, "wb") as dst:
-                                    dst.write(src.read())
-                            except OSError:
-                                pass
+                        try:
+                            with open(movie_poster, "rb") as src, open(folder_path, "wb") as dst:
+                                dst.write(src.read())
+                        except OSError:
+                            pass
                 backdrop_url = _best_image("backdrop_path")
                 movie_backdrop = os.path.join(target_dir, "backdrop.jpg")
-                needs_hd_backdrop = not os.path.exists(movie_backdrop) or os.path.getsize(movie_backdrop) < 300000
-                if backdrop_url and needs_hd_backdrop:
+                if backdrop_url and not _image_is_hd(movie_backdrop, _BACKDROP_MIN_WIDTH):
                     if await _download_image(session, _resize_tmdb_image(backdrop_url, "original"), movie_backdrop):
                         for extra in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
                             art_path = os.path.join(target_dir, extra)
@@ -1641,7 +1639,7 @@ async def _enrich_media_metadata(entry):
                                     dst.write(src.read())
                             except OSError:
                                 pass
-                elif not os.path.exists(movie_backdrop) and os.path.exists(movie_poster):
+                elif not _image_is_hd(movie_backdrop, _BACKDROP_MIN_WIDTH):
                     if _generate_fallback_backdrop(movie_poster, movie_backdrop):
                         for extra in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
                             art_path = os.path.join(target_dir, extra)
@@ -1650,6 +1648,8 @@ async def _enrich_media_metadata(entry):
                                     dst.write(src.read())
                             except OSError:
                                 pass
+                if not _image_is_hd(movie_poster, _POSTER_MIN_WIDTH):
+                    _mark_art_best_effort(target_dir)
 
         prev = FILE_ID_CACHE.get(key)
         if isinstance(prev, dict):
@@ -1717,6 +1717,57 @@ def _resize_tmdb_image(url, size="w780"):
     if size == "original":
         return url
     return url.replace("/original", f"/{size}", 1)
+
+_POSTER_MIN_WIDTH = 1000
+_BACKDROP_MIN_WIDTH = 1280
+
+
+def _image_is_hd(path, min_width=_POSTER_MIN_WIDTH):
+    """True when an existing local JPEG is at least `min_width` px wide.
+
+    Missing, unreadable or non-JPEG files count as not-HD so enrichment can
+    replace corrupt or low-resolution artwork (e.g. old w780-era posters).
+    """
+    try:
+        with open(path, "rb") as f:
+            data = f.read(65536)
+    except OSError:
+        return False
+    if len(data) < 4 or data[0:2] != b"\xff\xd8":
+        return False
+    i = 2
+    while i < len(data) - 9:
+        if data[i] != 0xFF:
+            i += 1
+            continue
+        marker = data[i + 1]
+        if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+            width = struct.unpack(">H", data[i + 7 : i + 9])[0]
+            return width >= min_width
+        seg_len = struct.unpack(">H", data[i + 2 : i + 4])[0]
+        i += 2 + seg_len
+    return False
+
+
+def _poster_art_ok(folder):
+    """True when the folder already has acceptable poster art (HD, or marked
+    best-effort so we don't re-fetch TMDB on every restart)."""
+    poster = os.path.join(folder, "poster.jpg")
+    if not os.path.exists(poster):
+        return False
+    return _image_is_hd(poster, _POSTER_MIN_WIDTH) or os.path.exists(
+        os.path.join(folder, ".art_best_effort")
+    )
+
+
+def _mark_art_best_effort(folder):
+    """Record that TMDB's best available artwork for this folder is still
+    below HD, so enrichment stops re-fetching it on every restart."""
+    try:
+        open(os.path.join(folder, ".art_best_effort"), "w").close()
+    except OSError:
+        pass
+
 
 async def _download_subtitle_bytes(file_id):
     """Fetch a small subtitle document's bytes via the primary client."""
@@ -3739,11 +3790,16 @@ async def restore_cached_strm_files():
 
     # Improve-the-past: entries that never resolved under the previous matcher
     # get one more pass with the new capabilities (imdb /find, roman-numeral
-    # normalization, original-title merging, language-biased search).
+    # normalization, original-title merging, language-biased search). Entries
+    # whose local poster is missing or below HD are re-enriched in the same
+    # pass so artwork is refreshed at full resolution automatically.
     try:
-        unresolved = _unresolved_enrich_entries()
-        if unresolved:
-            asyncio.create_task(_re_enrich_unresolved(unresolved))
+        requeue = {
+            e["_cache_key"]: e
+            for e in (_unresolved_enrich_entries() + _insufficient_art_entries())
+        }
+        if requeue:
+            asyncio.create_task(_re_enrich_unresolved(list(requeue.values())))
     except Exception as exc:
         logger.warning(f"[RESTORE] could not queue re-enrichment: {exc}")
 
@@ -3953,6 +4009,44 @@ def _unresolved_enrich_entries():
         entries.append(entry)
         if len(entries) >= 60:
             break
+    return entries
+
+
+def _insufficient_art_entries():
+    """Cache entries whose local poster.jpg is missing or below HD; a re-enrich
+    refreshes artwork at full resolution (or marks it best-effort)."""
+    entries = []
+    for key, data in FILE_ID_CACHE.items():
+        if not isinstance(data, dict):
+            continue
+        if not (data.get("file_id") and (data.get("file_name") or data.get("title"))):
+            continue
+        _chat_from_key, msg_id = _split_cache_key(key)
+        chat_id = data.get("chat_id") or _chat_from_key
+        base_name = data.get("file_name") or data.get("title") or f"Media_{msg_id}"
+        entry = _meta_to_entry(
+            msg_id, chat_id, data.get("file_id"), data.get("file_size") or 0, base_name
+        )
+        language = data.get("language") or detect_language(base_name) or DEFAULT_LANGUAGE
+        year = data.get("year") or entry.get("year")
+        entry.update({
+            "language": language,
+            "year": year,
+            "_cache_key": key,
+        })
+        if _is_unknown_media(entry):
+            continue
+        if entry.get("is_tv"):
+            entry["show_root"] = tv_show_root(
+                SHOWS_DIR, language, entry.get("show_name") or entry.get("title"), year
+            )
+        entry["target_dir"] = strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
+        entry["strm_base"] = strm_base(entry)
+        art_folder = entry.get("show_root") or entry.get("target_dir") or ""
+        if art_folder and not _poster_art_ok(art_folder):
+            entries.append(entry)
+            if len(entries) >= 60:
+                break
     return entries
 
 
