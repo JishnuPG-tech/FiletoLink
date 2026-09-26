@@ -263,7 +263,7 @@
 			function imageUrl(itemId, type, index = null) {
 				const { width, height } = imageDimensions(type);
 				const suffix = index == null ? '' : `/${index}`;
-				return `${base}/Items/${itemId}/Images/${type}${suffix}?quality=88&maxWidth=${width}&maxHeight=${height}`;
+				return `${base}/Items/${itemId}/Images/${type}${suffix}?quality=96&maxWidth=${width}&maxHeight=${height}`;
 			}
 
 			async function fetchImage(url, signal) {
@@ -494,12 +494,12 @@
 			async function fetchArtwork(item, signal) {
 				const urls = itemImageUrls(item);
 				const logoPromise = fetchImage(urls.logo, signal);
-				const preferBackdrop = localStorage.getItem('abyss-prefer-backdrop') === 'true';
+				// Always prefer high-res widescreen backdrop over tiny episode snapshot
+				const preferBackdrop = localStorage.getItem('abyss-prefer-backdrop') !== 'false';
 				let backdrop;
-				let primaryBackdrop;
+				let primaryBackdrop = false;
 				if (preferBackdrop) {
 					backdrop = await fetchImage(urls.backdrop, signal);
-					primaryBackdrop = false;
 					if (!backdrop && urls.primary) {
 						backdrop = await fetchImage(urls.primary, signal);
 						primaryBackdrop = true;

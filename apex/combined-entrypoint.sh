@@ -2,6 +2,7 @@
 set -euo pipefail
 
 FILETOLINK_PID="${1:-}"
+export HOSTNAME="Apex"
 
 echo "[BOOT] Starting Gateway..."
 mkdir -p /data/jellyfin/data /data/jellyfin/config /data/jellyfin/cache /data/jellyfin/log /data/cache 2>/dev/null || true
@@ -187,7 +188,7 @@ PY
     printf '%s\n' "$JELLYFIN_SERVER_ID" > "$SERVER_ID_FILE"
 fi
 
-if [ -f "$SYSTEM_XML" ] && [ -n "$JELLYFIN_SERVER_ID" ]; then
+if [ -f "$SYSTEM_XML" ]; then
     python3 - "$SYSTEM_XML" "$JELLYFIN_SERVER_ID" <<'PY'
 import re
 import sys
@@ -196,15 +197,27 @@ from pathlib import Path
 path = Path(sys.argv[1])
 server_id = sys.argv[2]
 text = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
-replacement = f"<ServerId>{server_id}</ServerId>"
+
+# Ensure stable ServerId
+id_replacement = f"<ServerId>{server_id}</ServerId>"
 if re.search(r"<ServerId>[^<]*</ServerId>", text):
-    text = re.sub(r"<ServerId>[^<]*</ServerId>", replacement, text, count=1)
+    text = re.sub(r"<ServerId>[^<]*</ServerId>", id_replacement, text, count=1)
 elif "</SystemConfiguration>" in text:
-    text = text.replace("</SystemConfiguration>", f"  {replacement}\n</SystemConfiguration>", 1)
+    text = text.replace("</SystemConfiguration>", f"  {id_replacement}\n</SystemConfiguration>", 1)
 else:
-    text = f"<SystemConfiguration>\n  {replacement}\n</SystemConfiguration>\n"
+    text = f"<SystemConfiguration>\n  {id_replacement}\n</SystemConfiguration>\n"
+
+# Ensure clean ServerName as Apex
+name_replacement = "<ServerName>Apex</ServerName>"
+if re.search(r"<ServerName>[^<]*</ServerName>", text):
+    text = re.sub(r"<ServerName>[^<]*</ServerName>", name_replacement, text, count=1)
+elif "</SystemConfiguration>" in text:
+    text = text.replace("</SystemConfiguration>", f"  {name_replacement}\n</SystemConfiguration>", 1)
+
 path.write_text(text, encoding="utf-8")
 PY
+    cp -f "$SYSTEM_XML" "/data/jellyfin/config/system.xml" 2>/dev/null || true
+    echo "[JELLYFIN] Configured server name as Apex in $SYSTEM_XML"
 fi
 
 echo "[HEALTH] Jellyfin starting in background (local datadir)..."

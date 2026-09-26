@@ -656,17 +656,19 @@ html[data-theme="dark"] .MuiDialog-paper {
 }
 
 html[data-theme="dark"] .MuiDrawer-paper {
-    background-color: rgba(var(--abyss-glass-tint), 0.69);
-    border-radius: 32px !important;
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-    border: solid 1px rgba(245, 245, 247, 0.2) !important;
-    left: 24px;
-    top: 24px;
-    bottom: 24px;
-    padding: 24px 0;
-    max-height: stretch;
-    min-width: fit-content;
-    width: 42vw;
+    background-color: #141416 !important;
+    border-radius: 20px !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
+    border: solid 1px rgba(255, 255, 255, 0.12) !important;
+    left: 16px;
+    top: 16px;
+    bottom: 16px;
+    padding: 16px 0;
+    max-height: calc(100vh - 32px);
+    width: 280px !important;
+    max-width: 85vw !important;
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
 }
 
 html[data-theme="dark"] .MuiDrawer-paper .MuiDivider-root {
@@ -802,11 +804,13 @@ html.abyss-spotlight-visible[data-theme="dark"] .MuiAppBar-root+div[aria-hidden=
 /* Navigation / drawer */
 .editPageSidebar,
 .mainDrawer {
-    background-color: rgba(var(--abyss-glass-tint), 0.69);
-    margin: 24px 0;
-    border-radius: 32px;
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-    border: solid 1px rgba(245, 245, 247, 0.2) !important;
+    background-color: #141416 !important;
+    margin: 16px 0;
+    border-radius: 20px !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    border: solid 1px rgba(255, 255, 255, 0.12) !important;
+    width: 280px !important;
+    max-width: 85vw !important;
 }
 
 .mainDrawer.drawer-open {
@@ -2535,7 +2539,8 @@ body:has(#videoOsdPage) .skinHeader .MuiTypography-root.MuiTypography-body1 {
     }
 
     .MuiDrawer-paper {
-        width: 60vw;
+        width: 280px !important;
+        max-width: 85vw !important;
     }
 }
 
@@ -2918,4 +2923,43 @@ html[data-theme="dark"] .MuiDrawer-root *,
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
+}
+
+/* --- Settings & Header UI Enhancements --- */
+
+/* Clean solid background on Dashboard & Settings pages to prevent backdrop/poster bleed-through */
+#dashboardPage,
+.pageWithSidebar,
+div[data-role="page"]:has(.dashboardSection),
+.dashboardSection,
+.dashboardContent,
+.dashboardColumn {
+    background-color: #0e0e11 !important;
+}
+
+body:has(#dashboardPage) #abyss-spotlight-backdrop,
+body:has(.pageWithSidebar) #abyss-spotlight-backdrop,
+body:has(#dashboardPage) .backdropContainer,
+body:has(.pageWithSidebar) .backdropContainer {
+    display: none !important;
+    opacity: 0 !important;
+}
+
+/* Hide server warning/switcher button in top navigation bar */
+header.MuiAppBar-root .MuiStack-root:first-of-type > .MuiButtonBase-root:has(svg[data-testid*="Warning"]),
+header.MuiAppBar-root .MuiStack-root:first-of-type > .MuiButtonBase-root:has(svg[data-testid*="Dns"]),
+header.MuiAppBar-root .MuiStack-root:first-of-type > [class*="MuiChip"]:has(svg[data-testid*="Warning"]),
+header.MuiAppBar-root .MuiStack-root:first-of-type > [class*="MuiChip"]:has(svg[data-testid*="Dns"]),
+header.MuiAppBar-root [class*="server-name"],
+header.MuiAppBar-root [class*="serverName"],
+.headerServerButton {
+    display: none !important;
+}
+
+/* Crisp image rendering for cards and library tiles */
+.cardImage,
+.cardContent,
+.cardImageContainer {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
 }

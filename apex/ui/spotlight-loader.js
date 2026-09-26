@@ -394,10 +394,24 @@
       } catch (e) {}
     }
 
+    function replaceServerNameText() {
+      try {
+        if (!document.body) return;
+        var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+        var node;
+        while ((node = walker.nextNode())) {
+          if (node.nodeValue && /r-jishnupg-[a-z0-9-]+/i.test(node.nodeValue)) {
+            node.nodeValue = node.nodeValue.replace(/r-jishnupg-[a-z0-9-]+/gi, "Apex");
+          }
+        }
+      } catch (e) {}
+    }
+
     var installScheduled = false;
 
     var scheduleInstall = function () {
       ensureDarkTheme();
+      replaceServerNameText();
       var alreadyGood =
         currentIndexPage && currentIndexPage.isConnected &&
         currentIndexPage === findVisibleById("indexPage") &&
@@ -411,6 +425,7 @@
       var run = function () {
         installScheduled = false;
         installSpotlight();
+        replaceServerNameText();
       };
 
       if (typeof requestAnimationFrame === "function") {
@@ -421,6 +436,7 @@
     };
 
     ensureDarkTheme();
+    replaceServerNameText();
     if (typeof MutationObserver === "function") {
       safe(function () {
         if (document.documentElement) {
@@ -441,6 +457,7 @@
     // without needing a hard refresh.
     setInterval(function () {
       scheduleInstall();
+      replaceServerNameText();
       if (currentSync) safe(currentSync);
     }, 2000);
 
