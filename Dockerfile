@@ -39,11 +39,7 @@ RUN python3 -m pip install --upgrade pip --break-system-packages && \
 COPY . .
 COPY apex /opt/apex
 
-RUN if [ -f /opt/apex/theme/pitch-black.css ] && [ -d /usr/share/jellyfin/web ]; then \
-        cp /opt/apex/theme/pitch-black.css /usr/share/jellyfin/web/pitch-black.css \
-        && sed -i 's|</head>|<link rel="stylesheet" href="pitch-black.css"></head>|' /usr/share/jellyfin/web/index.html; \
-    fi \
-    && chmod +x /app/combined-entrypoint.sh /opt/apex/health_doctor.py /opt/apex/combined-entrypoint.sh
+RUN chmod +x /app/combined-entrypoint.sh /opt/apex/health_doctor.py /opt/apex/combined-entrypoint.sh
 
 EXPOSE 7860
 

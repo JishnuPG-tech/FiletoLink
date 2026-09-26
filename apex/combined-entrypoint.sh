@@ -66,21 +66,28 @@ restore_jellyfin_local() {
         mkdir -p /data/jellyfin/data/metadata.snapshot
     fi
 
-    # Seed and sync Pitch Black OLED dark theme branding
-    if [ -f "/opt/apex/theme/branding.xml" ]; then
-        echo "[JELLYFIN] Applying Pitch Black OLED dark theme branding..."
-        cp -f /opt/apex/theme/branding.xml "$LOCAL_ROOT/config/branding.xml"
-        mkdir -p /data/jellyfin/config
-        cp -f /opt/apex/theme/branding.xml /data/jellyfin/config/branding.xml 2>/dev/null || true
-    fi
-
-    # Pre-inject pitch-black.css into web assets for instant loading
-    if [ -f "/opt/apex/theme/pitch-black.css" ] && [ -d "/usr/share/jellyfin/web" ]; then
-        cp -f /opt/apex/theme/pitch-black.css /usr/share/jellyfin/web/pitch-black.css 2>/dev/null || true
-        if [ -f "/usr/share/jellyfin/web/index.html" ] && ! grep -q "pitch-black.css" /usr/share/jellyfin/web/index.html; then
-            sed -i 's|</head>|<link rel="stylesheet" href="pitch-black.css"></head>|' /usr/share/jellyfin/web/index.html 2>/dev/null || true
-            echo "[JELLYFIN] Pitch Black OLED theme injected into web index.html."
+    # Ensure branding is completely reset to stock Jellyfin default
+    for b_path in "$LOCAL_ROOT/config/branding.xml" "/data/jellyfin/config/branding.xml"; do
+        if [ -f "$b_path" ]; then
+            python3 -c "
+import xml.etree.ElementTree as ET
+try:
+    tree = ET.parse('$b_path')
+    root = tree.getroot()
+    css_node = root.find('CustomCss')
+    if css_node is not None and css_node.text:
+        css_node.text = ''
+        tree.write('$b_path', encoding='utf-8', xml_declaration=True)
+except Exception:
+    pass
+" 2>/dev/null || true
         fi
+    done
+
+    # Clean up any custom css files and restore stock index.html
+    rm -f /usr/share/jellyfin/web/netflix-dark.css /usr/share/jellyfin/web/pitch-black.css 2>/dev/null || true
+    if [ -f "/usr/share/jellyfin/web/index.html" ]; then
+        sed -i 's|<link rel="stylesheet" href="[^"]*css"></head>|</head>|g' /usr/share/jellyfin/web/index.html 2>/dev/null || true
     fi
 
     echo "[JELLYFIN] Local datadir ready. Metadata redirected to fast local disk."
