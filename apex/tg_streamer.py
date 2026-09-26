@@ -1223,11 +1223,17 @@ async def _enrich_media_metadata(entry):
             FILE_ID_CACHE[key] = prev
             await save_cache_async()
         logger.info(f"[TMDB] ✅ Enriched {'TV' if is_tv else 'Movie'} metadata for '{query}' (tmdb_id={tmdb_id})")
-        # The ingest scan may have happened before TMDB enrichment completed.
-        # Refresh once after metadata is fully published so Jellyfin replaces
-        # its provisional/unknown item with the NFO-backed identity.
+        # The ingest scan may have happened before TMDB enrichment completed,
+        # and the debounced /Library/Refresh can be dropped by the 15s coalesce
+        # window. Force an item-level FullRefresh (by .strm path) so Jellyfin
+        # re-reads the freshly written NFO + poster instead of keeping the
+        # provisional folder-name identity. Runs in a background task so
+        # enrichment never waits on Jellyfin.
         try:
-            await request_jellyfin_scan()
+            if entry.get("strm_path"):
+                asyncio.create_task(refresh_jellyfin_item_by_path(entry.get("strm_path")))
+            else:
+                asyncio.create_task(request_jellyfin_scan())
         except Exception as scan_exc:
             logger.warning(f"[TMDB] Metadata published but Jellyfin refresh failed: {scan_exc}")
         return True
@@ -1590,6 +1596,72 @@ async def trigger_jellyfin_scan():
                 await asyncio.sleep(5)
                 continue
             logger.warning(f"Could not trigger Jellyfin library refresh after retries: {e}")
+
+
+async def refresh_jellyfin_item_by_path(strm_path, retries=8, delay=4.0):
+    """Locate the Jellyfin item for a given `.strm` path and trigger a full
+    metadata refresh so the NFO/poster written by TMDB enrichment are re-read.
+
+    A plain /Library/Refresh does NOT re-identify an already-indexed item (its
+    name is stable), so Jellyfin keeps the provisional folder-based identity.
+    This forces an item-level FullRefresh which consumes the local .nfo.
+    """
+    if not strm_path:
+        return False
+    headers = _jellyfin_auth_header()
+    if not headers:
+        return False
+    api_key = _read_jellyfin_api_key()
+    norm = os.path.normpath(strm_path)
+    for attempt in range(retries):
+        try:
+            connector = aiohttp.TCPConnector(family=socket.AF_INET)
+            async with aiohttp.ClientSession(connector=connector) as session:
+                params = {
+                    "Recursive": "true",
+                    "IncludeItemTypes": "Movie,Series,Episode",
+                    "Fields": "Path",
+                    "Limit": "10000",
+                }
+                if api_key:
+                    params["api_key"] = api_key
+                async with session.get(
+                    "http://127.0.0.1:8096/Items",
+                    params=params,
+                    headers=headers,
+                    timeout=30,
+                ) as response:
+                    if response.status != 200:
+                        continue
+                    payload = await response.json()
+                item_id = next(
+                    (it.get("Id") for it in (payload.get("Items") or [])
+                     if os.path.normpath(str(it.get("Path") or "")) == norm),
+                    None,
+                )
+                if not item_id:
+                    # Item may not have been indexed by the ingest scan yet.
+                    await asyncio.sleep(delay)
+                    continue
+                refresh_params = {
+                    "metadataRefreshMode": "FullRefresh",
+                    "replaceAllMetadata": "false",
+                    "replaceAllImages": "false",
+                }
+                async with session.post(
+                    f"http://127.0.0.1:8096/Items/{item_id}/Refresh",
+                    params=refresh_params,
+                    headers=headers,
+                    timeout=15,
+                ) as response:
+                    if response.status in (200, 204):
+                        logger.info(f"[JELLYFIN] Full metadata refresh queued for {os.path.basename(strm_path)}")
+                        return True
+        except Exception as exc:
+            logger.info(f"[JELLYFIN] Item refresh attempt {attempt + 1} failed: {type(exc).__name__}")
+        await asyncio.sleep(delay)
+    logger.warning(f"[JELLYFIN] Could not locate/refresh Jellyfin item for {strm_path}")
+    return False
 
 
 async def deduplicate_jellyfin_items():
