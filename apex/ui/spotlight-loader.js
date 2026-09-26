@@ -444,24 +444,26 @@
     function syncSettingsTheme() {
       var isSettings = isSettingsRoute();
       var themeLink = document.querySelector('link[data-abyss-theme]');
-      if (themeLink && themeLink.disabled !== isSettings) {
-        themeLink.disabled = isSettings;
+      if (themeLink && themeLink.disabled) {
+        themeLink.disabled = false;
       }
       var customCss = document.getElementById("customCss");
-      if (customCss && customCss.disabled !== isSettings) {
-        customCss.disabled = isSettings;
+      if (customCss && customCss.disabled) {
+        customCss.disabled = false;
       }
       if (isSettings) {
-        document.documentElement.classList.add("jellyfin-default-settings");
-        document.documentElement.classList.remove("abyss-theme-active");
+        document.documentElement.classList.add("jellyfin-settings-page");
+        document.documentElement.classList.remove("abyss-spotlight-active");
         clearSpotlightBackdrop();
         if (currentIframe) {
           currentIframe.style.display = "none";
         }
       } else {
-        document.documentElement.classList.remove("jellyfin-default-settings");
+        document.documentElement.classList.remove("jellyfin-settings-page");
         document.documentElement.classList.add("abyss-theme-active");
       }
+      ensureDarkTheme();
+      replaceServerNameText();
     }
 
     var installScheduled = false;
@@ -469,11 +471,8 @@
     var scheduleInstall = function () {
       syncSettingsTheme();
       if (isSettingsRoute()) {
-        replaceServerNameText();
         return;
       }
-      ensureDarkTheme();
-      replaceServerNameText();
       var alreadyGood =
         currentIndexPage && currentIndexPage.isConnected &&
         currentIndexPage === findVisibleById("indexPage") &&

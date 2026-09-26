@@ -2871,16 +2871,21 @@ html[data-theme="dark"] .MuiDrawer-root *,
     }
 }
 
-/* --- Settings & Header UI Enhancements --- */
+/* ==========================================================================
+   PURE ABYSS 100%: COMPLETE DASHBOARD, SETTINGS & MOBILE THEME
+   ========================================================================== */
 
-/* Clean solid background on Dashboard & Settings pages to prevent backdrop/poster bleed-through */
+/* 1. Global Page Backgrounds on Settings/Admin */
 #dashboardPage,
 .pageWithSidebar,
 div[data-role="page"]:has(.dashboardSection),
 .dashboardSection,
 .dashboardContent,
-.dashboardColumn {
-    background-color: #0e0e11 !important;
+.dashboardColumn,
+.settingsContainer {
+    background-color: #0b0b0e !important;
+    color: rgb(var(--abyss-accent)) !important;
+    font-family: "Google Sans", sans-serif !important;
 }
 
 body:has(#dashboardPage) #abyss-spotlight-backdrop,
@@ -2891,7 +2896,234 @@ body:has(.pageWithSidebar) .backdropContainer {
     opacity: 0 !important;
 }
 
-/* Hide server warning/switcher button in top navigation bar */
+/* 2. Docked Admin Sidebar (Desktop & Tablet) - NEVER overlaps content */
+@media (min-width: 960px) {
+    .MuiDrawer-docked,
+    .MuiDrawer-docked .MuiDrawer-paper {
+        position: relative !important;
+        width: 260px !important;
+        min-width: 260px !important;
+        max-width: 260px !important;
+        background-color: #111114 !important;
+        border: none !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        top: 0 !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        height: 100vh !important;
+        overflow-y: auto !important;
+    }
+
+    .pageWithSidebar {
+        display: flex !important;
+        flex-direction: row !important;
+    }
+
+    .pageWithSidebar .content-primary,
+    .pageWithSidebar .dashboardContent {
+        flex: 1 !important;
+        max-width: calc(100% - 260px) !important;
+        padding: 24px 32px !important;
+    }
+}
+
+/* 3. Mobile / Slide-Out Drawer (Android & Touch screens) */
+@media (max-width: 959px) {
+    .MuiDrawer-modal .MuiDrawer-paper,
+    .mainDrawer {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        width: 280px !important;
+        max-width: 80vw !important;
+        background: rgba(17, 17, 21, 0.96) !important;
+        backdrop-filter: blur(25px) !important;
+        -webkit-backdrop-filter: blur(25px) !important;
+        border: none !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 0 24px 24px 0 !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7) !important;
+        z-index: 1300 !important;
+    }
+}
+
+/* 4. Sidebar Navigation Items - Abyss Frosted Glass Pills */
+.MuiDrawer-paper .MuiListItemButton-root,
+.mainDrawer .navMenuOption {
+    border-radius: 50px !important;
+    margin: 4px 12px !important;
+    padding: 10px 18px !important;
+    color: rgba(var(--abyss-accent), 0.75) !important;
+    transition: all 0.2s var(--abyss-ease) !important;
+    font-family: "Google Sans", sans-serif !important;
+    font-weight: 500 !important;
+}
+
+.MuiDrawer-paper .MuiListItemButton-root:hover,
+.mainDrawer .navMenuOption:hover {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: #ffffff !important;
+}
+
+.MuiDrawer-paper .MuiListItemButton-root.Mui-selected,
+.mainDrawer .navMenuOption-selected {
+    background: rgba(255, 255, 255, 0.15) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+.MuiDrawer-paper .MuiListItemIcon-root {
+    min-width: 36px !important;
+    color: inherit !important;
+}
+
+.MuiDrawer-paper .MuiListSubheader-root {
+    background: transparent !important;
+    color: rgba(var(--abyss-accent), 0.45) !important;
+    font-family: "Google Sans", sans-serif !important;
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+    padding-left: 24px !important;
+}
+
+/* 5. Dashboard Cards, Widgets & Containers */
+.dashboardSection,
+.dashboardColumn,
+#dashboardPage .cardBox,
+#dashboardPage .paperList,
+.readOnlyContent {
+    background: rgba(22, 22, 26, 0.75) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 16px !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
+    padding: 20px !important;
+    margin-bottom: 20px !important;
+    color: rgb(var(--abyss-accent)) !important;
+}
+
+/* Server info table */
+.readOnlyContent table,
+.readOnlyContent tr,
+.readOnlyContent td {
+    border-color: rgba(255, 255, 255, 0.06) !important;
+    font-family: "Google Sans", sans-serif !important;
+    padding: 10px 8px !important;
+}
+
+/* 6. Action Buttons in Admin & Settings */
+.dashboardSection button,
+#dashboardPage button.raised,
+.button-submit,
+.emby-button.raised {
+    border-radius: 50px !important;
+    font-family: "Google Sans", sans-serif !important;
+    font-weight: 600 !important;
+    padding: 0.6em 1.6em !important;
+    letter-spacing: 0.02em !important;
+    border: none !important;
+    transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+/* Scan all libraries (Primary action) */
+#dashboardPage button.raised:not([class*="delete"]):not([class*="cancel"]):not([class*="warn"]) {
+    background: rgba(255, 255, 255, 0.95) !important;
+    color: #0e0e11 !important;
+}
+
+#dashboardPage button.raised:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 16px rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Restart button */
+button[id*="Restart"],
+button:has([data-testid*="Restart"]),
+.button-restart {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Shutdown button */
+button[id*="Shutdown"],
+button:has([data-testid*="Power"]),
+.button-shutdown {
+    background: rgba(235, 87, 87, 0.15) !important;
+    color: #ff6b6b !important;
+    border: 1px solid rgba(235, 87, 87, 0.3) !important;
+}
+
+/* 7. Inputs, Dropdowns, Checkboxes & Forms */
+.emby-input,
+.emby-select,
+.emby-textarea,
+.MuiInputBase-root,
+input[type="text"],
+input[type="number"],
+input[type="password"] {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 12px !important;
+    color: #ffffff !important;
+    font-family: "Google Sans", sans-serif !important;
+    padding: 10px 14px !important;
+    box-shadow: none !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.emby-input:focus,
+.emby-select:focus,
+.emby-textarea:focus,
+.MuiInputBase-root.Mui-focused {
+    border-color: rgba(255, 255, 255, 0.6) !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08) !important;
+    outline: none !important;
+}
+
+/* Switches & Toggles */
+.emby-checkbox:checked + span + .checkboxOutline,
+.checkboxOutline {
+    border-radius: 6px !important;
+}
+
+.emby-toggle-button {
+    border-radius: 50px !important;
+}
+
+/* 8. Activity Log Items */
+#dashboardPage .listItem,
+.activityLogList .listItem {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 12px !important;
+    margin-bottom: 8px !important;
+    padding: 12px 16px !important;
+    transition: background 0.2s ease !important;
+}
+
+#dashboardPage .listItem:hover,
+.activityLogList .listItem:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.activityLogList .listItemIcon,
+#dashboardPage .listItemIcon {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-radius: 50px !important;
+    color: #ffffff !important;
+}
+
+/* 9. Top Navigation Bar: Hide server switch warning pill */
 header.MuiAppBar-root .MuiStack-root:first-of-type > .MuiButtonBase-root:has(svg[data-testid*="Warning"]),
 header.MuiAppBar-root .MuiStack-root:first-of-type > .MuiButtonBase-root:has(svg[data-testid*="Dns"]),
 header.MuiAppBar-root .MuiStack-root:first-of-type > [class*="MuiChip"]:has(svg[data-testid*="Warning"]),
@@ -2902,10 +3134,39 @@ header.MuiAppBar-root [class*="serverName"],
     display: none !important;
 }
 
-/* Crisp image rendering for cards and library tiles */
+/* 10. Crisp Card & Image Rendering */
 .cardImage,
 .cardContent,
 .cardImageContainer {
     image-rendering: -webkit-optimize-contrast;
     image-rendering: crisp-edges;
+}
+
+/* 11. Android / Mobile Perfection */
+@media (max-width: 600px) {
+    /* Touch-friendly minimum target size */
+    button,
+    .button-flat,
+    .emby-button,
+    .cardOverlayButton {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    /* Clean mobile header */
+    .skinHeader {
+        padding: 8px 12px !important;
+    }
+
+    /* 2-column mobile poster grid */
+    .itemsContainer.padded-left.padded-right {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+    }
+
+    /* Mobile settings padding */
+    .content-primary,
+    .dashboardContent {
+        padding: 16px 12px !important;
+    }
 }
