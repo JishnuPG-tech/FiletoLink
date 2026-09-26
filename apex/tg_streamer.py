@@ -1184,7 +1184,12 @@ async def _enrich_media_metadata(entry):
                 logger.info(f"[AI-FALLBACK] Published canonical title '{ai_title}' (no TMDB match)")
                 try:
                     if entry.get("strm_path"):
-                        asyncio.create_task(refresh_jellyfin_item_by_path(entry.get("strm_path")))
+                        asyncio.create_task(
+                            refresh_jellyfin_item_by_path(
+                                entry.get("strm_path"),
+                                alt_paths=([entry["_prev_strm_path"]] if entry.get("_prev_strm_path") else []),
+                            )
+                        )
                     else:
                         asyncio.create_task(request_jellyfin_scan())
                 except Exception as scan_exc:
@@ -1226,6 +1231,9 @@ async def _enrich_media_metadata(entry):
                 os.makedirs(new_target_dir, exist_ok=True)
                 os.replace(old_strm_path, new_strm_path)
                 entry["strm_path"] = new_strm_path
+                # Remember the pre-move path so the post-enrichment item refresh
+                # can still locate the Jellyfin item while it is re-indexed.
+                entry["_prev_strm_path"] = old_strm_path
                 logger.info(
                     f"[ORGANIZE] Moved '{entry.get('title')}' to {tmdb_language} folder"
                 )
@@ -1315,7 +1323,12 @@ async def _enrich_media_metadata(entry):
         # enrichment never waits on Jellyfin.
         try:
             if entry.get("strm_path"):
-                asyncio.create_task(refresh_jellyfin_item_by_path(entry.get("strm_path")))
+                asyncio.create_task(
+                    refresh_jellyfin_item_by_path(
+                        entry.get("strm_path"),
+                        alt_paths=([entry["_prev_strm_path"]] if entry.get("_prev_strm_path") else []),
+                    )
+                )
             else:
                 asyncio.create_task(request_jellyfin_scan())
         except Exception as scan_exc:
@@ -1682,13 +1695,19 @@ async def trigger_jellyfin_scan():
             logger.warning(f"Could not trigger Jellyfin library refresh after retries: {e}")
 
 
-async def refresh_jellyfin_item_by_path(strm_path, retries=8, delay=4.0):
+async def refresh_jellyfin_item_by_path(strm_path, alt_paths=None, retries=12, delay=5.0):
     """Locate the Jellyfin item for a given `.strm` path and trigger a full
     metadata refresh so the NFO/poster written by TMDB enrichment are re-read.
 
     A plain /Library/Refresh does NOT re-identify an already-indexed item (its
     name is stable), so Jellyfin keeps the provisional folder-based identity.
     This forces an item-level FullRefresh which consumes the local .nfo.
+
+    The item may not be indexed yet (the .strm can be created and even moved to
+    its language folder seconds before this runs), so we poll. Matching is by
+    exact path, by any `alt_paths` (e.g. the pre-move path), and finally by the
+    .strm basename so a Jellyfin-side folder move still resolves. Every few
+    attempts a library scan is nudged so a freshly moved file gets indexed.
     """
     if not strm_path:
         return False
@@ -1696,7 +1715,11 @@ async def refresh_jellyfin_item_by_path(strm_path, retries=8, delay=4.0):
     if not headers:
         return False
     api_key = _read_jellyfin_api_key()
-    norm = os.path.normpath(strm_path)
+    base = os.path.basename(strm_path).lower()
+    paths = [strm_path]
+    if alt_paths:
+        paths.extend(alt_paths)
+    norm_paths = {os.path.normpath(p).lower() for p in paths if p}
     for attempt in range(retries):
         try:
             connector = aiohttp.TCPConnector(family=socket.AF_INET)
@@ -1718,13 +1741,32 @@ async def refresh_jellyfin_item_by_path(strm_path, retries=8, delay=4.0):
                     if response.status != 200:
                         continue
                     payload = await response.json()
+                items = payload.get("Items") or []
                 item_id = next(
-                    (it.get("Id") for it in (payload.get("Items") or [])
-                     if os.path.normpath(str(it.get("Path") or "")) == norm),
+                    (
+                        it.get("Id") for it in items
+                        if os.path.normpath(str(it.get("Path") or "")).lower() in norm_paths
+                    ),
                     None,
                 )
                 if not item_id:
-                    # Item may not have been indexed by the ingest scan yet.
+                    # Fallback: the item may live under a different folder after
+                    # TMDB language organize moved the .strm; match by basename.
+                    item_id = next(
+                        (
+                            it.get("Id") for it in items
+                            if os.path.basename(str(it.get("Path") or "")).lower() == base
+                        ),
+                        None,
+                    )
+                if not item_id:
+                    # Every few attempts, nudge a library scan so a freshly
+                    # created/moved .strm is indexed before the next lookup.
+                    if attempt % 4 == 0:
+                        try:
+                            await request_jellyfin_scan()
+                        except Exception:
+                            pass
                     await asyncio.sleep(delay)
                     continue
                 refresh_params = {
