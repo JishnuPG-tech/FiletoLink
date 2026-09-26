@@ -43,6 +43,7 @@ restore_jellyfin_local() {
             -exec cp -a -f {} "$LOCAL_ROOT/data/" \; 2>/dev/null || true
         echo "[PERSISTENCE] Jellyfin database snapshot found ($(stat -c '%s' /data/jellyfin/data/data/jellyfin.db 2>/dev/null || echo unknown) bytes)."
         sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" "PRAGMA journal_mode=WAL; PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
+        python3 /opt/apex/repair_jellyfin_libraries.py 2>/dev/null || python3 "$(dirname "$0")/repair_jellyfin_libraries.py" 2>/dev/null || true
     else
         echo "[PERSISTENCE] No Jellyfin database snapshot found; Jellyfin will run first-time initialization."
     fi

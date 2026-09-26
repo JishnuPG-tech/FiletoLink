@@ -1889,6 +1889,20 @@ def _create_strm_file_sync(entry):
     else:
         stream_url = f"http://127.0.0.1:{PORT}/stream_file?file_id={file_id}&message_id={msg_id}&filename={clean_title}.mp4"
 
+    # Avoid rewriting unchanged .strm files to prevent Jellyfin filesystem watcher
+    # from detecting file change and pruning extracted metadata & posters.
+    if os.path.exists(strm_path):
+        try:
+            with open(strm_path, "r", encoding="utf-8") as f:
+                if f.read().strip() == stream_url.strip():
+                    entry["target_dir"] = target_dir
+                    entry["show_root"] = show_root
+                    entry["strm_base"] = strm_base_name
+                    entry["strm_path"] = strm_path
+                    return strm_filename, target_dir, show_root
+        except Exception:
+            pass
+
     tmp_path = f"{strm_path}.tmp"
     with open(tmp_path, "w", encoding="utf-8") as f:
         f.write(stream_url)
@@ -2889,8 +2903,13 @@ async def _process_and_index_message(message, chat_id):
         return False, False
     msg_id = message.id
     existing = _cache_lookup(msg_id, msg_chat_id)
-    if isinstance(existing, dict) and existing.get("file_id") == media.file_id:
-        return False, True
+    if isinstance(existing, dict):
+        strm_path = existing.get("strm_path") or _entry_strm_path(existing)
+        if strm_path and os.path.exists(strm_path):
+            if media.file_id and existing.get("file_id") != media.file_id:
+                existing["file_id"] = media.file_id
+                FILE_ID_CACHE[_cache_key(msg_chat_id, msg_id)] = existing
+            return False, True
     file_name = media_file_name(message, media)
     if subtitle_is_document(file_name, getattr(media, "mime_type", None)):
         placed = await _place_subtitle(msg_id, msg_chat_id, media.file_id, file_name)
@@ -2899,6 +2918,10 @@ async def _process_and_index_message(message, chat_id):
     entry = _meta_to_entry(msg_id, msg_chat_id, media.file_id, media.file_size or 0, file_name)
     if _is_unknown_media(entry):
         return False, True
+    if isinstance(existing, dict):
+        for k in ("language", "tmdb_id", "tmdb_title", "tmdb_year", "target_dir", "strm_path", "strm_base", "show_root"):
+            if existing.get(k):
+                entry[k] = existing[k]
     FILE_ID_CACHE[_cache_key(msg_chat_id, msg_id)] = entry
     strm_name = await create_strm_file_async(entry)
     logger.info(f"[REINDEX] Re-ingested '{strm_name}' (msg {msg_id}, chat {msg_chat_id})")

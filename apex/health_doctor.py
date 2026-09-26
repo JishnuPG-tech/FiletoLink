@@ -298,6 +298,17 @@ def ensure_jellyfin_libraries():
     for collection_type, lib_path in expected.items():
         name = "Movies" if collection_type == "movies" else "TV Shows"
         if name in present:
+            folder_info = existing.get(name) or {}
+            locs = folder_info.get("Locations") or []
+            if lib_path not in locs:
+                os.makedirs(lib_path, exist_ok=True)
+                params = {"name": name, "path": lib_path, "refreshLibrary": "true"}
+                qs = "&".join(f"{k}={urllib.request.quote(str(v))}" for k, v in params.items())
+                try:
+                    pstatus, _ = _jellyfin_request("POST", f"/Library/VirtualFolders/Paths?{qs}", auth, body={})
+                    logger.info(f"[JELLYFIN] Attached '{lib_path}' to existing '{name}' library (status={pstatus}).")
+                except Exception as exc:
+                    logger.warning(f"[JELLYFIN] Could not attach '{lib_path}' to '{name}': {exc}")
             continue
         all_present = False
 
