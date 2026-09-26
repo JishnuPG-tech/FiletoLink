@@ -66,6 +66,13 @@ JELLYFIN_PORT = int(os.environ.get("JELLYFIN_PORT", "8096"))
 TG_PORT = int(os.environ.get("TG_LISTEN_PORT", "8082"))
 FILETOLINK_PORT = int(os.environ.get("FILETOLINK_PORT", "8081"))
 
+@app.get("/ping")
+@app.get("/keepalive")
+@app.get("/heartbeat")
+async def keepalive_ping():
+    """Fast, zero-overhead heartbeat endpoint for UptimeRobot / cron pings to prevent Space sleep."""
+    return JSONResponse({"status": "ok", "service": "Apex-Jellyfin", "alive": True})
+
 @app.get("/health")
 @app.get("/debug/status")
 async def health_check():

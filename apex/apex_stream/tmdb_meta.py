@@ -185,6 +185,14 @@ _MEDIA_EXT_RE = re.compile(
 )
 
 
+_URL_NOISE_RE = re.compile(
+    r"(?i)\b(?:https?://\S+|www\.\S+|\S+\.(?:com|org|net|vip|in|me|xyz|top|site|cc|to|is|pm|ms|link))\b"
+)
+_WATERMARK_PAREN_RE = re.compile(
+    r"(?i)\s*\([^)]*(?:www\.|t\.me|https?://|\.com|\.org|\.net|\.vip|\.in|\.xyz|tamil|bolly|cinema|esub|dual[- ]?audio|clean[- ]?audio|hq[- ]?line|rip)[^)]*\)"
+)
+
+
 def _strip_noise(text: str) -> str:
     """Strip group tags ([...], @Handle), the real media extension and collapse
     whitespace.
@@ -196,7 +204,9 @@ def _strip_noise(text: str) -> str:
     keeping them produces dotted folder names and breaks both Jellyfin
     matching and TMDB search queries.
     """
-    t = re.sub(r"\[[^\]]*\]", " ", text)
+    t = _URL_NOISE_RE.sub(" ", text)
+    t = _WATERMARK_PAREN_RE.sub(" ", t)
+    t = re.sub(r"\[[^\]]*\]", " ", t)
     t = re.sub(r"@[\w.\-]+", " ", t)
     t = _MEDIA_EXT_RE.sub(" ", t)
     # "+" and "&" are release/present separators too ("Dd+5.1 H" -> "Dd 5 1 H",

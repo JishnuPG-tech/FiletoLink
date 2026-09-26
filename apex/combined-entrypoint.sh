@@ -42,6 +42,7 @@ restore_jellyfin_local() {
             \( -name metadata -o -name metadata.snapshot \) -prune -o \
             -exec cp -a -f {} "$LOCAL_ROOT/data/" \; 2>/dev/null || true
         echo "[PERSISTENCE] Jellyfin database snapshot found ($(stat -c '%s' /data/jellyfin/data/data/jellyfin.db 2>/dev/null || echo unknown) bytes)."
+        sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" "PRAGMA journal_mode=WAL; PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
     else
         echo "[PERSISTENCE] No Jellyfin database snapshot found; Jellyfin will run first-time initialization."
     fi
@@ -111,6 +112,7 @@ sync_jellyfin_back() {
     while :; do
         sleep 20
         if [ -f "$LOCAL_ROOT/data/data/jellyfin.db" ]; then
+            sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
             mkdir -p /data/jellyfin/data/data
             snapshot="/data/jellyfin/data/data/jellyfin.db.tmp"
             if sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" ".backup '$snapshot'" 2>/dev/null; then
@@ -227,6 +229,33 @@ for bcfg in "$LOCAL_ROOT/config/branding.xml" "/data/jellyfin/config/branding.xm
         sed -i 's|<CustomCss>[^<]*ElegantFin[^<]*</CustomCss>|<CustomCss></CustomCss>|g' "$bcfg" 2>/dev/null || true
     fi
 done
+
+# Configure encoding.xml for direct play / stream remuxing (prevents CPU-heavy video transcode)
+ENCODING_XML="$LOCAL_ROOT/config/encoding.xml"
+python3 - "$ENCODING_XML" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+content = """<?xml version="1.0" encoding="utf-8"?>
+<EncodingOptions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <EncodingThreadCount>0</EncodingThreadCount>
+  <TranscodingTempPath>/opt/jellyfin-local/cache/transcodes</TranscodingTempPath>
+  <DownMixAudioBoost>2</DownMixAudioBoost>
+  <EnableThrottling>true</EnableThrottling>
+  <ThrottleDelaySeconds>180</ThrottleDelaySeconds>
+  <HardwareAccelerationType>none</HardwareAccelerationType>
+  <EnableVideoEncoding>false</EnableVideoEncoding>
+  <EnableAudioEncoding>true</EnableAudioEncoding>
+  <AllowVideoStreamCopy>true</AllowVideoStreamCopy>
+  <AllowAudioStreamCopy>true</AllowAudioStreamCopy>
+</EncodingOptions>
+"""
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(content.strip(), encoding="utf-8")
+PY
+cp -f "$ENCODING_XML" "/data/jellyfin/config/encoding.xml" 2>/dev/null || true
+echo "[JELLYFIN] Configured zero-CPU video encoding & direct stream remux in $ENCODING_XML"
 
 echo "[HEALTH] Jellyfin starting in background (local datadir)..."
 launch_jellyfin

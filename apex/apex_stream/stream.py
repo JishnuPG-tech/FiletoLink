@@ -254,6 +254,14 @@ class StreamDriver:
                     for _ in range(to_skip):
                         await run.read_chunk()
                     while chunk_index <= run_end:
+                        # Predictive Read-Ahead: when reaching the end of the current run,
+                        # asynchronously prefetch the subsequent run into cache
+                        if chunk_index == run_end and run_end < layout.end_chunk:
+                            next_run_start = run_end + 1
+                            next_run_count = min(cfg.run_size, layout.end_chunk - next_run_start + 1)
+                            asyncio.create_task(
+                                self._prefetch_next_run(source_key, next_run_start, next_run_count, plan.dc_id)
+                            )
                         chunk = await run.read_chunk()
                         chunk_index += 1
                         if emitted_window == 0:
@@ -333,6 +341,22 @@ class StreamDriver:
             return fetch(client, chat_id, message_id, run_start, chunk_count)
 
         return _factory
+
+    async def _prefetch_next_run(self, source_key: tuple, next_run_start: int, next_run_count: int, dc_id: Optional[int]) -> None:
+        """Asynchronously pre-warm the next chunk run in RAM cache ahead of client playback."""
+        try:
+            client = await self.pool.select(dc_id=dc_id)
+            try:
+                factory = self._factory_for(client.client, source_key[0], source_key[1])
+                source_run = await self.registry.get_run(source_key, next_run_start, next_run_count, factory)
+                try:
+                    await asyncio.wait_for(source_run.read_chunk(), timeout=2.0)
+                finally:
+                    await source_run.close()
+            finally:
+                await self.pool.release(client.client_id)
+        except Exception:
+            pass
 
     # --- convenience ---------------------------------------------------
 

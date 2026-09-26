@@ -298,6 +298,20 @@ async def proxy_http_request(
         except Exception:
             pass
 
+    # Direct Play Optimization: Force DirectPlay & DirectStream in PlaybackInfo responses
+    # for .strm items so modern browsers and devices stream natively without HLS CPU transcoding
+    if "application/json" in content_type and "playbackinfo" in request.url.path.lower() and content:
+        try:
+            import json
+            pb_data = json.loads(content.decode("utf-8"))
+            for m_src in pb_data.get("MediaSources") or []:
+                if isinstance(m_src, dict):
+                    m_src["SupportsDirectPlay"] = True
+                    m_src["SupportsDirectStream"] = True
+            content = json.dumps(pb_data).encode("utf-8")
+        except Exception:
+            pass
+
     normal_resp = Response(
         content=content,
         status_code=status_code,

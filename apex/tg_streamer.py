@@ -759,10 +759,25 @@ apex_driver = StreamDriver(
 # they never consume updates so the webhook/primary bot owns ingestion.
 extra_clients = []
 if not APEX_CFG.extra_tokens:
-    APEX_CFG.extra_tokens = [
-        value for index in range(1, 100)
-        if (value := os.environ.get(f"JELLYFIN_MULTI_TOKEN{index}", "").strip())
-    ]
+    discovered_tokens = []
+    for index in range(1, 100):
+        if val := os.environ.get(f"JELLYFIN_MULTI_TOKEN{index}", "").strip():
+            if val not in discovered_tokens:
+                discovered_tokens.append(val)
+    for prefix in ("BOT_TOKEN_", "TG_BOT_TOKEN_", "MULTI_TOKEN_"):
+        for index in range(1, 25):
+            if val := os.environ.get(f"{prefix}{index}", "").strip():
+                if val not in discovered_tokens and val != BOT_TOKEN:
+                    discovered_tokens.append(val)
+    for env_name in ("EXTRA_BOT_TOKENS", "MULTI_BOT_TOKENS", "APEX_EXTRA_TOKENS", "APEX_TELEGRAM_EXTRA_TOKENS"):
+        if val := os.environ.get(env_name, "").strip():
+            for tok in val.split(","):
+                tok_clean = tok.strip()
+                if tok_clean and tok_clean not in discovered_tokens and tok_clean != BOT_TOKEN:
+                    discovered_tokens.append(tok_clean)
+    APEX_CFG.extra_tokens = discovered_tokens
+    if APEX_CFG.extra_tokens:
+        logger.info(f"[POOL] Discovered {len(APEX_CFG.extra_tokens)} extra streaming bot token(s).")
 for _ec_idx, _ec_token in enumerate(APEX_CFG.extra_tokens, start=2):
     if API_ID and API_HASH and _ec_token:
         try:
@@ -1444,10 +1459,24 @@ async def _enrich_media_metadata(entry):
                         f.write(build_tvshow_nfo(detail))
                 poster_url = _best_image("poster_path")
                 if poster_url and not os.path.exists(poster_path):
-                    await _download_image(session, _resize_tmdb_image(poster_url), poster_path)
+                    if await _download_image(session, _resize_tmdb_image(poster_url, "w780"), poster_path):
+                        folder_path = os.path.join(show_root, "folder.jpg")
+                        if not os.path.exists(folder_path):
+                            try:
+                                with open(poster_path, "rb") as src, open(folder_path, "wb") as dst:
+                                    dst.write(src.read())
+                            except OSError:
+                                pass
                 backdrop_url = _best_image("backdrop_path")
                 if backdrop_url and not os.path.exists(backdrop_path):
-                    await _download_image(session, _resize_tmdb_image(backdrop_url, "w1280"), backdrop_path)
+                    if await _download_image(session, _resize_tmdb_image(backdrop_url, "original"), backdrop_path):
+                        fanart_path = os.path.join(show_root, "fanart.jpg")
+                        if not os.path.exists(fanart_path):
+                            try:
+                                with open(backdrop_path, "rb") as src, open(fanart_path, "wb") as dst:
+                                    dst.write(src.read())
+                            except OSError:
+                                pass
 
                 season_detail = None
                 season_number = int(entry.get("season") or 1)
@@ -1476,12 +1505,35 @@ async def _enrich_media_metadata(entry):
                 )
                 with open(nfo_path, "w", encoding="utf-8") as f:
                     f.write(build_movie_nfo(detail))
+                movie_nfo = os.path.join(target_dir, "movie.nfo")
+                if not os.path.exists(movie_nfo):
+                    try:
+                        with open(nfo_path, "rb") as src, open(movie_nfo, "wb") as dst:
+                            dst.write(src.read())
+                    except OSError:
+                        pass
                 poster_url = _best_image("poster_path")
-                if poster_url and not os.path.exists(os.path.join(target_dir, "poster.jpg")):
-                    await _download_image(session, _resize_tmdb_image(poster_url), os.path.join(target_dir, "poster.jpg"))
+                movie_poster = os.path.join(target_dir, "poster.jpg")
+                if poster_url and not os.path.exists(movie_poster):
+                    if await _download_image(session, _resize_tmdb_image(poster_url, "w780"), movie_poster):
+                        folder_path = os.path.join(target_dir, "folder.jpg")
+                        if not os.path.exists(folder_path):
+                            try:
+                                with open(movie_poster, "rb") as src, open(folder_path, "wb") as dst:
+                                    dst.write(src.read())
+                            except OSError:
+                                pass
                 backdrop_url = _best_image("backdrop_path")
-                if backdrop_url and not os.path.exists(os.path.join(target_dir, "backdrop.jpg")):
-                    await _download_image(session, _resize_tmdb_image(backdrop_url, "w1280"), os.path.join(target_dir, "backdrop.jpg"))
+                movie_backdrop = os.path.join(target_dir, "backdrop.jpg")
+                if backdrop_url and not os.path.exists(movie_backdrop):
+                    if await _download_image(session, _resize_tmdb_image(backdrop_url, "original"), movie_backdrop):
+                        fanart_path = os.path.join(target_dir, "fanart.jpg")
+                        if not os.path.exists(fanart_path):
+                            try:
+                                with open(movie_backdrop, "rb") as src, open(fanart_path, "wb") as dst:
+                                    dst.write(src.read())
+                            except OSError:
+                                pass
 
         prev = FILE_ID_CACHE.get(key)
         if isinstance(prev, dict):
@@ -1542,9 +1594,11 @@ def _tmdb_year(detail):
     return None
 
 
-def _resize_tmdb_image(url, size="w500"):
-    """Rewrite a TMDB original image URL to a smaller requested size."""
-    if "image.tmdb.org/" not in url:
+def _resize_tmdb_image(url, size="w780"):
+    """Rewrite a TMDB image URL to requested size (or original)."""
+    if not url or "image.tmdb.org/" not in url:
+        return url
+    if size == "original":
         return url
     return url.replace("/original", f"/{size}", 1)
 

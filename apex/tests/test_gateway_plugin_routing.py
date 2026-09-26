@@ -1,4 +1,5 @@
 import pytest
+import httpx
 from starlette.datastructures import Headers
 from unittest.mock import AsyncMock, patch
 
@@ -90,3 +91,58 @@ async def test_jellyfin_ui_assets_rewrite_to_web():
         target_url = mock_proxy.call_args[0][0]
         assert "8096" in target_url
         assert "/web/ui/abyss.css" in target_url
+
+
+@pytest.mark.asyncio
+async def test_keepalive_endpoints():
+    from gateway.main import keepalive_ping
+    resp = await keepalive_ping()
+    assert resp.status_code == 200
+    import json
+    data = json.loads(resp.body.decode("utf-8"))
+    assert data["status"] == "ok"
+    assert data["alive"] is True
+
+
+@pytest.mark.asyncio
+async def test_playbackinfo_directplay_override():
+    import json
+    from unittest.mock import MagicMock
+    from gateway.utils import proxy_http_request
+
+    # Mock response with MediaSources having SupportsDirectPlay=False
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.headers = httpx.Headers({"content-type": "application/json"})
+    payload = {
+        "MediaSources": [
+            {
+                "Id": "item1",
+                "Path": "/data/media/Movies/Spider-Man.strm",
+                "SupportsDirectPlay": False,
+                "SupportsDirectStream": False,
+            }
+        ]
+    }
+    mock_resp.aread = AsyncMock(return_value=json.dumps(payload).encode("utf-8"))
+    mock_resp.aclose = AsyncMock()
+
+    mock_client = MagicMock()
+    mock_client.build_request.return_value = MagicMock()
+    mock_client.send = AsyncMock(return_value=mock_resp)
+
+    with patch("gateway.utils.get_http_client", return_value=mock_client):
+        from starlette.datastructures import QueryParams
+        req = AsyncMock()
+        req.url.path = "/jellyfin/Items/123/PlaybackInfo"
+        req.headers = Headers({"accept": "application/json"})
+        req.method = "POST"
+        req.body = AsyncMock(return_value=b"{}")
+        req.query_params = QueryParams([])
+
+        result = await proxy_http_request("http://127.0.0.1:8096/Items/123/PlaybackInfo", req)
+        assert result.status_code == 200
+        out_data = json.loads(result.body.decode("utf-8"))
+        src = out_data["MediaSources"][0]
+        assert src["SupportsDirectPlay"] is True
+        assert src["SupportsDirectStream"] is True
