@@ -113,6 +113,16 @@ PUBLIC_BASE_URL = get_env(
 WEBHOOK_PATH = "/tg-stream/telegram-webhook"
 
 DATA_DIR = "/data/jellyfin"
+if not USER_SESSION_STRING:
+    _session_file = os.path.join(DATA_DIR, "user_session.string")
+    if os.path.exists(_session_file):
+        try:
+            with open(_session_file, "r", encoding="utf-8") as _sf:
+                USER_SESSION_STRING = _sf.read().strip()
+                if USER_SESSION_STRING:
+                    logger.info("[PYROGRAM] Loaded USER_SESSION_STRING from persisted storage.")
+        except Exception as _e:
+            logger.warning(f"[PYROGRAM] Could not read user_session.string: {_e}")
 MOVIES_DIR = os.path.join(DATA_DIR, "media/Movies")
 SHOWS_DIR = os.path.join(DATA_DIR, "media/TV Shows")
 CACHE_FILE = os.path.join(DATA_DIR, "file_ids.json")
@@ -2386,6 +2396,395 @@ async def webhook_link(request):
 async def register_webhook_route(request):
     ok, url, desc = await register_telegram_webhook()
     return web.json_response({"ok": ok, "url": url, "description": desc, "purpose": "activate bot connection"})
+
+
+_AUTH_CLIENT_HOLDER = {}
+
+
+@routes.get("/session-login")
+async def session_login_page(request):
+    """Web interface to generate Pyrogram user string session right inside this space."""
+    user_status = "Not Connected"
+    user_detail = "No active user session"
+    is_connected = False
+    if "tg_user" in globals() and tg_user and getattr(tg_user, "is_connected", False):
+        try:
+            me = await tg_user.get_me()
+            is_connected = True
+            user_status = "Connected"
+            user_detail = f"{getattr(me, 'first_name', '')} (@{getattr(me, 'username', '') or getattr(me, 'id', '')})"
+        except Exception:
+            user_status = "Connected (Active)"
+    
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telegram User Session Setup</title>
+<style>
+  :root {{
+    --bg-primary: #0b0d13;
+    --bg-surface: #141721;
+    --bg-elevated: #1a1e2c;
+    --border: rgba(255, 255, 255, 0.08);
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --success: #10b981;
+    --danger: #ef4444;
+    --text: #f8fafc;
+    --text-muted: #94a3b8;
+  }}
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }}
+  .card {{
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    max-width: 520px;
+    width: 100%;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+  }}
+  h1 {{ font-size: 24px; font-weight: 700; margin-bottom: 8px; }}
+  p.subtitle {{ color: var(--text-muted); font-size: 14px; margin-bottom: 24px; line-height: 1.5; }}
+  .status-badge {{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 24px;
+    background: {'rgba(16, 185, 129, 0.15)' if is_connected else 'rgba(239, 68, 68, 0.15)'};
+    color: {'var(--success)' if is_connected else 'var(--danger)'};
+    border: 1px solid {'rgba(16, 185, 129, 0.3)' if is_connected else 'rgba(239, 68, 68, 0.3)'};
+  }}
+  .form-group {{ margin-bottom: 16px; text-align: left; }}
+  label {{ display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }}
+  input {{
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s;
+  }}
+  input:focus {{ border-color: var(--accent); }}
+  button {{
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-top: 8px;
+  }}
+  button:hover {{ background: var(--accent-hover); }}
+  button:disabled {{ opacity: 0.5; cursor: not-allowed; }}
+  .alert {{
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    line-height: 1.4;
+    display: none;
+  }}
+  .alert-error {{ background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }}
+  .alert-success {{ background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }}
+  .step-2 {{ display: none; }}
+  .result-box {{
+    margin-top: 20px;
+    padding: 16px;
+    background: var(--bg-elevated);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    display: none;
+  }}
+  .result-box textarea {{
+    width: 100%;
+    height: 90px;
+    background: #0b0d13;
+    border: 1px solid var(--border);
+    color: #10b981;
+    font-family: monospace;
+    font-size: 11px;
+    padding: 8px;
+    border-radius: 6px;
+    resize: none;
+    margin-top: 8px;
+  }}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>⚡ Automatic Userbot Setup</h1>
+  <p class="subtitle">Log in once with your phone number to automatically unlock full channel history scanning & zero-reforward playback.</p>
+
+  <div class="status-badge">
+    <span>●</span> Status: {user_status} ({user_detail})
+  </div>
+
+  <div id="alertBox" class="alert"></div>
+
+  <!-- Step 1: Phone -->
+  <div id="stepPhone">
+    <div class="form-group">
+      <label>Phone Number (with Country Code)</label>
+      <input type="text" id="phoneInput" placeholder="+919876543210" autocomplete="tel">
+    </div>
+    <button id="sendBtn" onclick="sendCode()">Send Telegram OTP</button>
+  </div>
+
+  <!-- Step 2: Code & 2FA -->
+  <div id="stepCode" class="step-2">
+    <div class="form-group">
+      <label>Telegram Login OTP Code</label>
+      <input type="text" id="codeInput" placeholder="Enter code sent by Telegram">
+    </div>
+    <div class="form-group" id="passGroup" style="display:none;">
+      <label>2-Step Verification Password (if enabled)</label>
+      <input type="password" id="passInput" placeholder="Your 2FA cloud password">
+    </div>
+    <button id="verifyBtn" onclick="verifyCode()">Verify & Activate Userbot</button>
+  </div>
+
+  <!-- Step 3: Success -->
+  <div id="resultBox" class="result-box">
+    <p style="font-weight:600;color:var(--success);margin-bottom:6px;">✅ Session Generated & Userbot Activated!</p>
+    <p style="font-size:12px;color:var(--text-muted);">Saved to storage volume! Copy this into your Hugging Face Secrets as <code>USER_SESSION_STRING</code> for permanent persistence:</p>
+    <textarea id="sessionText" readonly></textarea>
+    <button onclick="copySession()" style="margin-top:8px;background:var(--bg-elevated);border:1px solid var(--border);">📋 Copy to Clipboard</button>
+  </div>
+</div>
+
+<script>
+async function sendCode() {{
+  const phone = document.getElementById('phoneInput').value.trim();
+  const alertBox = document.getElementById('alertBox');
+  const btn = document.getElementById('sendBtn');
+  if (!phone) {{
+    showAlert('Please enter your phone number with country code.', 'error');
+    return;
+  }}
+  btn.disabled = true;
+  btn.innerText = 'Sending...';
+  hideAlert();
+  try {{
+    const res = await fetch('/tg-stream/auth/send-code', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{ phone }})
+    }});
+    const data = await res.json();
+    if (data.ok) {{
+      showAlert('Login code sent to your Telegram app!', 'success');
+      document.getElementById('stepPhone').style.display = 'none';
+      document.getElementById('stepCode').style.display = 'block';
+    }} else {{
+      showAlert(data.error || 'Failed to send code', 'error');
+    }}
+  }} catch (err) {{
+    showAlert('Network error: ' + err.message, 'error');
+  }} finally {{
+    btn.disabled = false;
+    btn.innerText = 'Send Telegram OTP';
+  }}
+}}
+
+async function verifyCode() {{
+  const code = document.getElementById('codeInput').value.trim();
+  const password = document.getElementById('passInput').value;
+  const btn = document.getElementById('verifyBtn');
+  if (!code) {{
+    showAlert('Please enter the OTP code received from Telegram.', 'error');
+    return;
+  }}
+  btn.disabled = true;
+  btn.innerText = 'Verifying...';
+  hideAlert();
+  try {{
+    const res = await fetch('/tg-stream/auth/verify-code', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{ code, password }})
+    }});
+    const data = await res.json();
+    if (data.ok) {{
+      showAlert('Success! User session activated and scanning started.', 'success');
+      document.getElementById('stepCode').style.display = 'none';
+      document.getElementById('resultBox').style.display = 'block';
+      document.getElementById('sessionText').value = data.session_string;
+    }} else if (data.need_password) {{
+      showAlert('2-Step Verification password required.', 'error');
+      document.getElementById('passGroup').style.display = 'block';
+    }} else {{
+      showAlert(data.error || 'Verification failed', 'error');
+    }}
+  }} catch (err) {{
+    showAlert('Network error: ' + err.message, 'error');
+  }} finally {{
+    btn.disabled = false;
+    btn.innerText = 'Verify & Activate Userbot';
+  }}
+}}
+
+function showAlert(msg, type) {{
+  const b = document.getElementById('alertBox');
+  b.innerText = msg;
+  b.className = 'alert alert-' + type;
+  b.style.display = 'block';
+}}
+function hideAlert() {{
+  document.getElementById('alertBox').style.display = 'none';
+}}
+function copySession() {{
+  const t = document.getElementById('sessionText');
+  t.select();
+  navigator.clipboard.writeText(t.value);
+  showAlert('Copied session string to clipboard!', 'success');
+}}
+</script>
+</body>
+</html>"""
+    return web.Response(text=html, content_type="text/html")
+
+
+@routes.post("/auth/send-code")
+async def auth_send_code(request):
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid json"}, status=400)
+    phone = (data.get("phone") or "").strip()
+    if not phone:
+        return web.json_response({"ok": False, "error": "Phone number required"}, status=400)
+    if not API_ID or not API_HASH:
+        return web.json_response({"ok": False, "error": "API_ID and API_HASH not configured on server"}, status=500)
+
+    old = _AUTH_CLIENT_HOLDER.get("client")
+    if old:
+        try:
+            await old.stop()
+        except Exception:
+            pass
+        _AUTH_CLIENT_HOLDER.clear()
+
+    try:
+        temp_client = Client(
+            "temp_session_gen",
+            api_id=int(API_ID),
+            api_hash=API_HASH,
+            in_memory=True,
+        )
+        await temp_client.connect()
+        sent_code = await temp_client.send_code(phone)
+        _AUTH_CLIENT_HOLDER["client"] = temp_client
+        _AUTH_CLIENT_HOLDER["phone"] = phone
+        _AUTH_CLIENT_HOLDER["phone_code_hash"] = sent_code.phone_code_hash
+        return web.json_response({"ok": True})
+    except Exception as e:
+        logger.error(f"[AUTH] send_code failed: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=400)
+
+
+@routes.post("/auth/verify-code")
+async def auth_verify_code(request):
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid json"}, status=400)
+    code = (data.get("code") or "").strip()
+    password = data.get("password") or ""
+
+    temp_client = _AUTH_CLIENT_HOLDER.get("client")
+    phone = _AUTH_CLIENT_HOLDER.get("phone")
+    phone_code_hash = _AUTH_CLIENT_HOLDER.get("phone_code_hash")
+    if not temp_client or not phone or not phone_code_hash:
+        return web.json_response({"ok": False, "error": "No pending login session. Send code first."}, status=400)
+
+    try:
+        from pyrogram.errors import SessionPasswordNeeded, PasswordHashInvalid, PhoneCodeInvalid, PhoneCodeExpired
+    except Exception:
+        SessionPasswordNeeded = Exception
+        PasswordHashInvalid = Exception
+        PhoneCodeInvalid = Exception
+        PhoneCodeExpired = Exception
+
+    try:
+        try:
+            await temp_client.sign_in(phone, phone_code_hash, code)
+        except SessionPasswordNeeded:
+            if not password:
+                return web.json_response({"ok": False, "need_password": True})
+            await temp_client.check_password(password)
+
+        session_str = await temp_client.export_session_string()
+        
+        session_file = os.path.join(DATA_DIR, "user_session.string")
+        try:
+            with open(session_file, "w", encoding="utf-8") as f:
+                f.write(session_str)
+            logger.info(f"[AUTH] Saved new session string to {session_file}")
+        except Exception as se:
+            logger.warning(f"[AUTH] Could not persist session file: {se}")
+
+        global USER_SESSION_STRING, tg_user
+        USER_SESSION_STRING = session_str
+        if "tg_user" in globals() and tg_user and getattr(tg_user, "is_connected", False):
+            try:
+                await tg_user.stop()
+            except Exception:
+                pass
+
+        tg_user = Client(
+            "tg_user_session",
+            api_id=int(API_ID),
+            api_hash=API_HASH,
+            session_string=session_str,
+            workdir=DATA_DIR,
+            in_memory=True,
+            no_updates=True,
+            max_concurrent_transmissions=APEX_CFG.telegram_max_concurrent,
+        )
+        await tg_user.start()
+        user_me = await tg_user.get_me()
+        logger.info(f"[PYROGRAM] Pyrogram User Account client activated! Logged in as: {getattr(user_me, 'first_name', '')}")
+
+        try:
+            await temp_client.stop()
+        except Exception:
+            pass
+        _AUTH_CLIENT_HOLDER.clear()
+
+        asyncio.create_task(_sync_configured_channel_once())
+
+        return web.json_response({"ok": True, "session_string": session_str})
+
+    except (PhoneCodeInvalid, PhoneCodeExpired) as e:
+        return web.json_response({"ok": False, "error": f"Invalid or expired OTP code: {e}"}, status=400)
+    except PasswordHashInvalid as e:
+        return web.json_response({"ok": False, "need_password": True, "error": "Incorrect 2FA password"}, status=400)
+    except Exception as e:
+        logger.error(f"[AUTH] verify_code error: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=400)
 
 
 async def _process_and_index_message(message, chat_id):

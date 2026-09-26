@@ -108,6 +108,9 @@ async def route_catch_all(path: str, request: Request):
             sub_p = f"/web{sub_p}"
         return await proxy_http_request(f"http://127.0.0.1:{JELLYFIN_PORT}{sub_p}", request, default_prefix="/jellyfin", extra_headers={"X-Forwarded-Prefix": "/jellyfin"})
     
+    if req_path in ("/session-login", "/session-login/"):
+        return await proxy_http_request(f"http://127.0.0.1:{TG_PORT}/session-login", request, default_prefix="")
+
     if req_path in ("/tg-stream", "/tg_stream") or req_path.startswith("/tg-stream/") or req_path.startswith("/tg_stream/"):
         logger.info(f"[ROUTER] {req_path} -> Telegram ({TG_PORT})")
         if req_path in ("/tg-stream", "/tg_stream"):
