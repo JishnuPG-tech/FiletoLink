@@ -82,14 +82,14 @@ class TestFolders:
         )
 
     def test_tv_target_dir(self):
-        assert tv_target_dir("/m/TV", "Hindi", "Pathaan", 1, 2023) == os.path.join("/m/TV", "Hindi", "Pathaan (2023)", "Season 01")
-        assert tv_target_dir("/m/TV", "English", "Breaking Bad", 2, 2008) == os.path.join("/m/TV", "English", "Breaking Bad (2008)", "Season 02")
+        assert tv_target_dir("/m/TV", "Hindi", "Pathaan", 1, 2023) == os.path.join("/m/TV", "Pathaan (2023)", "Season 01")
+        assert tv_target_dir("/m/TV", "English", "Breaking Bad", 2, 2008) == os.path.join("/m/TV", "Breaking Bad (2008)", "Season 02")
 
     def test_tv_no_season_defaults_one(self):
         assert tv_target_dir("/m/TV", "Malayalam", "Manjummel Boys", None, 2023).endswith("Season 01")
 
     def test_tv_show_root(self):
-        assert tv_show_root("/m/TV", "English", "Breaking Bad", 2008) == os.path.join("/m/TV", "English", "Breaking Bad (2008)")
+        assert tv_show_root("/m/TV", "English", "Breaking Bad", 2008) == os.path.join("/m/TV", "Breaking Bad (2008)")
 
     def test_safe_folder(self):
         assert safe_folder("Spider-Man: No Way Home (2021)") == "Spider-Man No Way Home (2021)"
@@ -110,7 +110,7 @@ class TestFolders:
 
     def test_strm_dir_tv(self):
         entry = {"title": "Breaking Bad - S01E01", "is_tv": True, "show_name": "Breaking Bad", "season": 1, "episode": 1, "year": 2008, "language": "English"}
-        assert strm_dir("/m/Movies", "/m/TV", entry) == os.path.join("/m/TV", "English", "Breaking Bad (2008)", "Season 01")
+        assert strm_dir("/m/Movies", "/m/TV", entry) == os.path.join("/m/TV", "Breaking Bad (2008)", "Season 01")
 
 
 class TestSubtitles:

@@ -12,7 +12,19 @@ import hmac
 import hashlib
 import aiohttp
 import httpx
-from aiohttp import web
+import shutil
+from typing import Optional
+
+_BLACKLIST_PATTERNS = [
+    re.compile(r"mot\s*test\s*servicing", re.IGNORECASE),
+]
+
+
+def is_blacklisted(text: Optional[str]) -> bool:
+    """Return True if text matches unwanted demo / test media to permanently purge."""
+    if not text:
+        return False
+    return any(bool(p.search(str(text))) for p in _BLACKLIST_PATTERNS)
 
 # Pyrogram imports for MTProto direct chunk streaming
 from pyrogram import Client, filters
@@ -798,6 +810,9 @@ def index_media(msg_id, chat_id, file_id, file_size, file_name):
     """Core ingestion: cache the file and create a .strm for Jellyfin."""
     if not file_id or not msg_id:
         return False
+    if is_blacklisted(file_name):
+        logger.info(f"[BLACKLIST] Refusing to index blacklisted media: {file_name}")
+        return False
 
     entry = _meta_to_entry(msg_id, chat_id, file_id, file_size, file_name)
     cached = _cache_lookup(msg_id, chat_id)
@@ -894,6 +909,10 @@ async def process_telegram_media(message, is_channel_post):
                 logger.warning(f"[CONFIG] Could not persist channel_id: {e}")
 
         file_name = media_file_name(message, media)
+        caption = getattr(message, "caption", None)
+        if is_blacklisted(file_name) or is_blacklisted(caption):
+            logger.info(f"[BLACKLIST] Dropped blacklisted media message: {file_name}")
+            return
         if subtitle_is_document(file_name, getattr(media, "mime_type", None)):
             placed = await _place_subtitle(message.id, chat_id, media.file_id, file_name)
             logger.info(f"[PYROGRAM] 🎞️ Subtitle handled: {file_name} placed={placed}")
@@ -1213,7 +1232,7 @@ async def _enrich_media_metadata(entry):
         if is_tv and show_root:
             tv_nfo = os.path.join(show_root, "tvshow.nfo")
             tv_backdrop = os.path.join(show_root, "backdrop.jpg")
-            has_hd_backdrop = os.path.exists(tv_backdrop) and os.path.getsize(tv_backdrop) >= 250000
+            has_hd_backdrop = os.path.exists(tv_backdrop) and os.path.getsize(tv_backdrop) >= 300000
             if os.path.exists(tv_nfo) and os.path.exists(os.path.join(show_root, "poster.jpg")) and has_hd_backdrop and not _nfo_needs_repair(tv_nfo):
                 return True
         elif not is_tv:
@@ -1221,7 +1240,7 @@ async def _enrich_media_metadata(entry):
                 target_dir, f"{entry.get('strm_base', strm_base(entry))}.nfo"
             )
             movie_backdrop = os.path.join(target_dir, "backdrop.jpg")
-            has_hd_backdrop = os.path.exists(movie_backdrop) and os.path.getsize(movie_backdrop) >= 250000
+            has_hd_backdrop = os.path.exists(movie_backdrop) and os.path.getsize(movie_backdrop) >= 300000
             if (os.path.exists(movie_nfo) and os.path.exists(os.path.join(target_dir, "poster.jpg"))
                     and has_hd_backdrop and not _nfo_needs_repair(movie_nfo)):
                 return True
@@ -1398,9 +1417,9 @@ async def _enrich_media_metadata(entry):
 
         tmdb_id = hit.get("id")
         if is_tv:
-            detail = await _tmdb_get(f"/tv/{tmdb_id}", {"append_to_response": f"season/{int(entry.get('season') or 1)}"})
+            detail = await _tmdb_get(f"/tv/{tmdb_id}", {"append_to_response": f"images,season/{int(entry.get('season') or 1)}"})
         else:
-            detail = await _tmdb_get(f"/movie/{tmdb_id}", {})
+            detail = await _tmdb_get(f"/movie/{tmdb_id}", {"append_to_response": "images"})
 
         if not detail:
             logger.info(f"[TMDB] No detail for tmdb_id={tmdb_id} ({query})")
@@ -1428,11 +1447,6 @@ async def _enrich_media_metadata(entry):
                 logger.info(
                     f"[ORGANIZE] Moved '{entry.get('title')}' to {tmdb_language} folder"
                 )
-            # Always point the entry at the new canonical path, even when the
-            # old .strm was missing (a later restore would otherwise recreate
-            # the stale-language copy). Remember the pre-move path so the
-            # post-enrichment item refresh / restore prune can still resolve
-            # the old Jellyfin item while it is re-indexed.
             entry["strm_path"] = new_strm_path
             if old_strm_path and old_strm_path != new_strm_path:
                 entry["_prev_strm_path"] = old_strm_path
@@ -1451,6 +1465,30 @@ async def _enrich_media_metadata(entry):
                     return None
                 return f"https://image.tmdb.org/t/p/original{base}"
 
+            art_dir = show_root if is_tv else target_dir
+
+            # Download English / official clear logo so title shows sharp English branding
+            images_data = detail.get("images") or {}
+            logos_list = images_data.get("logos") or []
+            if logos_list and art_dir:
+                def _logo_rank(l):
+                    l_lang = l.get("iso_639_1")
+                    lang_score = 3 if l_lang == "en" else (2 if not l_lang else (1 if l_lang in ("hi", "ta", "ml", "te") else 0))
+                    return (lang_score, l.get("vote_average", 0), l.get("vote_count", 0), l.get("width", 0))
+                best_logo = max(logos_list, key=_logo_rank)
+                logo_path = best_logo.get("file_path")
+                if logo_path:
+                    logo_url = f"https://image.tmdb.org/t/p/original{logo_path}"
+                    logo_dst = os.path.join(art_dir, "logo.png")
+                    clearlogo_dst = os.path.join(art_dir, "clearlogo.png")
+                    if not os.path.exists(logo_dst) or os.path.getsize(logo_dst) < 5000:
+                        if await _download_image(session, logo_url, logo_dst):
+                            try:
+                                with open(logo_dst, "rb") as s, open(clearlogo_dst, "wb") as d:
+                                    d.write(s.read())
+                            except OSError:
+                                pass
+
             if is_tv:
                 if not show_root:
                     return False
@@ -1462,7 +1500,7 @@ async def _enrich_media_metadata(entry):
                     with open(nfo_path, "w", encoding="utf-8") as f:
                         f.write(build_tvshow_nfo(detail))
                 poster_url = _best_image("poster_path")
-                if poster_url and not os.path.exists(poster_path):
+                if poster_url and (not os.path.exists(poster_path) or os.path.getsize(poster_path) < 80000):
                     if await _download_image(session, _resize_tmdb_image(poster_url, "w780"), poster_path):
                         folder_path = os.path.join(show_root, "folder.jpg")
                         if not os.path.exists(folder_path):
@@ -1472,7 +1510,7 @@ async def _enrich_media_metadata(entry):
                             except OSError:
                                 pass
                 backdrop_url = _best_image("backdrop_path")
-                needs_hd_backdrop = not os.path.exists(backdrop_path) or os.path.getsize(backdrop_path) < 250000
+                needs_hd_backdrop = not os.path.exists(backdrop_path) or os.path.getsize(backdrop_path) < 300000
                 if backdrop_url and needs_hd_backdrop:
                     if await _download_image(session, _resize_tmdb_image(backdrop_url, "original"), backdrop_path):
                         fanart_path = os.path.join(show_root, "fanart.jpg")
@@ -1518,7 +1556,7 @@ async def _enrich_media_metadata(entry):
                         pass
                 poster_url = _best_image("poster_path")
                 movie_poster = os.path.join(target_dir, "poster.jpg")
-                if poster_url and not os.path.exists(movie_poster):
+                if poster_url and (not os.path.exists(movie_poster) or os.path.getsize(movie_poster) < 80000):
                     if await _download_image(session, _resize_tmdb_image(poster_url, "w780"), movie_poster):
                         folder_path = os.path.join(target_dir, "folder.jpg")
                         if not os.path.exists(folder_path):
@@ -1529,7 +1567,7 @@ async def _enrich_media_metadata(entry):
                                 pass
                 backdrop_url = _best_image("backdrop_path")
                 movie_backdrop = os.path.join(target_dir, "backdrop.jpg")
-                needs_hd_backdrop = not os.path.exists(movie_backdrop) or os.path.getsize(movie_backdrop) < 250000
+                needs_hd_backdrop = not os.path.exists(movie_backdrop) or os.path.getsize(movie_backdrop) < 300000
                 if backdrop_url and needs_hd_backdrop:
                     if await _download_image(session, _resize_tmdb_image(backdrop_url, "original"), movie_backdrop):
                         fanart_path = os.path.join(target_dir, "fanart.jpg")
@@ -2906,15 +2944,22 @@ async def _process_and_index_message(message, chat_id):
     if msg_chat_id is None or not allowed_chat(chat):
         return False, False
     msg_id = message.id
+    file_name = media_file_name(message, media)
+    caption = getattr(message, "caption", None)
+    if is_blacklisted(file_name) or is_blacklisted(caption):
+        logger.info(f"[BLACKLIST] Skipping blacklisted media during reindex: {file_name}")
+        return False, False
     existing = _cache_lookup(msg_id, msg_chat_id)
     if isinstance(existing, dict):
+        if is_blacklisted(existing.get("title")) or is_blacklisted(existing.get("file_name")):
+            FILE_ID_CACHE.pop(_cache_key(msg_chat_id, msg_id), None)
+            return False, False
         strm_path = existing.get("strm_path") or _entry_strm_path(existing)
         if strm_path and os.path.exists(strm_path):
             if media.file_id and existing.get("file_id") != media.file_id:
                 existing["file_id"] = media.file_id
                 FILE_ID_CACHE[_cache_key(msg_chat_id, msg_id)] = existing
             return False, True
-    file_name = media_file_name(message, media)
     if subtitle_is_document(file_name, getattr(media, "mime_type", None)):
         placed = await _place_subtitle(msg_id, msg_chat_id, media.file_id, file_name)
         logger.info(f"[REINDEX] Subtitle handled: {file_name} placed={placed}")
@@ -3627,7 +3672,148 @@ async def restore_cached_strm_files():
     except Exception as exc:
         logger.warning(f"[RESTORE] could not queue re-enrichment: {exc}")
 
+    try:
+        asyncio.create_task(_reconcile_and_upgrade_library())
+    except Exception as exc:
+        logger.warning(f"[RESTORE] could not queue library upgrade: {exc}")
+
 _RE_ENRICH_RUNNING = False
+
+
+async def _reconcile_and_upgrade_library():
+    """Startup reconciliation:
+    1. Permanently remove TV Shows/English and blacklisted demo entries.
+    2. Reset mis-matched entries in FILE_ID_CACHE (e.g. Indian film matched to Portuguese/European).
+    3. Re-enrich entries needing HD artwork (backdrops < 300KB, missing logo.png).
+    """
+    try:
+        # Step 1: Remove English TV folder and clean files on disk
+        english_tv = os.path.join(SHOWS_DIR, "English")
+        if os.path.exists(english_tv):
+            try:
+                shutil.rmtree(english_tv, ignore_errors=True)
+                logger.info("[PURGE] Deleted TV Shows/English folder from disk.")
+            except Exception as e:
+                logger.warning(f"[PURGE] Error removing TV Shows/English: {e}")
+
+        # Purge any file containing "mot test servicing"
+        for root in (MOVIES_DIR, SHOWS_DIR):
+            if not os.path.exists(root):
+                continue
+            for dirpath, dirnames, filenames in os.walk(root, topdown=False):
+                for fn in filenames:
+                    if is_blacklisted(fn):
+                        try:
+                            os.remove(os.path.join(dirpath, fn))
+                            logger.info(f"[PURGE] Removed blacklisted file: {fn}")
+                        except OSError:
+                            pass
+                for dn in dirnames:
+                    if is_blacklisted(dn) or (root == SHOWS_DIR and dn.lower() == "english"):
+                        try:
+                            shutil.rmtree(os.path.join(dirpath, dn), ignore_errors=True)
+                            logger.info(f"[PURGE] Removed blacklisted directory: {dn}")
+                        except OSError:
+                            pass
+
+        # Step 2: Remove blacklisted items from FILE_ID_CACHE
+        keys_to_purge = []
+        for key, data in list(FILE_ID_CACHE.items()):
+            if not isinstance(data, dict):
+                continue
+            name = data.get("file_name") or data.get("title") or ""
+            strm_path = data.get("strm_path") or ""
+            target_dir = data.get("target_dir") or ""
+            if is_blacklisted(name) or is_blacklisted(strm_path) or "/tv shows/english" in strm_path.lower():
+                keys_to_purge.append(key)
+                if strm_path and os.path.exists(strm_path):
+                    try:
+                        os.remove(strm_path)
+                    except OSError:
+                        pass
+                if target_dir and os.path.exists(target_dir):
+                    try:
+                        shutil.rmtree(target_dir, ignore_errors=True)
+                    except OSError:
+                        pass
+        if keys_to_purge:
+            for k in keys_to_purge:
+                FILE_ID_CACHE.pop(k, None)
+            await save_cache_async()
+            logger.info(f"[PURGE] Cleaned {len(keys_to_purge)} blacklisted cache items.")
+
+        # Step 3: Upgrade artwork or re-enrich mis-matched entries
+        to_enrich = []
+        for key, data in list(FILE_ID_CACHE.items()):
+            if not isinstance(data, dict):
+                continue
+            target_dir = data.get("target_dir") or (
+                strm_dir(MOVIES_DIR, SHOWS_DIR, data)
+                if ("title" in data or "show_name" in data)
+                else None
+            )
+            if not target_dir or not os.path.exists(target_dir):
+                continue
+
+            backdrop = os.path.join(target_dir, "backdrop.jpg")
+            logo = os.path.join(target_dir, "logo.png")
+            poster = os.path.join(target_dir, "poster.jpg")
+            needs_hd = (
+                not os.path.exists(backdrop)
+                or os.path.getsize(backdrop) < 300000
+                or not os.path.exists(logo)
+                or not os.path.exists(poster)
+                or os.path.getsize(poster) < 80000
+            )
+
+            # Check if this item had a suspicious match (e.g. Indian language matched Portuguese)
+            lang = (data.get("language") or "").lower()
+            tmdb_title = (data.get("tmdb_title") or "").lower()
+            suspicious = False
+            if lang in ("tamil", "malayalam", "telugu", "hindi", "kannada"):
+                for foreign_pfx in ("a vingança", "el ", "le ", "die ", "der "):
+                    if tmdb_title.startswith(foreign_pfx):
+                        suspicious = True
+                        break
+
+            entry = dict(data)
+            entry["_cache_key"] = key
+            if suspicious:
+                entry.pop("tmdb_id", None)
+                entry.pop("tmdb_title", None)
+                entry.pop("tmdb_year", None)
+                data.pop("tmdb_id", None)
+                data.pop("tmdb_title", None)
+                data.pop("tmdb_year", None)
+                for wrong_file in ("movie.nfo", "poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "logo.png", "clearlogo.png"):
+                    wf = os.path.join(target_dir, wrong_file)
+                    if os.path.exists(wf):
+                        try:
+                            os.remove(wf)
+                        except OSError:
+                            pass
+                nfo_file = os.path.join(target_dir, f"{data.get('strm_base', strm_base(data))}.nfo")
+                if os.path.exists(nfo_file):
+                    try:
+                        os.remove(nfo_file)
+                    except OSError:
+                        pass
+                to_enrich.append(entry)
+            elif needs_hd:
+                to_enrich.append(entry)
+
+        if to_enrich:
+            logger.info(f"[ARTWORK-UPGRADE] Upgrading artwork for {len(to_enrich)} item(s)...")
+            for entry in to_enrich:
+                try:
+                    await enrich_media_metadata(entry)
+                except Exception as exc:
+                    logger.warning(f"[ARTWORK-UPGRADE] Error for '{entry.get('title')}': {exc}")
+                await asyncio.sleep(0.3)
+            await request_jellyfin_scan()
+
+    except Exception as e:
+        logger.warning(f"[UPGRADE] Library reconciliation noticed: {e}")
 
 
 def _unresolved_enrich_entries():

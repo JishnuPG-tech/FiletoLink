@@ -156,9 +156,14 @@ def tv_show_root(
     show_name: Optional[str] = None,
     year: Optional[int] = None,
 ) -> str:
-    """Series root folder: `TV Shows/<Language>/<Show> (<Year>)`."""
+    """Series root folder: `TV Shows/<Show> (<Year>)`.
+
+    Jellyfin requires TV show libraries to have series folders directly in the
+    library root, not nested under language subfolders (which Jellyfin misinterprets
+    as the show name itself).
+    """
     show = folder_name(show_name, year) if show_name else "Unknown_Show"
-    return os.path.join(shows_dir, safe_folder(language), show)
+    return os.path.join(shows_dir, show)
 
 
 def tv_target_dir(
@@ -168,7 +173,7 @@ def tv_target_dir(
     season: Optional[int] = None,
     year: Optional[int] = None,
 ) -> str:
-    """Season folder under the series root: `.../<Show> (<Year>)/Season NN`."""
+    """Season folder under the series root: `TV Shows/<Show> (<Year>)/Season NN`."""
     season_num = int(season) if season else 1
     return os.path.join(
         tv_show_root(shows_dir, language, show_name, year),

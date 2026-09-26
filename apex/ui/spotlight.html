@@ -263,7 +263,7 @@
 			function imageUrl(itemId, type, index = null) {
 				const suffix = index == null ? '' : `/${index}`;
 				if (type === 'Backdrop') {
-					return `${base}/Items/${itemId}/Images/${type}${suffix}?quality=100`;
+					return `${base}/Items/${itemId}/Images/${type}${suffix}?quality=100&maxWidth=3840`;
 				}
 				const { width, height } = imageDimensions(type);
 				return `${base}/Items/${itemId}/Images/${type}${suffix}?quality=96&maxWidth=${width}&maxHeight=${height}`;
@@ -488,7 +488,7 @@
 				const isEpisode = item.Type === 'Episode';
 				const artworkId = isEpisode ? item.SeriesId || item.Id : item.Id;
 				return {
-					primary: isEpisode ? imageUrl(item.Id, 'Primary') : null,
+					primary: imageUrl(artworkId, 'Primary'),
 					backdrop: imageUrl(artworkId, 'Backdrop', 0),
 					logo: imageUrl(artworkId, 'Logo')
 				};

@@ -313,6 +313,33 @@ class TestBestTmdbMatch:
         hit = best_tmdb_match(results, "premam", "movie", 2015, language="ml")
         assert hit["id"] == 1
 
+    def test_reject_false_positive_foreign_movie_with_partial_overlap(self):
+        # A 2026 Tamil query for "Dhurandhar The Revenge" must NOT match an unrelated
+        # Portuguese 1980 film "A Vingança de Dhurandhar"
+        results = [
+            {
+                "id": 999,
+                "title": "A Vingança de Dhurandhar",
+                "original_title": "A Vingança de Dhurandhar",
+                "release_date": "1980-05-12",
+                "original_language": "pt",
+            }
+        ]
+        hit = best_tmdb_match(results, "dhurandhar the revenge", "movie", year=2026, language="ta")
+        assert hit is None
+
+    def test_reject_large_year_gap(self):
+        results = [
+            {
+                "id": 100,
+                "title": "The Beast",
+                "release_date": "1975-04-10",
+                "original_language": "en",
+            }
+        ]
+        hit = best_tmdb_match(results, "the beast", "movie", year=2024, language="en")
+        assert hit is None
+
 
 class TestExtractImdbId:
     def test_radarr_brace_imdb(self):

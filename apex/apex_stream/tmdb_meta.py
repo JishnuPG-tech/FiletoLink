@@ -512,24 +512,27 @@ def parse_media_meta(filename_or_caption: Optional[str]) -> Dict:
     }
 
 
+_INDIAN_LANG_CODES = {"ml", "ta", "te", "hi", "kn", "bn", "pa", "mr", "gu", "ur"}
+
+
 def best_tmdb_match(results: List[Dict], query: str, media_type: str,
                     year: Optional[int] = None, threshold: float = 0.5,
                     language: Optional[str] = None):
     """Return the best TMDB search result for (query, year, type), or None.
 
     Scoring: token overlap against the hit's title merged with its
-    original_title (TMDB search already covers original/translated/alternative
-    names, and readding the original name tightens the signal for
-    transliterated queries). Year is a SOFT signal, not a hard filter (the
-    right film usually ranks by year proximity): exact year +0.3, ±1 year +0.15,
-    >1 year off −0.15. A hit whose `original_language` matches the release's
-    detected language gets +0.1 affinity. Wrong media_type results are excluded
-    so movies never steal a series match.
+    original_title. Uses Dice coefficient to balance query precision and hit length.
+    Year proximity provides strong signal: exact year +0.3, ±1 year +0.15,
+    >2 years off heavily penalized.
+    Regional language affinity: if release language is Indian regional (Tamil, Malayalam, etc.)
+    and hit language is a non-Indian foreign language (Portuguese, German, etc.),
+    a strong mismatch penalty is applied to prevent false-positive hijacking.
     """
     q_toks = _sig_tokens(query)
     if not q_toks:
         return None
     lang = (language or "").strip().lower()
+    is_indian = lang in _INDIAN_LANG_CODES
     best, best_score = None, -1.0
     for r in results or []:
         mt = r.get("media_type")
@@ -537,26 +540,54 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
             continue
         name = r.get("title") or r.get("name") or ""
         r_toks = _sig_tokens(name)
-        r_toks |= _sig_tokens(r.get("original_title") or r.get("original_name") or "")
-        if not r_toks:
+        orig_name = r.get("original_title") or r.get("original_name") or ""
+        orig_toks = _sig_tokens(orig_name)
+        combined_r = r_toks | orig_toks
+        if not combined_r:
             continue
-        overlap = len(q_toks & r_toks)
+        overlap = len(q_toks & combined_r)
         if not overlap:
             continue
-        score = overlap / max(1, min(len(q_toks), len(r_toks)))
+
+        sim_main = (2.0 * len(q_toks & r_toks)) / (len(q_toks) + len(r_toks)) if r_toks else 0.0
+        sim_orig = (2.0 * len(q_toks & orig_toks)) / (len(q_toks) + len(orig_toks)) if orig_toks else 0.0
+        sim_comb = (2.0 * overlap) / (len(q_toks) + len(combined_r))
+        score = max(sim_main, sim_orig, sim_comb)
+
+        if q_toks <= combined_r:
+            if len(q_toks) == len(combined_r):
+                score += 0.3
+            else:
+                score += 0.15
+
         date = (r.get("release_date") or r.get("first_air_date") or "")[:4]
         if year and date and date.isdigit():
             hit_year = int(date)
-            if hit_year == year:
+            diff = abs(hit_year - year)
+            if diff == 0:
                 score += 0.3
-            elif abs(hit_year - year) <= 1:
+            elif diff == 1:
                 score += 0.15
+            elif diff == 2:
+                score -= 0.1
+            elif diff <= 5:
+                score -= 0.4
+            elif diff <= 9:
+                score -= 0.75
             else:
+                score -= 1.1
+
+        hit_lang = (r.get("original_language") or "").lower()
+        if lang:
+            if hit_lang == lang:
+                score += 0.2
+            elif is_indian and hit_lang in _INDIAN_LANG_CODES:
+                score += 0.05
+            elif is_indian and hit_lang not in _INDIAN_LANG_CODES and hit_lang not in {"en", ""}:
+                score -= 0.4
+            elif not is_indian and lang == "en" and hit_lang not in {"en", ""}:
                 score -= 0.15
-        if q_toks <= r_toks:
-            score += 0.3
-        if lang and lang == (r.get("original_language") or "").lower():
-            score += 0.1
+
         if score > best_score:
             best, best_score = r, score
     return best if best_score >= threshold else None

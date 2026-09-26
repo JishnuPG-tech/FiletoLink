@@ -45,7 +45,6 @@ body {
 	object-position: center 20%;
 	display: block;
 	transform: scale(1);
-	image-rendering: -webkit-optimize-contrast;
 	image-rendering: high-quality;
 }
 

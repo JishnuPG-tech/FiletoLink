@@ -100,6 +100,17 @@ def repair_database(db_path: str) -> bool:
                 print(f"[REPAIR] Healed '{name}' ({row_id}): Path -> '{views_path}', Locations -> {locs}")
                 repaired += 1
 
+        # Permanently purge blacklisted demo items and invalid TV Shows/English items
+        cur.execute(
+            "DELETE FROM BaseItems WHERE Path LIKE '%/TV Shows/English%' "
+            "OR Path LIKE '%Mot test servicing%' "
+            "OR Name LIKE '%Mot test servicing%' "
+            "OR (Name = 'English' AND type LIKE '%Series%')"
+        )
+        purged = cur.rowcount
+        if purged > 0:
+            print(f"[REPAIR] Purged {purged} blacklisted / stale item rows from {db_path}.")
+
         conn.execute("COMMIT")
         conn.close()
         if repaired:
