@@ -534,4 +534,38 @@ class TestNfoRepair:
         assert backdrop.exists()
 
         with Image.open(str(backdrop)) as out_img:
-            assert out_img.size == (1920, 1080)
+            assert out_img.size == (1920, 1080)
+
+    def test_ms_rose_mr_cane_blacklisted(self):
+        from tg_streamer import is_blacklisted
+        assert is_blacklisted("Ms.Rose & Mr.Cane") is True
+        assert is_blacklisted("Ms Rose & Mr Cane 2026") is True
+        assert is_blacklisted("Ms. Rose & Mr. Cane (2026).strm") is True
+        assert is_blacklisted("Mot test servicing") is True
+        assert is_blacklisted("Obsession (2025).strm") is False
+
+    def test_popular_movie_preferred_within_one_year_gap(self):
+        candidates = [
+            {
+                "id": 999999,
+                "title": "Obsession",
+                "release_date": "2025-01-01",
+                "popularity": 0.5,
+                "vote_count": 0,
+                "poster_path": None,
+                "backdrop_path": None,
+            },
+            {
+                "id": 1339713,
+                "title": "Obsession",
+                "release_date": "2026-05-15",
+                "popularity": 65.0,
+                "vote_count": 450,
+                "poster_path": "/obsession_poster.jpg",
+                "backdrop_path": "/obsession_backdrop.jpg",
+                "overview": "A man uses a mystical charm to make his crush fall in love.",
+            }
+        ]
+        match = best_tmdb_match(candidates, "obsession", "movie", year=2025)
+        assert match is not None
+        assert match["id"] == 1339713

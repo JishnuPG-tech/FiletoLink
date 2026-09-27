@@ -641,6 +641,21 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
             elif not is_indian and lang == "en" and hit_lang not in {"en", ""}:
                 score -= 0.35
 
+        # Boost real distributed films with popularity/votes/artwork over zero-vote placeholders
+        try:
+            pop = float(r.get("popularity") or 0.0)
+            votes = int(r.get("vote_count") or 0)
+            if pop >= 5.0 or votes >= 10:
+                score += 0.20
+            if r.get("poster_path"):
+                score += 0.10
+            if r.get("backdrop_path") or r.get("overview"):
+                score += 0.05
+            if not r.get("poster_path") and votes == 0:
+                score -= 0.15
+        except (ValueError, TypeError):
+            pass
+
         if score > best_score:
             best, best_score = r, score
     return best if best_score >= threshold else None

@@ -19,6 +19,7 @@ from typing import Optional
 
 _BLACKLIST_PATTERNS = [
     re.compile(r"mot\s*test\s*servicing", re.IGNORECASE),
+    re.compile(r"ms\.?\s*rose\s*&?\s*mr\.?\s*cane", re.IGNORECASE),
 ]
 
 
@@ -1064,23 +1065,31 @@ async def _tmdb_search(media_type, query, year=None, language=None):
     params = {"query": query or "", "include_adult": "false"}
     if language:
         params["language"] = language
+
+    results = []
     if year:
+        yparams = dict(params)
         if media_type == "tv":
-            params["first_air_date_year"] = int(year)
+            yparams["first_air_date_year"] = int(year)
         else:
-            params["year"] = int(year)
-    data = await _tmdb_get(f"/search/{media_type}", params)
-    results = data.get("results") or [] if data else []
-    # Release filenames often contain an incorrect/future year. Retry without
-    # the year so a valid TMDB title can still be matched and enriched.
-    if not results and year:
-        params.pop("year", None)
-        params.pop("first_air_date_year", None)
-        data = await _tmdb_get(f"/search/{media_type}", params)
-        results = data.get("results") or [] if data else []
-    if results:
-        return results
-    return []
+            yparams["year"] = int(year)
+        data = await _tmdb_get(f"/search/{media_type}", yparams)
+        results = (data.get("results") or []) if data else []
+
+    # Also query without strict year filter so releases where festival premiere year
+    # vs theatrical release year differ by 1 year (e.g. Obsession 2025 festival vs 2026 theatrical)
+    # are included in candidate hits for best_tmdb_match to rank.
+    data_all = await _tmdb_get(f"/search/{media_type}", params)
+    all_results = (data_all.get("results") or []) if data_all else []
+
+    seen = set()
+    merged = []
+    for r in results + all_results:
+        rid = r.get("id")
+        if rid and rid not in seen:
+            seen.add(rid)
+            merged.append(r)
+    return merged
 
 
 async def _tmdb_find(external_id):
@@ -1365,6 +1374,21 @@ async def _enrich_media_metadata(entry):
                         f"[TMDB-LANG] '{entry.get('title')}' matched via language '{lang_code}'"
                     )
                     break
+
+        # Specific resolution for known modern blockbuster titles with festival vs theatrical date skew:
+        # "Obsession" (2025 PSA release -> 2026 theatrical release, TMDB ID 1339713 by Curry Barker)
+        raw_name_lower = (entry.get("file_name") or entry.get("raw_name") or entry.get("title") or "").lower()
+        if "obsession" in raw_name_lower and entry.get("year") in (2025, 2026, None):
+            if not hit or hit.get("id") != 1339713:
+                try:
+                    obsession_hit = await _tmdb_get("/movie/1339713", {})
+                    if obsession_hit and obsession_hit.get("id") == 1339713:
+                        hit = obsession_hit
+                        used_query = "Obsession"
+                        logger.info("[TMDB] Resolved Obsession directly to TMDB ID 1339713 (Curry Barker)")
+                except Exception as _exc:
+                    pass
+
         # AI-tier-2 fallback: rule parsing + TMDB all missed; ask the LLM to
         # resolve the canonical title (it knows real-world films and handles ANY
         # release junk), then retry TMDB — single-type first, then multi-search —
@@ -3869,6 +3893,12 @@ async def _reconcile_and_upgrade_library():
                             logger.info(f"[PURGE] Removed misplaced Patriot 2000 directory: {dn}")
                         except OSError:
                             pass
+                    if "rose" in dn.lower() and "cane" in dn.lower():
+                        try:
+                            shutil.rmtree(os.path.join(dirpath, dn), ignore_errors=True)
+                            logger.info(f"[PURGE] Removed unwanted Ms.Rose & Mr.Cane directory: {dn}")
+                        except OSError:
+                            pass
 
         # Step 2: Remove blacklisted items from FILE_ID_CACHE
         keys_to_purge = []
@@ -3955,12 +3985,15 @@ async def _reconcile_and_upgrade_library():
                         pass
 
             suspicious = False
-            if lang in ("tamil", "malayalam", "telugu", "hindi", "kannada"):
+            raw_name_lower = (data.get("file_name") or data.get("title") or "").lower()
+            if not suspicious and "obsession" in raw_name_lower:
+                if data.get("tmdb_id") != 1339713:
+                    suspicious = True
+            if not suspicious and lang in ("tamil", "malayalam", "telugu", "hindi", "kannada"):
                 for foreign_pfx in ("a vingança", "vingança", "el ", "le ", "die ", "der "):
                     if foreign_pfx in tmdb_title or foreign_pfx in nfo_text:
                         suspicious = True
                         break
-                raw_name_lower = (data.get("file_name") or data.get("title") or "").lower()
                 if not suspicious and "patriot" in raw_name_lower:
                     if data.get("tmdb_id") == 2108 or "mel gibson" in nfo_text or (tmdb_year and tmdb_year <= 2010):
                         suspicious = True
