@@ -117,8 +117,9 @@ AI_TITLE_MODEL = get_env("AI_TITLE_MODEL", default="auto/best-fast")
 # Reasoning models consume tokens on reasoning_content before producing the
 # answer; keep the budget large enough that a JSON reply still fits.
 AI_TITLE_MAX_TOKENS = int(get_env("AI_TITLE_MAX_TOKENS", default="1024"))
-# Small in-memory cache so restart/idempotency re-checks don't re-call the LLM.
 _AI_TITLE_CACHE = {}
+_AI_DISAMBIGUATE_CACHE = {}
+
 
 # Public URL Telegram must deliver bot updates to (through the Apex gateway).
 PUBLIC_BASE_URL = get_env(
@@ -1203,6 +1204,128 @@ async def _ai_extract_title(filename):
     return None, None
 
 
+_AI_DISAMBIGUATE_SYSTEM = (
+    "You are an expert film and television media disambiguator. Given a raw media release filename or "
+    "query context, and a JSON list of candidate TMDB search results, determine the exact TMDB candidate ID "
+    "that matches the media.\n"
+    "Disambiguation criteria:\n"
+    "1. Match against release keywords, language (e.g. Malayalam, Tamil, Telugu, Hindi, Kannada, English), "
+    "director, cast, and release year (allow ±1 year difference for festival premieres vs theatrical releases, "
+    "e.g. 2025 festival vs 2026 general release).\n"
+    "2. NEVER match a modern Indian or regional film to an unrelated classic or English/Hollywood film "
+    "(e.g., 'Patriot 2026 Malayalam' matches 2026 Malayalam 'Patriot', NEVER the 2000 English movie 'The Patriot').\n"
+    "3. Prefer popular, officially distributed titles with posters/overviews over zero-vote placeholders.\n"
+    "4. If no candidate in the list is a genuine match, return null.\n"
+    "Return strict JSON only in this format: {\"tmdb_id\": <integer id or null>, \"reason\": \"<short explanation>\"}. "
+    "No markdown fences, no explanations outside JSON."
+)
+
+
+async def _ai_disambiguate_candidates(raw_context, candidates, media_type="movie", year=None, language=None):
+    """Use Omniroute LLM proxy to disambiguate multiple TMDB candidates.
+
+    Returns the matching candidate dictionary from candidates, or None if no match / failure.
+    Never raises; automatically fails safe to None so caller immediately falls back
+    to deterministic best_tmdb_match.
+    """
+    if not (OMNIROUTE_URL and OMNIROUTE_KEY) or not candidates or len(candidates) <= 1:
+        return None
+
+    cache_key = f"{raw_context}:{media_type}:{year}:{language}:{len(candidates)}"
+    if cache_key in _AI_DISAMBIGUATE_CACHE:
+        cached_id = _AI_DISAMBIGUATE_CACHE[cache_key]
+        if cached_id is None:
+            return None
+        for c in candidates:
+            if c.get("id") == cached_id:
+                return c
+        return None
+
+    summaries = []
+    for c in candidates[:8]:
+        date = (c.get("release_date") or c.get("first_air_date") or "")[:4]
+        overview = (c.get("overview") or "").strip()
+        if len(overview) > 160:
+            overview = overview[:157] + "..."
+        summaries.append({
+            "id": c.get("id"),
+            "title": c.get("title") or c.get("name"),
+            "original_title": c.get("original_title") or c.get("original_name"),
+            "year": date,
+            "original_language": c.get("original_language"),
+            "popularity": round(float(c.get("popularity") or 0), 1),
+            "overview": overview,
+        })
+
+    user_prompt = json.dumps({
+        "release_context": raw_context,
+        "media_type": media_type,
+        "year_hint": year,
+        "language_hint": language,
+        "candidates": summaries,
+    }, ensure_ascii=False)
+
+    connector = aiohttp.TCPConnector(family=socket.AF_INET)
+    payload = {
+        "model": AI_TITLE_MODEL,
+        "temperature": 0,
+        "max_tokens": 256,
+        "messages": [
+            {"role": "system", "content": _AI_DISAMBIGUATE_SYSTEM},
+            {"role": "user", "content": user_prompt},
+        ],
+    }
+    headers = {
+        "Authorization": f"Bearer {OMNIROUTE_KEY}",
+        "Content-Type": "application/json",
+    }
+    try:
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.post(
+                f"{OMNIROUTE_URL}/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=12,
+            ) as resp:
+                if resp.status != 200:
+                    body = (await resp.text())[:160] or ""
+                    logger.warning(f"[AI-DISAMBIGUATE] proxy {resp.status} for '{raw_context}': {body}")
+                    _AI_DISAMBIGUATE_CACHE[cache_key] = None
+                    return None
+                data = await resp.json()
+
+        content = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+        stripped = content.strip()
+        if stripped.startswith("```"):
+            stripped = re.sub(r"^```[a-z]*\s*", "", stripped)
+            stripped = re.sub(r"\s*```$", "", stripped)
+        try:
+            parsed = json.loads(stripped)
+        except Exception:
+            m = re.search(r"\{.*\}", stripped, re.DOTALL)
+            parsed = json.loads(m.group(0)) if m else {}
+
+        chosen_id = parsed.get("tmdb_id")
+        if chosen_id is not None:
+            try:
+                chosen_id = int(chosen_id)
+                for cand in candidates:
+                    if cand.get("id") == chosen_id:
+                        _AI_DISAMBIGUATE_CACHE[cache_key] = chosen_id
+                        logger.info(
+                            f"[AI-DISAMBIGUATE] '{raw_context}' -> TMDB ID {chosen_id} "
+                            f"('{cand.get('title') or cand.get('name')}', reason: {parsed.get('reason', 'matched')})"
+                        )
+                        return cand
+            except (ValueError, TypeError):
+                pass
+    except Exception as e:
+        logger.warning(f"[AI-DISAMBIGUATE] call notice for '{raw_context}': {e}")
+
+    _AI_DISAMBIGUATE_CACHE[cache_key] = None
+    return None
+
+
 async def _download_image(session, url, save_path):
     """Download an image (e.g. TMDB poster/backdrop) to save_path."""
     try:
@@ -1354,7 +1477,13 @@ async def _enrich_media_metadata(entry):
                     results = await _tmdb_search(media_type, cand, entry.get("year"), language="en-US")
                 except Exception as _exc:
                     results = []
-                hit = best_tmdb_match(results, cand, media_type, entry.get("year"), language=lang_code)
+                ai_hit = None
+                if len(results) > 1:
+                    raw_context = entry.get("file_name") or entry.get("raw_name") or entry.get("caption") or entry.get("title") or cand
+                    ai_hit = await _ai_disambiguate_candidates(
+                        raw_context, results, media_type=media_type, year=entry.get("year"), language=lang_code
+                    )
+                hit = ai_hit or best_tmdb_match(results, cand, media_type, entry.get("year"), language=lang_code)
                 used_query = cand
                 if hit:
                     break
@@ -1367,7 +1496,13 @@ async def _enrich_media_metadata(entry):
                     results = await _tmdb_search(media_type, cand, entry.get("year"), language=lang_code)
                 except Exception as _exc:
                     results = []
-                hit = best_tmdb_match(results, cand, media_type, entry.get("year"), language=lang_code)
+                ai_hit = None
+                if len(results) > 1:
+                    raw_context = entry.get("file_name") or entry.get("raw_name") or entry.get("caption") or entry.get("title") or cand
+                    ai_hit = await _ai_disambiguate_candidates(
+                        raw_context, results, media_type=media_type, year=entry.get("year"), language=lang_code
+                    )
+                hit = ai_hit or best_tmdb_match(results, cand, media_type, entry.get("year"), language=lang_code)
                 used_query = cand
                 if hit:
                     logger.info(
@@ -1408,14 +1543,26 @@ async def _enrich_media_metadata(entry):
                     results = await _tmdb_search(media_type, ai_title, year_hint, language="en-US")
                 except Exception as _exc:
                     results = []
-                hit = best_tmdb_match(results, ai_title, media_type, year_hint, language=lang_code)
+                ai_hit = None
+                if len(results) > 1:
+                    raw_context = entry.get("file_name") or entry.get("raw_name") or entry.get("caption") or ai_title
+                    ai_hit = await _ai_disambiguate_candidates(
+                        raw_context, results, media_type=media_type, year=year_hint, language=lang_code
+                    )
+                hit = ai_hit or best_tmdb_match(results, ai_title, media_type, year_hint, language=lang_code)
 
                 if not hit and lang_code and lang_code != "en":
                     try:
                         results = await _tmdb_search(media_type, ai_title, year_hint, language=lang_code)
                     except Exception as _exc:
                         results = []
-                    hit = best_tmdb_match(results, ai_title, media_type, year_hint, language=lang_code)
+                    ai_hit = None
+                    if len(results) > 1:
+                        raw_context = entry.get("file_name") or entry.get("raw_name") or entry.get("caption") or ai_title
+                        ai_hit = await _ai_disambiguate_candidates(
+                            raw_context, results, media_type=media_type, year=year_hint, language=lang_code
+                        )
+                    hit = ai_hit or best_tmdb_match(results, ai_title, media_type, year_hint, language=lang_code)
 
                 if not hit and year_hint:
                     for delta in (-1, 1):
@@ -1424,7 +1571,13 @@ async def _enrich_media_metadata(entry):
                             results = await _tmdb_search(media_type, ai_title, adj_year, language="en-US")
                         except Exception:
                             results = []
-                        hit = best_tmdb_match(results, ai_title, media_type, adj_year, language=lang_code)
+                        ai_hit = None
+                        if len(results) > 1:
+                            raw_context = entry.get("file_name") or entry.get("raw_name") or entry.get("caption") or ai_title
+                            ai_hit = await _ai_disambiguate_candidates(
+                                raw_context, results, media_type=media_type, year=adj_year, language=lang_code
+                            )
+                        hit = ai_hit or best_tmdb_match(results, ai_title, media_type, adj_year, language=lang_code)
                         if hit:
                             break
 

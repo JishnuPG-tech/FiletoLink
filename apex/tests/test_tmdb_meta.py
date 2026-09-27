@@ -568,4 +568,118 @@ class TestNfoRepair:
         ]
         match = best_tmdb_match(candidates, "obsession", "movie", year=2025)
         assert match is not None
-        assert match["id"] == 1339713
+        assert match["id"] == 1339713
+
+    @pytest.mark.asyncio
+    async def test_ai_disambiguate_candidates_no_credentials(self, monkeypatch):
+        import sys, types
+        from unittest.mock import MagicMock
+        pg = sys.modules.setdefault("pyrogram", types.ModuleType("pyrogram"))
+        pg.__path__ = []
+        pg.Client = MagicMock()
+        pg.filters = MagicMock()
+        for sub in ("raw", "raw.functions", "raw.types", "enums", "types"):
+            mod = types.ModuleType(f"pyrogram.{sub}")
+            mod.ChatType = MagicMock()
+            mod.Message = MagicMock()
+            sys.modules[f"pyrogram.{sub}"] = mod
+        err_mod = types.ModuleType("pyrogram.errors")
+        err_mod.FloodWait = type("FloodWait", (Exception,), {})
+        err_mod.RPCError = type("RPCError", (Exception,), {})
+        err_mod.AuthKeyDuplicated = type("AuthKeyDuplicated", (Exception,), {})
+        sys.modules["pyrogram.errors"] = err_mod
+
+        import tg_streamer
+        monkeypatch.setattr(tg_streamer, "OMNIROUTE_URL", "")
+        monkeypatch.setattr(tg_streamer, "OMNIROUTE_KEY", "")
+
+        candidates = [{"id": 1, "title": "A"}, {"id": 2, "title": "B"}]
+        res = await tg_streamer._ai_disambiguate_candidates("Some Movie", candidates)
+        assert res is None
+
+    @pytest.mark.asyncio
+    async def test_ai_disambiguate_candidates_success_and_fallback(self, monkeypatch):
+        import sys, types
+        from unittest.mock import MagicMock, AsyncMock
+        pg = sys.modules.setdefault("pyrogram", types.ModuleType("pyrogram"))
+        pg.__path__ = []
+        pg.Client = MagicMock()
+        pg.filters = MagicMock()
+        for sub in ("raw", "raw.functions", "raw.types", "enums", "types"):
+            mod = types.ModuleType(f"pyrogram.{sub}")
+            mod.ChatType = MagicMock()
+            mod.Message = MagicMock()
+            sys.modules[f"pyrogram.{sub}"] = mod
+        err_mod = types.ModuleType("pyrogram.errors")
+        err_mod.FloodWait = type("FloodWait", (Exception,), {})
+        err_mod.RPCError = type("RPCError", (Exception,), {})
+        err_mod.AuthKeyDuplicated = type("AuthKeyDuplicated", (Exception,), {})
+        sys.modules["pyrogram.errors"] = err_mod
+
+        import tg_streamer
+        monkeypatch.setattr(tg_streamer, "OMNIROUTE_URL", "https://api.omniroute.ai/v1")
+        monkeypatch.setattr(tg_streamer, "OMNIROUTE_KEY", "test_key")
+        tg_streamer._AI_DISAMBIGUATE_CACHE.clear()
+
+        candidates = [
+            {"id": 100, "title": "Patriot", "release_date": "2000-06-28", "original_language": "en"},
+            {"id": 200, "title": "Patriot", "release_date": "2026-01-15", "original_language": "ml"},
+        ]
+
+        class FakeResponse:
+            def __init__(self, status, json_data):
+                self.status = status
+                self._json_data = json_data
+
+            async def json(self):
+                return self._json_data
+
+            async def text(self):
+                return ""
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        class FakeClientSession:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def post(self, url, **kwargs):
+                return FakeResponse(200, {
+                    "choices": [{
+                        "message": {
+                            "content": '```json\n{"tmdb_id": 200, "reason": "2026 Malayalam release"}\n```'
+                        }
+                    }]
+                })
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        monkeypatch.setattr("aiohttp.ClientSession", FakeClientSession)
+
+        # 1. Success case: returns matched candidate
+        res = await tg_streamer._ai_disambiguate_candidates("Patriot 2026 Malayalam", candidates)
+        assert res is not None
+        assert res["id"] == 200
+
+        # 2. Cached case
+        cached_res = await tg_streamer._ai_disambiguate_candidates("Patriot 2026 Malayalam", candidates)
+        assert cached_res is not None
+        assert cached_res["id"] == 200
+
+        # 3. Error case: 500 status code fails safe to None
+        class FailingClientSession(FakeClientSession):
+            def post(self, url, **kwargs):
+                return FakeResponse(500, {})
+
+        monkeypatch.setattr("aiohttp.ClientSession", FailingClientSession)
+        fail_res = await tg_streamer._ai_disambiguate_candidates("Other Movie 2026", candidates)
+        assert fail_res is None
+
