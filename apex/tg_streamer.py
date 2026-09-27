@@ -1754,32 +1754,30 @@ async def _enrich_media_metadata(entry):
         # Filename tags are only a hint. TMDB's original_language is the
         # authoritative fallback for files such as a Malayalam movie whose
         # filename does not contain "Malayalam", "mal", or a language code.
+        # Record TMDB original_language as metadata, but DO NOT move an existing
+        # .strm file across language folders on disk. The upload may be dubbed (e.g.
+        # an English dubbed Chinese movie like Ne Zha 2), and moving files on disk
+        # leaves orphaned items in jellyfin.db, producing duplicate movie cards.
         tmdb_language = language_name_from_code(detail.get("original_language"))
-        if tmdb_language and tmdb_language != entry.get("language"):
+        if tmdb_language:
+            entry["tmdb_original_language"] = tmdb_language
             old_strm_path = entry.get("strm_path")
-            entry["language"] = tmdb_language
-            new_target_dir = strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
-            new_show_root = (
-                tv_show_root(SHOWS_DIR, tmdb_language, entry.get("show_name"), entry.get("year"))
-                if entry.get("is_tv") and entry.get("show_name")
-                else None
-            )
-            new_strm_path = os.path.join(
-                new_target_dir, f"{entry.get('strm_base', strm_base(entry))}.strm"
-            )
-            if old_strm_path and os.path.exists(old_strm_path) and old_strm_path != new_strm_path:
-                os.makedirs(new_target_dir, exist_ok=True)
-                os.replace(old_strm_path, new_strm_path)
-                logger.info(
-                    f"[ORGANIZE] Moved '{entry.get('title')}' to {tmdb_language} folder"
+            if tmdb_language != entry.get("language") and (not old_strm_path or not os.path.exists(old_strm_path)):
+                entry["language"] = tmdb_language
+                new_target_dir = strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
+                new_show_root = (
+                    tv_show_root(SHOWS_DIR, tmdb_language, entry.get("show_name"), entry.get("year"))
+                    if entry.get("is_tv") and entry.get("show_name")
+                    else None
                 )
-            entry["strm_path"] = new_strm_path
-            if old_strm_path and old_strm_path != new_strm_path:
-                entry["_prev_strm_path"] = old_strm_path
-            entry["target_dir"] = new_target_dir
-            entry["show_root"] = new_show_root
-            target_dir = new_target_dir
-            show_root = new_show_root
+                new_strm_path = os.path.join(
+                    new_target_dir, f"{entry.get('strm_base', strm_base(entry))}.strm"
+                )
+                entry["strm_path"] = new_strm_path
+                entry["target_dir"] = new_target_dir
+                entry["show_root"] = new_show_root
+                target_dir = new_target_dir
+                show_root = new_show_root
 
         os.makedirs(target_dir, exist_ok=True)
         connector = aiohttp.TCPConnector(family=socket.AF_INET)
@@ -1865,6 +1863,26 @@ async def _enrich_media_metadata(entry):
                 if not _image_is_hd(poster_path, _POSTER_MIN_WIDTH):
                     _mark_art_best_effort(show_root)
 
+                # Download extra high-res backdrops so Jellyfin indexes multiple BackdropImageTags for dynamic rotation
+                images_data = detail.get("images") or {}
+                backdrops_list = list(images_data.get("backdrops") or [])
+                if len(backdrops_list) > 1 and show_root:
+                    primary_file = os.path.basename(backdrop_url) if backdrop_url else ""
+                    extra_candidates = [
+                        b for b in backdrops_list
+                        if b.get("file_path") and os.path.basename(b.get("file_path")) != primary_file
+                    ]
+                    extra_candidates.sort(
+                        key=lambda b: (b.get("width", 0) >= 1280, b.get("width", 0), b.get("vote_average", 0)),
+                        reverse=True,
+                    )
+                    for b_idx, b_item in enumerate(extra_candidates[:3], start=1):
+                        b_fp = b_item.get("file_path")
+                        b_dst = os.path.join(show_root, f"backdrop{b_idx}.jpg")
+                        if not os.path.exists(b_dst) or os.path.getsize(b_dst) < 100000:
+                            b_url = f"https://image.tmdb.org/t/p/original{b_fp}"
+                            await _download_image(session, b_url, b_dst)
+
                 season_detail = None
                 season_number = int(entry.get("season") or 1)
                 season_detail = next(
@@ -1930,6 +1948,26 @@ async def _enrich_media_metadata(entry):
                                 pass
                 if not _image_is_hd(movie_poster, _POSTER_MIN_WIDTH):
                     _mark_art_best_effort(target_dir)
+
+                # Download extra high-res backdrops so Jellyfin indexes multiple BackdropImageTags for dynamic rotation
+                images_data = detail.get("images") or {}
+                backdrops_list = list(images_data.get("backdrops") or [])
+                if len(backdrops_list) > 1 and target_dir:
+                    primary_file = os.path.basename(backdrop_url) if backdrop_url else ""
+                    extra_candidates = [
+                        b for b in backdrops_list
+                        if b.get("file_path") and os.path.basename(b.get("file_path")) != primary_file
+                    ]
+                    extra_candidates.sort(
+                        key=lambda b: (b.get("width", 0) >= 1280, b.get("width", 0), b.get("vote_average", 0)),
+                        reverse=True,
+                    )
+                    for b_idx, b_item in enumerate(extra_candidates[:3], start=1):
+                        b_fp = b_item.get("file_path")
+                        b_dst = os.path.join(target_dir, f"backdrop{b_idx}.jpg")
+                        if not os.path.exists(b_dst) or os.path.getsize(b_dst) < 100000:
+                            b_url = f"https://image.tmdb.org/t/p/original{b_fp}"
+                            await _download_image(session, b_url, b_dst)
 
         prev = FILE_ID_CACHE.get(key)
         if isinstance(prev, dict):
@@ -4278,6 +4316,18 @@ async def _reconcile_and_upgrade_library():
                         try:
                             shutil.rmtree(os.path.join(dirpath, dn), ignore_errors=True)
                             logger.info(f"[PURGE] Removed misplaced Kattalan Telugu directory: {dn}")
+                        except OSError:
+                            pass
+                    # Remove abandoned movie directories that have no media (.strm) files left
+                    full_dn = os.path.join(dirpath, dn)
+                    if root == MOVIES_DIR and os.path.isdir(full_dn):
+                        try:
+                            subdirs = [sd for sd in os.listdir(full_dn) if os.path.isdir(os.path.join(full_dn, sd))]
+                            if not subdirs:
+                                has_strm = any(f.endswith((".strm", ".mp4", ".mkv")) for f in os.listdir(full_dn))
+                                if not has_strm:
+                                    shutil.rmtree(full_dn, ignore_errors=True)
+                                    logger.info(f"[PURGE] Removed abandoned movie folder without media: {dn}")
                         except OSError:
                             pass
 

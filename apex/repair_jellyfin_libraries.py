@@ -119,6 +119,44 @@ def repair_database(db_path: str) -> bool:
         if purged > 0:
             print(f"[REPAIR] Purged {purged} blacklisted / stale item rows from {db_path}.")
 
+        # Clean up orphaned rows whose media files do not exist on disk (prevents duplicate ghost items)
+        cur.execute(
+            "SELECT Id, Path, Name FROM BaseItems "
+            "WHERE (Path LIKE '/data/jellyfin/media/%' OR Path LIKE '/opt/jellyfin-local/%' OR Path LIKE '/data/movies/%') "
+            "AND (type LIKE '%Movie%' OR type LIKE '%Episode%')"
+        )
+        orphaned = []
+        for row_id, item_path, item_name in cur.fetchall():
+            if item_path and not os.path.exists(item_path):
+                orphaned.append(row_id)
+        if orphaned:
+            cur.executemany("DELETE FROM BaseItems WHERE Id = ?", [(oid,) for oid in orphaned])
+            print(f"[REPAIR] Removed {len(orphaned)} orphaned item row(s) whose files no longer exist on disk.")
+
+        # Clean up duplicate Movie titles if any exist in BaseItems (e.g. duplicate Ne Zha 2)
+        cur.execute(
+            "SELECT Id, Path, Name FROM BaseItems WHERE type LIKE '%Movie%' AND Path IS NOT NULL"
+        )
+        seen_names = {}
+        dup_to_delete = []
+        for row_id, item_path, item_name in cur.fetchall():
+            if not item_name:
+                continue
+            clean_name = item_name.strip().lower()
+            exists = os.path.exists(item_path) if item_path else False
+            if clean_name in seen_names:
+                prev_id, prev_path, prev_exists = seen_names[clean_name]
+                if not exists:
+                    dup_to_delete.append(row_id)
+                elif not prev_exists:
+                    dup_to_delete.append(prev_id)
+                    seen_names[clean_name] = (row_id, item_path, exists)
+            else:
+                seen_names[clean_name] = (row_id, item_path, exists)
+        if dup_to_delete:
+            cur.executemany("DELETE FROM BaseItems WHERE Id = ?", [(did,) for did in dup_to_delete])
+            print(f"[REPAIR] Removed {len(dup_to_delete)} duplicate movie row(s) from {db_path}.")
+
         conn.execute("COMMIT")
         conn.close()
         if repaired:
@@ -129,6 +167,24 @@ def repair_database(db_path: str) -> bool:
     except Exception as exc:
         print(f"[REPAIR] Error checking/repairing {db_path}: {exc}", file=sys.stderr)
         return False
+
+
+def cleanup_empty_media_folders(roots=None):
+    """Remove abandoned movie/show directories that contain no playable media files."""
+    search_roots = roots or ["/data/jellyfin/media/Movies", "/data/jellyfin/media/TV Shows", "/opt/jellyfin-local/media"]
+    for root_dir in search_roots:
+        if not os.path.exists(root_dir):
+            continue
+        for dirpath, dirnames, filenames in os.walk(root_dir, topdown=False):
+            if dirpath == root_dir:
+                continue
+            media_files = [f for f in filenames if f.endswith((".strm", ".mp4", ".mkv", ".avi", ".ts"))]
+            if not media_files and not dirnames:
+                try:
+                    import shutil
+                    shutil.rmtree(dirpath, ignore_errors=True)
+                except Exception:
+                    pass
 
 
 def purge_plugin_databases():
@@ -178,6 +234,7 @@ def main():
     for db in TARGET_DATABASES:
         repair_database(db)
     purge_plugin_databases()
+    cleanup_empty_media_folders()
 
 
 if __name__ == "__main__":

@@ -62,7 +62,7 @@
 			const $ = id => document.getElementById(id);
 			const AUTO_INTERVAL = 5000;
 			const REFRESH_INTERVAL = 60000;
-			const FIELDS = 'Overview,RunTimeTicks,UserData,OfficialRating,CommunityRating,SeriesName,SeriesId,ParentIndexNumber,IndexNumber,PlaybackPositionTicks,ChildCount,Status,ParentBackdropImageTags,SeriesPrimaryImageTag,SeriesThumbImageTag';
+			const FIELDS = 'Overview,RunTimeTicks,UserData,OfficialRating,CommunityRating,SeriesName,SeriesId,ParentIndexNumber,IndexNumber,PlaybackPositionTicks,ChildCount,Status,BackdropImageTags,ParentBackdropImageTags,SeriesPrimaryImageTag,SeriesThumbImageTag';
 			const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 			const imageCache = new Map();
 			let items = [];
@@ -528,11 +528,32 @@
 			function itemImageUrls(item) {
 				const isEpisode = item.Type === 'Episode';
 				const artworkId = isEpisode ? item.SeriesId || item.Id : item.Id;
-				const hasBackdrop = (item.BackdropImageTags && item.BackdropImageTags.length > 0) ||
-					(item.ParentBackdropImageTags && item.ParentBackdropImageTags.length > 0);
-				const backdropTag = (item.BackdropImageTags && item.BackdropImageTags.length > 0)
-					? item.BackdropImageTags[0]
-					: (item.ParentBackdropImageTags && item.ParentBackdropImageTags.length > 0 ? item.ParentBackdropImageTags[0] : null);
+				const tags = (item.BackdropImageTags && item.BackdropImageTags.length > 0)
+					? item.BackdropImageTags
+					: (item.ParentBackdropImageTags && item.ParentBackdropImageTags.length > 0 ? item.ParentBackdropImageTags : []);
+				const hasBackdrop = tags.length > 0;
+				let backdropIndex = 0;
+				let backdropTag = tags[0] || null;
+
+				// Dynamically rotate thumbnails/backdrops over time
+				if (tags.length > 1) {
+					let sessionOffset = 0;
+					try {
+						let s = sessionStorage.getItem('abyss_spotlight_backdrop_seed');
+						if (!s) {
+							s = String(Math.floor(Math.random() * 100));
+							sessionStorage.setItem('abyss_spotlight_backdrop_seed', s);
+						}
+						sessionOffset = parseInt(s, 10) || 0;
+					} catch { /* ignore */ }
+
+					// 4-hour time slot + item character seed + session offset
+					const timeSlot = Math.floor(Date.now() / (1000 * 60 * 60 * 4));
+					const charSeed = (item.Id || "").split("").reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) >>> 0, 0);
+					backdropIndex = (timeSlot + charSeed + sessionOffset) % tags.length;
+					backdropTag = tags[backdropIndex];
+				}
+
 				const hasThumb = !!(item.ImageTags?.Thumb || item.SeriesThumbImageTag);
 				const thumbTag = item.ImageTags?.Thumb || item.SeriesThumbImageTag || null;
 				const hasPrimary = !!(item.ImageTags?.Primary || item.SeriesPrimaryImageTag);
@@ -541,7 +562,8 @@
 				const logoTag = item.ImageTags?.Logo || null;
 				return {
 					primary: (hasPrimary || !item.ImageTags) ? imageUrl(artworkId, 'Primary', null, primaryTag) : null,
-					backdrop: (hasBackdrop || !item.BackdropImageTags) ? imageUrl(artworkId, 'Backdrop', 0, backdropTag) : null,
+					backdrop: (hasBackdrop || !item.BackdropImageTags) ? imageUrl(artworkId, 'Backdrop', backdropIndex, backdropTag) : null,
+					backdropFallback: (backdropIndex > 0) ? imageUrl(artworkId, 'Backdrop', 0, tags[0]) : null,
 					thumb: (hasThumb || !item.ImageTags) ? imageUrl(artworkId, 'Thumb', null, thumbTag) : null,
 					logo: (hasLogo || !item.ImageTags) ? imageUrl(artworkId, 'Logo', null, logoTag) : null
 				};
@@ -554,9 +576,14 @@
 				let primaryBackdrop = false;
 				let usedThumb = false;
 
-				// 1. Try high-res 1080p widescreen backdrop
+				// 1. Try high-res 1080p widescreen backdrop (rotated)
 				if (urls.backdrop) {
 					backdrop = await fetchImage(urls.backdrop, signal);
+				}
+
+				// If rotated backdrop wasn't cached or failed, fallback to index 0
+				if (!backdrop && urls.backdropFallback) {
+					backdrop = await fetchImage(urls.backdropFallback, signal);
 				}
 
 				// 2. If backdrop not found, try 1080p horizontal thumb/landscape
