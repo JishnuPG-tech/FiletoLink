@@ -193,6 +193,7 @@ def load_cache():
 
 def _save_cache_sync():
     try:
+        os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
         tmp = f"{CACHE_FILE}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(FILE_ID_CACHE, f, indent=2)
