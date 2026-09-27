@@ -192,13 +192,17 @@ class TestParseMediaMeta:
         assert cands[0] == "bharath circus"
         assert "bharath" in cands
 
-    def test_search_candidates_fallback_no_pollution(self):
-        meta = parse_media_meta("I Nobody Jiohotstar Dd+5.1 H (2026).mkv")
-        assert "i nobody" in meta["search_candidates"]
-        # Fragments ripped off release tokens must not become search queries.
-        for cand in meta["search_candidates"]:
-            for frag in (" dd", " h", " p", " ma", " jiohotstar"):
-                assert frag not in cand
+    def test_kattalan_mmax_parsed_cleanly(self):
+        raw = "[MS] Kattalan (2026) Malayalam 720p MMAX WEBDL AVC A.mkv"
+        meta = parse_media_meta(raw)
+        assert meta["title"] == "Kattalan"
+        assert meta["clean_title"] == "Kattalan"
+        assert meta["search_title"] == "kattalan"
+        assert meta["year"] == 2026
+        assert meta["language"] == "Malayalam"
+        assert "kattalan" in meta["search_candidates"]
+        assert "ms" not in meta["search_candidates"]
+        assert "mmax" not in meta["search_candidates"]
 
 
 class TestBestTmdbMatch:

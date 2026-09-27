@@ -108,6 +108,11 @@ def repair_database(db_path: str) -> bool:
             "OR Path LIKE '%Rose%Cane%' "
             "OR Name LIKE '%Rose%Cane%' "
             "OR Name LIKE '%Ms.Rose%' "
+            "OR Name LIKE '%Ms Rose%' "
+            "OR Path LIKE '%Ms.Rose%' "
+            "OR Path LIKE '%Ms Rose%' "
+            "OR (Path LIKE '%kattalan%' AND Path LIKE '%Telugu%') "
+            "OR (Name LIKE '%kattalan%' AND Path LIKE '%Telugu%') "
             "OR (Name = 'English' AND type LIKE '%Series%')"
         )
         purged = cur.rowcount
@@ -126,9 +131,53 @@ def repair_database(db_path: str) -> bool:
         return False
 
 
+def purge_plugin_databases():
+    """Scan Jellyfin local and persistent data dirs for all plugin SQLite databases
+    (e.g., IntroSkipper.db, SkipMe.db) and purge any queued or metadata rows referencing
+    blacklisted items like Ms.Rose & Mr.Cane."""
+    search_dirs = [
+        "/opt/jellyfin-local/data",
+        "/data/jellyfin/data",
+    ]
+    for sdir in search_dirs:
+        if not os.path.exists(sdir):
+            continue
+        for root, _, files in os.walk(sdir):
+            for f in files:
+                if not f.endswith(".db"):
+                    continue
+                db_file = os.path.join(root, f)
+                try:
+                    conn = sqlite3.connect(db_file, timeout=5)
+                    cur = conn.cursor()
+                    cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                    tables = [r[0] for r in cur.fetchall() if r[0] not in ("BaseItems", "sqlite_sequence")]
+                    for tbl in tables:
+                        cur.execute(f"PRAGMA table_info('{tbl}')")
+                        cols = cur.fetchall()
+                        text_cols = [
+                            c[1] for c in cols
+                            if any(t in str(c[2]).upper() for t in ("TEXT", "CHAR", "VARCHAR", "CLOB", "BLOB"))
+                            or c[1].lower() in ("path", "name", "title", "itemname")
+                        ]
+                        for col in text_cols:
+                            try:
+                                cur.execute(
+                                    f"DELETE FROM '{tbl}' WHERE \"{col}\" LIKE '%rose%cane%' "
+                                    f"OR \"{col}\" LIKE '%ms.rose%' OR \"{col}\" LIKE '%ms rose%'"
+                                )
+                            except Exception:
+                                pass
+                    conn.commit()
+                    conn.close()
+                except Exception:
+                    pass
+
+
 def main():
     for db in TARGET_DATABASES:
         repair_database(db)
+    purge_plugin_databases()
 
 
 if __name__ == "__main__":

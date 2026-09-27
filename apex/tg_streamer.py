@@ -19,7 +19,7 @@ from typing import Optional
 
 _BLACKLIST_PATTERNS = [
     re.compile(r"mot\s*test\s*servicing", re.IGNORECASE),
-    re.compile(r"ms\.?\s*rose\s*&?\s*mr\.?\s*cane", re.IGNORECASE),
+    re.compile(r"(?:ms\.?\s*rose|mr\.?\s*cane|rose\s*&?\s*cane)", re.IGNORECASE),
 ]
 
 
@@ -1522,6 +1522,20 @@ async def _enrich_media_metadata(entry):
                         hit = obsession_hit
                         used_query = "Obsession"
                         logger.info("[TMDB] Resolved Obsession directly to TMDB ID 1339713 (Curry Barker)")
+                except Exception as _exc:
+                    pass
+
+        # "Kattalan" (2026 Malayalam movie, TMDB ID 1065834):
+        # Prevent any misclassification to obscure short films (e.g. Telugu 'MS')
+        if "kattalan" in raw_name_lower:
+            entry["language"] = "Malayalam"
+            if not hit or hit.get("id") != 1065834:
+                try:
+                    kattalan_hit = await _tmdb_get("/movie/1065834", {})
+                    if kattalan_hit and kattalan_hit.get("id") == 1065834:
+                        hit = kattalan_hit
+                        used_query = "Kattalan"
+                        logger.info("[TMDB] Resolved Kattalan directly to TMDB ID 1065834 (Malayalam 2026)")
                 except Exception as _exc:
                     pass
 
@@ -4047,10 +4061,16 @@ async def _reconcile_and_upgrade_library():
                             logger.info(f"[PURGE] Removed misplaced Patriot 2000 directory: {dn}")
                         except OSError:
                             pass
-                    if "rose" in dn.lower() and "cane" in dn.lower():
+                    if ("rose" in dn.lower() and "cane" in dn.lower()) or "ms.rose" in dn.lower() or "ms rose" in dn.lower():
                         try:
                             shutil.rmtree(os.path.join(dirpath, dn), ignore_errors=True)
                             logger.info(f"[PURGE] Removed unwanted Ms.Rose & Mr.Cane directory: {dn}")
+                        except OSError:
+                            pass
+                    if "kattalan" in dn.lower() and "telugu" in dirpath.lower():
+                        try:
+                            shutil.rmtree(os.path.join(dirpath, dn), ignore_errors=True)
+                            logger.info(f"[PURGE] Removed misplaced Kattalan Telugu directory: {dn}")
                         except OSError:
                             pass
 

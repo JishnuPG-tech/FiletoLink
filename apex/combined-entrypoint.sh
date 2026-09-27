@@ -56,8 +56,9 @@ restore_jellyfin_local() {
 
     # Permanently delete TV Shows/English and blacklisted demo episodes from media paths
     rm -rf "/data/jellyfin/media/TV Shows/English" "/opt/jellyfin-local/media/TV Shows/English" 2>/dev/null || true
-    find /data/jellyfin/media /data/movies /data/tvshows -iname "*mot*test*servicing*" -exec rm -rf {} + 2>/dev/null || true
-    find /data/jellyfin/media /data/movies /data/tvshows -iname "*rose*cane*" -exec rm -rf {} + 2>/dev/null || true
+    find /data/jellyfin/media /data/movies /data/tvshows /data /opt/jellyfin-local -iname "*mot*test*servicing*" -exec rm -rf {} + 2>/dev/null || true
+    find /data/jellyfin/media /data/movies /data/tvshows /data /opt/jellyfin-local -iname "*rose*cane*" -o -iname "*ms.rose*" -o -iname "*ms rose*" -exec rm -rf {} + 2>/dev/null || true
+    find /data/jellyfin/media/Movies/Telugu /data/movies/Telugu /opt/jellyfin-local -iname "*kattalan*" -exec rm -rf {} + 2>/dev/null || true
 
     # Purge old low-res Jellyfin image cache so newly fetched HD/4K artwork is displayed immediately
     rm -rf "$LOCAL_ROOT/cache/images"/* /data/jellyfin/cache/images/* 2>/dev/null || true

@@ -116,7 +116,7 @@ _EXTRA_STOP = {
     # OTT platform brandings that commonly prefix release audio/codec tags.
     "jiohotstar", "hotstar", "jiocinema", "sonyliv", "zee5", "mxplayer",
     "voot", "airtel", "sunnxt", "manoramamax", "primevideo", "nuefliks",
-    "tvf",
+    "tvf", "mmax",
 }
 
 _ALL_STOP = _STOP_TOKENS | _EXTRA_STOP | _ALL_LANG_TOKENS
@@ -130,7 +130,7 @@ _QUALITY_ANCHORS = {
     "web-dl", "webdl", "webrip", "hdrip", "bdrip", "brrip", "hdtv",
     "remux", "bluray", "blu-ray", "10bit", "8bit", "truehd", "dts",
     "ddp5", "tvrip", "dvdrip", "dvd", "web", "amzn", "nf", "netflix",
-    "mkv", "mp4", "avi", "mov", "ts", "m2ts",
+    "mkv", "mp4", "avi", "mov", "ts", "m2ts", "mmax",
 }
 
 
@@ -378,7 +378,11 @@ def _clean_search_title(text: str) -> str:
     if len(tokens) > 1:
         non_desc = [w for w in tokens if w.lower() not in {"movie", "film", "cinema", "fullmovie", "full"}]
         if non_desc:
-            text = " ".join(non_desc)
+            tokens = non_desc
+    # Strip trailing single-letter tags (e.g. 'A' from 'AVC A' or release suffixes)
+    while len(tokens) > 1 and len(tokens[-1]) == 1 and tokens[-1].isalpha():
+        tokens.pop()
+    text = " ".join(tokens)
     return " ".join(text.lower().split())
 
 
@@ -386,8 +390,9 @@ def _significant_token_stream(text: str):
     """Yield non-stop, non-digit words that are likely part of the real title."""
     seen = set()
     stop_tokens = _ALL_STOP
-    for tok in re.findall(r"[a-z0-9]+", (text or "").lower()):
-        if tok in stop_tokens or (tok.isdigit() and len(tok) != 4):
+    cleaned = _strip_noise(_drop_dotted_group_tail(text or ""))
+    for tok in re.findall(r"[a-z0-9]+", cleaned.lower()):
+        if tok in stop_tokens or (tok.isdigit() and len(tok) != 4) or len(tok) <= 1:
             continue
         if _CHANNEL_TOKEN_RE.match(tok):
             continue
