@@ -959,12 +959,83 @@ if tg_app:
         chat = message.chat
         chat_t = getattr(chat, "type", None)
         logger.info(f"[PYROGRAM][RX] Received update: chat={chat.id if chat else '?'} type={chat_t} media={getattr(message, 'media', None)} caption={str(message.caption or '')[:40]!r}")
+        try:
+            message.continue_propagation()
+        except Exception:
+            pass
+
+    @tg_app.on_message(filters.command(["delete", "purge", "remove"]))
+    async def on_delete_command(client, message):
+        chat = message.chat
+        if not allowed_chat(chat):
+            logger.warning(f"[DELETE-CMD] Unauthorized chat attempted delete: {getattr(chat, 'id', None)}")
+            return
+
+        reply = getattr(message, "reply_to_message", None)
+        target_title = None
+        purged = []
+
+        if reply:
+            target_msg_id = getattr(reply, "id", None)
+            target_chat_id = getattr(reply.chat, "id", None) if reply.chat else None
+            purged = await purge_media_item(chat_id=target_chat_id, msg_id=target_msg_id)
+        else:
+            parts = (getattr(message, "text", "") or "").split(maxsplit=1)
+            if len(parts) > 1:
+                target_title = parts[1].strip()
+                purged = await purge_media_item(title_query=target_title)
+            else:
+                try:
+                    await message.reply_text(
+                        "⚠️ **Usage:**\n"
+                        "• Reply to a video post with `/delete`\n"
+                        "• Or type `/delete <Movie Title>` (e.g. `/delete Kattalan`)"
+                    )
+                except Exception:
+                    pass
+                return
+
+        if purged:
+            try:
+                await message.reply_text(
+                    f"✅ **Permanently removed:**\n"
+                    f"{', '.join(purged)}\n\n"
+                    f"The media has been deleted from Jellyfin and disk, and will not return on restart."
+                )
+            except Exception:
+                pass
+        else:
+            query_desc = f"'{target_title}'" if target_title else "this message"
+            try:
+                await message.reply_text(
+                    f"❌ Could not find any active media in the library matching {query_desc}."
+                )
+            except Exception:
+                pass
 
     @tg_app.on_message(filters.video | filters.document | filters.audio | filters.animation)
     async def on_media_message(client, message):
         is_channel_post = bool(message.chat and message.chat.type == ChatType.CHANNEL)
         await process_telegram_media(message, is_channel_post)
-    logger.info("[PYROGRAM] Message & channel-post media handlers registered.")
+
+    if hasattr(tg_app, "on_deleted_messages"):
+        @tg_app.on_deleted_messages()
+        async def on_deleted_media_messages(client, messages):
+            logger.info(f"[PYROGRAM][DELETE] Received deleted messages event ({len(messages)} messages)")
+            for msg in messages:
+                try:
+                    msg_id = getattr(msg, "id", None)
+                    chat = getattr(msg, "chat", None)
+                    chat_id = getattr(chat, "id", None) if chat else None
+                    if not msg_id:
+                        continue
+                    purged = await purge_media_item(chat_id=chat_id, msg_id=msg_id)
+                    if purged:
+                        logger.info(f"[PYROGRAM][DELETE] Automatically purged deleted Telegram media: {purged}")
+                except Exception as e:
+                    logger.error(f"[PYROGRAM][DELETE] Error handling deleted message: {e}")
+
+    logger.info("[PYROGRAM] Message, command & deletion handlers registered.")
 
 # Optional Pyrogram User Account Client (bypasses bot restrictions on reading past channel history)
 tg_user = None
@@ -2334,6 +2405,96 @@ async def trigger_jellyfin_scan():
                 await asyncio.sleep(5)
                 continue
             logger.warning(f"Could not trigger Jellyfin library refresh after retries: {e}")
+
+
+async def purge_media_item(
+    cache_key: Optional[str] = None,
+    chat_id: Optional[int] = None,
+    msg_id: Optional[int] = None,
+    title_query: Optional[str] = None,
+) -> list:
+    """Permanently delete a media item from disk, FILE_ID_CACHE, and MEDIA_CATALOG.
+    Never removes unrelated media. Returns list of purged titles.
+    """
+    purged_titles = []
+    matched_keys = []
+
+    for key, data in list(FILE_ID_CACHE.items()):
+        if not isinstance(data, dict):
+            continue
+        entry_chat, entry_msg = _split_cache_key(key)
+        matched = False
+
+        if cache_key and key == cache_key:
+            matched = True
+        elif msg_id is not None and entry_msg == int(msg_id):
+            if chat_id is None or int(data.get("chat_id") or entry_chat or 0) == int(chat_id):
+                matched = True
+        elif title_query:
+            q = re.sub(r"[^a-z0-9]+", " ", title_query.strip().lower()).strip()
+            ent_title = re.sub(r"[^a-z0-9]+", " ", str(data.get("title") or "").lower()).strip()
+            ent_clean = re.sub(r"[^a-z0-9]+", " ", str(data.get("clean_title") or "").lower()).strip()
+            ent_fname = re.sub(r"[^a-z0-9]+", " ", str(data.get("file_name") or "").lower()).strip()
+            if q in (ent_title, ent_clean, ent_fname):
+                matched = True
+            elif len(q) >= 4 and (ent_title == q or ent_clean == q or ent_title.startswith(q) or ent_clean.startswith(q)):
+                matched = True
+
+        if matched:
+            matched_keys.append((key, data))
+
+    if not matched_keys:
+        return []
+
+    for key, data in matched_keys:
+        title = data.get("title") or data.get("clean_title") or key
+        strm_path = data.get("strm_path") or ""
+        target_dir = data.get("target_dir") or ""
+        c_id = data.get("chat_id")
+        m_id = data.get("msg_id")
+        if not c_id or not m_id:
+            entry_chat, entry_msg = _split_cache_key(key)
+            c_id = c_id or entry_chat
+            m_id = m_id or entry_msg
+
+        # Remove .strm file
+        if strm_path and os.path.exists(strm_path):
+            try:
+                os.remove(strm_path)
+                logger.info(f"[PURGE] Deleted STRM file: {strm_path}")
+            except OSError as exc:
+                logger.warning(f"[PURGE] Could not delete STRM file {strm_path}: {exc}")
+
+        # Remove target directory IF it has no other .strm files (preserves TV show seasons / shared dirs)
+        if target_dir and os.path.isdir(target_dir):
+            try:
+                strms_left = [
+                    f for f in os.listdir(target_dir)
+                    if f.lower().endswith(".strm")
+                ]
+                if not strms_left:
+                    shutil.rmtree(target_dir, ignore_errors=True)
+                    logger.info(f"[PURGE] Deleted empty media directory: {target_dir}")
+            except OSError as exc:
+                logger.warning(f"[PURGE] Could not remove media directory {target_dir}: {exc}")
+
+        # Mark deleted in MEDIA_CATALOG so tombstones prevent resurrection across restarts
+        if c_id and m_id:
+            try:
+                MEDIA_CATALOG.mark_deleted(source_chat_id=int(c_id), source_message_id=int(m_id))
+            except Exception as exc:
+                logger.warning(f"[PURGE] Could not mark deleted in catalog: {exc}")
+
+        # Remove from FILE_ID_CACHE
+        FILE_ID_CACHE.pop(key, None)
+        purged_titles.append(title)
+
+    if purged_titles:
+        await save_cache_async()
+        # Trigger Jellyfin scan to immediately drop item from library/UI
+        await trigger_jellyfin_scan()
+
+    return purged_titles
 
 
 async def refresh_jellyfin_item_by_path(strm_path, alt_paths=None, retries=12, delay=5.0):
@@ -3959,6 +4120,14 @@ async def restore_cached_strm_files():
         identity = _canonical_media_key(entry)
         winners.setdefault(identity, entry)
 
+    # Count existing .strm files on disk across movies and shows
+    existing_strm_count = 0
+    for rdir in (MOVIES_DIR, SHOWS_DIR):
+        if os.path.isdir(rdir):
+            for r, _, fs in os.walk(rdir):
+                existing_strm_count += sum(1 for f in fs if f.lower().endswith(".strm"))
+
+    stale_user_deleted = []
     for entry in winners.values():
         record = _catalog_upsert(entry)
         if record is not None and record.deleted:
@@ -3967,12 +4136,50 @@ async def restore_cached_strm_files():
                 f"{entry.get('title')} ({entry.get('chat_id')}:{entry.get('msg_id')})"
             )
             continue
+
+        target_strm = entry.get("strm_path") or _entry_strm_path(entry)
+        target_dir = entry.get("target_dir")
+
+        # If the media library on disk is already established (existing_strm_count > 0),
+        # this media was confirmed published before (record.published),
+        # but its .strm file and directory no longer exist on disk:
+        # the user deliberately deleted this media from the Jellyfin Web UI.
+        # Mark it deleted so it permanently stays gone and is never resurrected.
+        if (
+            existing_strm_count > 0
+            and record is not None
+            and record.published
+            and target_strm
+            and not os.path.exists(target_strm)
+            and (not target_dir or not os.path.exists(target_dir))
+        ):
+            logger.info(
+                f"[RESTORE] Detected user-deleted media in Jellyfin: "
+                f"'{entry.get('title')}' (missing {target_strm}). Marking permanent tombstone."
+            )
+            try:
+                MEDIA_CATALOG.mark_deleted(
+                    source_chat_id=int(entry.get("chat_id") or 0),
+                    source_message_id=int(entry.get("msg_id") or 0),
+                )
+            except Exception as e:
+                logger.warning(f"[RESTORE] Could not mark deleted: {e}")
+            c_key = entry.get("_cache_key") or _cache_key(entry.get("chat_id"), entry.get("msg_id"))
+            stale_user_deleted.append(c_key)
+            continue
+
         await create_strm_file_async(entry)
         if entry.get("target_dir") and entry.get("strm_base"):
             expected_paths.add(os.path.normpath(
                 os.path.join(entry["target_dir"], f"{entry['strm_base']}.strm")
             ))
         count += 1
+
+    if stale_user_deleted:
+        for k in stale_user_deleted:
+            FILE_ID_CACHE.pop(k, None)
+        await save_cache_async()
+        logger.info(f"[RESTORE] Dropped {len(stale_user_deleted)} user-deleted media record(s) from cache.")
     if count > 0:
         logger.info(f"[RESTORE] Restored {count} .strm file(s) from persistent disk cache.")
         await trigger_jellyfin_scan()
