@@ -62,7 +62,7 @@
 			const $ = id => document.getElementById(id);
 			const AUTO_INTERVAL = 5000;
 			const REFRESH_INTERVAL = 60000;
-			const FIELDS = 'Overview,RunTimeTicks,UserData,OfficialRating,CommunityRating,SeriesName,SeriesId,ParentIndexNumber,IndexNumber,PlaybackPositionTicks';
+			const FIELDS = 'Overview,RunTimeTicks,UserData,OfficialRating,CommunityRating,SeriesName,SeriesId,ParentIndexNumber,IndexNumber,PlaybackPositionTicks,ChildCount,Status,ParentBackdropImageTags,SeriesPrimaryImageTag,SeriesThumbImageTag';
 			const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 			const imageCache = new Map();
 			let items = [];
@@ -84,6 +84,7 @@
 			const SVG_RATING = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#e3e3e3"><path d="M168-144q-29 0-50.5-21.5T96-216v-528q0-29.7 21.5-50.85Q139-816 168-816h624q29 0 50.5 21.15T864-744v528q0 29-21.5 50.5T792-144H168Zm337.5-154.35Q516-308.7 516-324v-168q0-15.3-10.29-25.65Q495.42-528 480.21-528t-25.71 10.35Q444-507.3 444-492v168q0 15.3 10.29 25.65Q464.58-288 479.79-288t25.71-10.35ZM480-600q14 0 25-11t11-25.5q0-14.5-11-25T479.5-672q-14.5 0-25 10.35T444-636q0 14 10.35 25T480-600ZM168-228h72v-72h-72v72Zm552 0h72v-72h-72v72ZM168-372h72v-72h-72v72Zm552 0h72v-72h-72v72ZM168-516h72v-72h-72v72Zm552 0h72v-72h-72v72ZM168-660h72v-72h-72v72Zm552 0h72v-72h-72v72Z"/></svg>`;
 			const SVG_CLOCK = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#e3e3e3"><path d="M516-510v-174q0-15.3-10.29-25.65Q495.42-720 480.21-720t-25.71 10.35Q444-699.3 444-684v189q0 8 3 14.5t8 11.5l133.85 133.85Q600-324 614.5-324.5 629-325 640-336t11-25.5q0-14.5-11.34-25.75L516-510ZM480-96q-79.38 0-149.19-30T208.5-208.5Q156-261 126-330.96t-30-149.5Q96-560 126-630q30-70 82.5-122t122.46-82q69.96-30 149.5-30t149.55 30.24q70 30.24 121.79 82.08 51.78 51.84 81.99 121.92Q864-559.68 864-480q0 79.38-30 149.19T752-208.5Q700-156 629.87-126T480-96Z"/></svg>`;
 			const SVG_STAR = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#e3e3e3"><path d="m480-285-164 98q-11 6-21.5 5t-18.5-7q-8-6-12-16.5t-1-21.5l43-183-145-123q-9-8-11-18.5t1-20.5q3-10 11-16.5t20-7.5l190-17 75-174q5-11 14-16.5t19-5.5q10 0 19 5.5t14 16.5l75 175 190 16q12 1 20 8t11 17q3 10 .5 20T798-533L654-410l43 183q3 11-1 21.5T684-189q-8 6-18.5 7t-21.5-5l-164-98Z"/></svg>`;
+			const SVG_TV = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#e3e3e3"><path d="M320-120v-80H160q-33 0-56.5-23.5T80-280v-480q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v480q0 33-23.5 56.5T800-200H640v80H320Zm-160-160h640v-480H160v480Zm0 0v-480 480Z"/></svg>`;
 
 			function isTvLayout() {
 				try {
@@ -396,9 +397,10 @@
 				const MIN_ITEMS = 6;
 				const MAX_ITEMS = 8;
 
-				// Fetch a generous pool of random movies from Jellyfin
-				const [randomMoviesResult, resumeResult] = await Promise.allSettled([
-					fetchJson(`${base}/Users/${userId}/Items?Recursive=true&IncludeItemTypes=Movie&SortBy=Random&Limit=40&Fields=${FIELDS}&ImageTypes=Backdrop,Primary,Thumb,Logo`, signal),
+				// Fetch generous pools of random movies and random series from Jellyfin
+				const [randomMoviesResult, randomSeriesResult, resumeResult] = await Promise.allSettled([
+					fetchJson(`${base}/Users/${userId}/Items?Recursive=true&IncludeItemTypes=Movie&SortBy=Random&Limit=30&Fields=${FIELDS}&ImageTypes=Backdrop,Primary,Thumb,Logo`, signal),
+					fetchJson(`${base}/Users/${userId}/Items?Recursive=true&IncludeItemTypes=Series&SortBy=Random&Limit=30&Fields=${FIELDS}&ImageTypes=Backdrop,Primary,Thumb,Logo`, signal),
 					fetchJson(`${base}/Users/${userId}/Items/Resume?Limit=2&Recursive=true&IncludeItemTypes=Movie,Episode&Fields=${FIELDS}`, signal)
 				]);
 				if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -414,17 +416,42 @@
 					}
 				}
 
-				// Populate the rest with true randomized movies from the library
 				const rawMovies = randomMoviesResult.status === 'fulfilled' ? randomMoviesResult.value.Items || [] : [];
-				const randomizedMovies = shuffleArray(rawMovies);
-				for (const item of randomizedMovies) {
+				let rawSeries = randomSeriesResult.status === 'fulfilled' ? randomSeriesResult.value.Items || [] : [];
+
+				if (rawSeries.length === 0) {
+					// Fallback in case series container wasn't directly found or episodes exist
+					try {
+						const fallbackEpisodes = await fetchJson(`${base}/Users/${userId}/Items?Recursive=true&IncludeItemTypes=Episode&SortBy=Random&Limit=10&Fields=${FIELDS}&ImageTypes=Backdrop,Primary,Thumb,Logo`, signal);
+						if (fallbackEpisodes?.Items?.length) {
+							rawSeries = fallbackEpisodes.Items;
+						}
+					} catch { /* optional */ }
+				}
+
+				const shuffledMovies = shuffleArray(rawMovies);
+				const shuffledSeries = shuffleArray(rawSeries);
+
+				// Interleave series and movies so both series and movies are well represented in the hero carousel
+				const interleaved = [];
+				const maxLen = Math.max(shuffledMovies.length, shuffledSeries.length);
+				// Randomize starting type on each reload (50% chance series first, 50% movie first)
+				const startWithSeries = Math.random() < 0.5;
+				for (let i = 0; i < maxLen; i++) {
+					const first = startWithSeries ? shuffledSeries[i] : shuffledMovies[i];
+					const second = startWithSeries ? shuffledMovies[i] : shuffledSeries[i];
+					if (first) interleaved.push({ ...first, _source: first.Type === 'Series' ? 'random-series' : 'random-movie' });
+					if (second) interleaved.push({ ...second, _source: second.Type === 'Series' ? 'random-series' : 'random-movie' });
+				}
+
+				for (const item of interleaved) {
 					if (picked.size >= MAX_ITEMS) break;
 					if (item?.Id && !picked.has(item.Id)) {
-						picked.set(item.Id, { ...item, _source: 'random-movie' });
+						picked.set(item.Id, item);
 					}
 				}
 
-				// Fallback Tier: if library has very few movies, supplement with recently added items or shows
+				// Fallback Tier: if library has very few items, supplement with recently added items or shows
 				if (picked.size < MIN_ITEMS) {
 					try {
 						const recentItems = await fetchJson(`${base}/Users/${userId}/Items?Limit=${MAX_ITEMS}&Recursive=true&SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=Movie,Series&Fields=${FIELDS}`, signal);
@@ -501,27 +528,36 @@
 			function itemImageUrls(item) {
 				const isEpisode = item.Type === 'Episode';
 				const artworkId = isEpisode ? item.SeriesId || item.Id : item.Id;
-				const backdropTag = item.BackdropImageTags && item.BackdropImageTags.length > 0 ? item.BackdropImageTags[0] : null;
-				const thumbTag = item.ImageTags ? item.ImageTags.Thumb : null;
-				const primaryTag = item.ImageTags ? item.ImageTags.Primary : null;
-				const logoTag = item.ImageTags ? item.ImageTags.Logo : null;
+				const hasBackdrop = (item.BackdropImageTags && item.BackdropImageTags.length > 0) ||
+					(item.ParentBackdropImageTags && item.ParentBackdropImageTags.length > 0);
+				const backdropTag = (item.BackdropImageTags && item.BackdropImageTags.length > 0)
+					? item.BackdropImageTags[0]
+					: (item.ParentBackdropImageTags && item.ParentBackdropImageTags.length > 0 ? item.ParentBackdropImageTags[0] : null);
+				const hasThumb = !!(item.ImageTags?.Thumb || item.SeriesThumbImageTag);
+				const thumbTag = item.ImageTags?.Thumb || item.SeriesThumbImageTag || null;
+				const hasPrimary = !!(item.ImageTags?.Primary || item.SeriesPrimaryImageTag);
+				const primaryTag = item.ImageTags?.Primary || item.SeriesPrimaryImageTag || null;
+				const hasLogo = !!(item.ImageTags?.Logo);
+				const logoTag = item.ImageTags?.Logo || null;
 				return {
-					primary: imageUrl(artworkId, 'Primary', null, primaryTag),
-					backdrop: imageUrl(artworkId, 'Backdrop', 0, backdropTag),
-					thumb: imageUrl(artworkId, 'Thumb', null, thumbTag),
-					logo: imageUrl(artworkId, 'Logo', null, logoTag)
+					primary: (hasPrimary || !item.ImageTags) ? imageUrl(artworkId, 'Primary', null, primaryTag) : null,
+					backdrop: (hasBackdrop || !item.BackdropImageTags) ? imageUrl(artworkId, 'Backdrop', 0, backdropTag) : null,
+					thumb: (hasThumb || !item.ImageTags) ? imageUrl(artworkId, 'Thumb', null, thumbTag) : null,
+					logo: (hasLogo || !item.ImageTags) ? imageUrl(artworkId, 'Logo', null, logoTag) : null
 				};
 			}
 
 			async function fetchArtwork(item, signal) {
 				const urls = itemImageUrls(item);
-				const logoPromise = fetchImage(urls.logo, signal);
+				const logoPromise = urls.logo ? fetchImage(urls.logo, signal) : Promise.resolve(null);
 				let backdrop = null;
 				let primaryBackdrop = false;
 				let usedThumb = false;
 
 				// 1. Try high-res 1080p widescreen backdrop
-				backdrop = await fetchImage(urls.backdrop, signal);
+				if (urls.backdrop) {
+					backdrop = await fetchImage(urls.backdrop, signal);
+				}
 
 				// 2. If backdrop not found, try 1080p horizontal thumb/landscape
 				if (!backdrop && urls.thumb) {
@@ -533,6 +569,26 @@
 				if (!backdrop && urls.primary) {
 					backdrop = await fetchImage(urls.primary, signal);
 					primaryBackdrop = true;
+				}
+
+				// 4. For Series, if still no backdrop, check if any season or episode has backdrop or thumb
+				if (!backdrop && item.Type === 'Series') {
+					try {
+						const children = await fetchJson(`${base}/Shows/${item.Id}/Episodes?Limit=1&Fields=Overview,ParentBackdropImageTags,SeriesPrimaryImageTag`, signal);
+						const ep = children.Items && children.Items[0];
+						if (ep) {
+							const epUrls = itemImageUrls(ep);
+							if (epUrls.backdrop) backdrop = await fetchImage(epUrls.backdrop, signal);
+							if (!backdrop && epUrls.thumb) {
+								backdrop = await fetchImage(epUrls.thumb, signal);
+								if (backdrop) usedThumb = true;
+							}
+							if (!backdrop && epUrls.primary) {
+								backdrop = await fetchImage(epUrls.primary, signal);
+								primaryBackdrop = true;
+							}
+						}
+					} catch { /* optional fallback */ }
 				}
 
 				return { backdrop, logo: await logoPromise, primaryBackdrop, usedThumb };
@@ -578,9 +634,10 @@
 
 			function updateContent(item, artwork) {
 				const isEpisode = item.Type === 'Episode';
+				const isSeries = item.Type === 'Series';
 				const detailId = isEpisode ? item.SeriesId || item.Id : item.Id;
 				const detailRoute = `/details?id=${detailId}`;
-				const playRoute = `/video?id=${item.Id}`;
+				const playRoute = isSeries ? `/details?id=${item.Id}` : `/video?id=${item.Id}`;
 				const title = isEpisode ? item.SeriesName || item.Name : item.Name;
 				const backdropImage = $('backdrop-img');
 				const logo = $('logo');
@@ -644,7 +701,14 @@
 
 				try {
 					const isResume = item._source === 'resume';
-					const playLabel = isResume ? (isEpisode ? `Continue ${episodePrefix}` : 'Resume') : (isEpisode ? `Play ${episodePrefix}`.trim() : 'Play');
+					let playLabel = 'Play';
+					if (isResume) {
+						playLabel = isEpisode ? `Continue ${episodePrefix}` : 'Resume';
+					} else if (isSeries) {
+						playLabel = 'Watch Series';
+					} else if (isEpisode) {
+						playLabel = `Play ${episodePrefix}`.trim();
+					}
 					const playButton = document.createElement('button');
 					playButton.type = 'button';
 					playButton.className = 'btn btn-play';
@@ -668,6 +732,10 @@
 				try {
 					const meta = $('meta');
 					while (meta.firstChild) meta.removeChild(meta.firstChild);
+					if (isSeries) {
+						const seasonText = item.ChildCount ? `${item.ChildCount} Season${item.ChildCount > 1 ? 's' : ''}` : 'Series';
+						meta.appendChild(metaPillWithIcon(SVG_TV, seasonText));
+					}
 					if (item.OfficialRating) meta.appendChild(metaPillWithIcon(SVG_RATING, item.OfficialRating));
 					const runtime = formatRuntime(item.RunTimeTicks);
 					if (runtime) meta.appendChild(metaPillWithIcon(SVG_CLOCK, runtime));
