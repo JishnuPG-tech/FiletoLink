@@ -16,6 +16,16 @@ TARGET_DATABASES = [
     "/data/jellyfin/data/data/jellyfin.db",
 ]
 
+PASSWORD_RESET_MARKERS = [
+    "/data/jellyfin/.password_reset_done",
+    "/opt/jellyfin-local/data/.password_reset_done",
+]
+
+MANUAL_RESET_TRIGGERS = [
+    "/data/jellyfin/reset_password",
+    "/opt/jellyfin-local/data/reset_password",
+]
+
 # name -> (item_id, views_dir_path, real_media_location, physical_folder_item_id)
 #
 # ItemId/LibraryOptions in /Library/VirtualFolders only resolve when the
@@ -38,7 +48,7 @@ LIBRARIES = {
 }
 
 
-def repair_database(db_path: str) -> bool:
+def repair_database(db_path: str, marker_file: str | None = None, force_reset_password: bool | None = None) -> bool:
     if not os.path.exists(db_path):
         return False
 
@@ -168,9 +178,34 @@ def repair_database(db_path: str) -> bool:
                 for u_id, u_name, u_attempts, u_pwd in user_rows:
                     print(f"[AUTH] Found Jellyfin user '{u_name}' (locked_attempts={u_attempts}, has_password={bool(u_pwd)}) in {db_path}")
 
-                cur.execute("UPDATE Users SET Password = NULL, InvalidLoginAttemptCount = 0")
-                if user_rows:
-                    print(f"[AUTH] Reset password to blank & cleared lockouts for {len(user_rows)} user(s) in {db_path}. Sign in with a blank password is enabled.")
+                db_dir = os.path.dirname(db_path)
+                markers = [marker_file] if marker_file else list(PASSWORD_RESET_MARKERS)
+                if not marker_file and db_dir:
+                    markers.append(os.path.join(db_dir, ".password_reset_done"))
+
+                marker_exists = any(os.path.exists(m) for m in markers)
+                env_force = os.environ.get("RESET_JELLYFIN_PASSWORD", "").strip().lower() in ("1", "true", "yes")
+                manual_trigger = any(os.path.exists(p) for p in MANUAL_RESET_TRIGGERS)
+
+                if force_reset_password is not None:
+                    should_reset = force_reset_password
+                else:
+                    should_reset = env_force or manual_trigger or (not marker_exists)
+
+                if should_reset:
+                    cur.execute("UPDATE Users SET Password = NULL, InvalidLoginAttemptCount = 0")
+                    if user_rows:
+                        print(f"[AUTH] Executed one-time password reset to blank for {len(user_rows)} user(s) in {db_path}. Sign in with a blank password is enabled.")
+                    if marker_file:
+                        try:
+                            os.makedirs(os.path.dirname(marker_file), exist_ok=True)
+                            with open(marker_file, "w", encoding="utf-8") as f:
+                                f.write(datetime.datetime.now(datetime.timezone.utc).isoformat())
+                        except Exception:
+                            pass
+                else:
+                    cur.execute("UPDATE Users SET InvalidLoginAttemptCount = 0")
+                    print(f"[AUTH] Preserved user password(s); cleared failed attempt lockouts in {db_path}.")
 
             # Unlock permissions if locked
             cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Permissions'")
@@ -270,14 +305,14 @@ def purge_plugin_databases():
                     pass
 
 
-def repair_system_xml():
+def repair_system_xml(configs=None):
     """Ensure system.xml has IsStartupWizardCompleted set to true so Jellyfin never
     redirects to first-time setup or blocks user login."""
-    configs = [
+    targets = configs or [
         "/opt/jellyfin-local/config/system.xml",
         "/data/jellyfin/config/system.xml",
     ]
-    for cfg in configs:
+    for cfg in targets:
         if not os.path.exists(cfg):
             continue
         try:
@@ -306,8 +341,29 @@ def repair_system_xml():
 
 
 def main():
+    env_force = os.environ.get("RESET_JELLYFIN_PASSWORD", "").strip().lower() in ("1", "true", "yes")
+    manual_trigger = any(os.path.exists(p) for p in MANUAL_RESET_TRIGGERS)
+    marker_exists = any(os.path.exists(m) for m in PASSWORD_RESET_MARKERS)
+    should_reset = env_force or manual_trigger or (not marker_exists)
+
     for db in TARGET_DATABASES:
-        repair_database(db)
+        repair_database(db, force_reset_password=should_reset)
+
+    if should_reset:
+        for m in PASSWORD_RESET_MARKERS:
+            try:
+                os.makedirs(os.path.dirname(m), exist_ok=True)
+                with open(m, "w", encoding="utf-8") as f:
+                    f.write(datetime.datetime.now(datetime.timezone.utc).isoformat())
+            except Exception:
+                pass
+        for manual_file in MANUAL_RESET_TRIGGERS:
+            try:
+                if os.path.exists(manual_file):
+                    os.remove(manual_file)
+            except Exception:
+                pass
+
     purge_plugin_databases()
     cleanup_empty_media_folders()
     repair_system_xml()

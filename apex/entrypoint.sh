@@ -28,12 +28,18 @@ restore_jellyfin_local() {
         find /data/jellyfin/data -mindepth 1 -maxdepth 1 \
             \( -name metadata -o -name metadata.snapshot \) -prune -o \
             -exec cp -a -f {} "$LOCAL_ROOT/data/" \; 2>/dev/null || true
+        sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" "PRAGMA journal_mode=WAL; PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
     fi
     if [ -d "/data/jellyfin/config" ]; then
         cp -a -f /data/jellyfin/config/. "$LOCAL_ROOT/config/" 2>/dev/null || true
     fi
     if [ -d "/data/jellyfin/cache" ]; then
         cp -a -f /data/jellyfin/cache/. "$LOCAL_ROOT/cache/" 2>/dev/null || true
+    fi
+
+    # Run library and auth repair after restoring both database and config
+    if [ -f "$LOCAL_ROOT/data/data/jellyfin.db" ] || [ -f "/data/jellyfin/data/data/jellyfin.db" ]; then
+        python3 /repair_jellyfin_libraries.py 2>/dev/null || python3 /opt/apex/repair_jellyfin_libraries.py 2>/dev/null || python3 "$(dirname "$0")/repair_jellyfin_libraries.py" 2>/dev/null || true
     fi
 
     # Jellyfin's item DB bakes absolute metadata paths (e.g. .../Data/metadata/People/x/folder.jpg)
@@ -51,7 +57,6 @@ restore_jellyfin_local() {
         mkdir -p /data/jellyfin/data/metadata.snapshot
     fi
 
-
     # Clean up any custom css files and restore stock index.html
     rm -f /usr/share/jellyfin/web/netflix-dark.css /usr/share/jellyfin/web/pitch-black.css 2>/dev/null || true
     if [ -f "/usr/share/jellyfin/web/index.html" ]; then
@@ -68,9 +73,16 @@ sync_jellyfin_back() {
     while :; do
         sleep 20
         if [ -f "$LOCAL_ROOT/data/data/jellyfin.db" ]; then
+            sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
             mkdir -p /data/jellyfin/data/data
-            sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" ".backup /data/jellyfin/data/data/jellyfin.db" 2>/dev/null || \
-                cp -f "$LOCAL_ROOT/data/data/jellyfin.db" /data/jellyfin/data/data/jellyfin.db 2>/dev/null || true
+            snapshot="/data/jellyfin/data/data/jellyfin.db.tmp"
+            if sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" ".backup '$snapshot'" 2>/dev/null; then
+                mv -f "$snapshot" /data/jellyfin/data/data/jellyfin.db
+            elif cp -f "$LOCAL_ROOT/data/data/jellyfin.db" "$snapshot" 2>/dev/null; then
+                mv -f "$snapshot" /data/jellyfin/data/data/jellyfin.db
+            else
+                rm -f "$snapshot" 2>/dev/null || true
+            fi
         fi
         if [ -d "$LOCAL_ROOT/data" ]; then
             find "$LOCAL_ROOT/data" -mindepth 1 -maxdepth 1 \
@@ -171,6 +183,61 @@ echo "[HEALTH] Nginx starting..."
 nginx -g 'daemon off;' -c /nginx.conf &
 NGINX_PID=$!
 
+perform_final_sync() {
+    echo "[PERSISTENCE] Graceful shutdown initiated. Syncing durable Jellyfin state..."
+    if [ -n "${JELLYFIN_PID:-}" ] && kill -0 "$JELLYFIN_PID" 2>/dev/null; then
+        echo "[JELLYFIN] Sending SIGTERM to Jellyfin (PID $JELLYFIN_PID)..."
+        kill -TERM "$JELLYFIN_PID" 2>/dev/null || true
+        for i in {1..10}; do
+            if ! kill -0 "$JELLYFIN_PID" 2>/dev/null; then
+                break
+            fi
+            sleep 0.5
+        done
+        kill -9 "$JELLYFIN_PID" 2>/dev/null || true
+    fi
+
+    if [ -f "$LOCAL_ROOT/data/data/jellyfin.db" ]; then
+        sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
+        mkdir -p /data/jellyfin/data/data
+        if sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" ".backup '/data/jellyfin/data/data/jellyfin.db'" 2>/dev/null; then
+            echo "[PERSISTENCE] Successfully backed up jellyfin.db to persistent volume."
+        else
+            cp -f "$LOCAL_ROOT/data/data/jellyfin.db" /data/jellyfin/data/data/jellyfin.db 2>/dev/null || true
+        fi
+    fi
+
+    if [ -d "$LOCAL_ROOT/data" ]; then
+        find "$LOCAL_ROOT/data" -mindepth 1 -maxdepth 1 \
+            -not -name data \
+            -not -name metadata \
+            -exec cp -a -f {} /data/jellyfin/data/ \; 2>/dev/null || true
+    fi
+
+    if [ -d "$LOCAL_ROOT/data/metadata" ]; then
+        mkdir -p /data/jellyfin/data/metadata.snapshot
+        cp -a -f "$LOCAL_ROOT/data/metadata/." /data/jellyfin/data/metadata.snapshot/ 2>/dev/null || true
+    fi
+
+    if [ -d "$LOCAL_ROOT/config" ]; then
+        cp -a -f "$LOCAL_ROOT/config/." /data/jellyfin/config/ 2>/dev/null || true
+    fi
+    if [ -d "$LOCAL_ROOT/log" ]; then
+        cp -a -f "$LOCAL_ROOT/log/." /data/jellyfin/log/ 2>/dev/null || true
+    fi
+
+    for pid in "${FASTAPI_PID:-}" "${NGINX_PID:-}" "${TG_STREAMER_PID:-}" "${SYNC_PID:-}"; do
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            kill -TERM "$pid" 2>/dev/null || true
+        fi
+    done
+
+    echo "[PERSISTENCE] Durable state successfully synced to /data. Exiting."
+    exit 0
+}
+
+trap perform_final_sync SIGTERM SIGINT SIGHUP
+
 echo "[BOOT] All services dispatched. Process Supervisor active."
 
 while true; do
@@ -203,5 +270,6 @@ while true; do
         SYNC_PID=$!
     fi
 
-    sleep 10
+    sleep 10 &
+    wait $! 2>/dev/null || true
 done

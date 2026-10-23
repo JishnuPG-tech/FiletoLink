@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import pytest
 
-from repair_jellyfin_libraries import repair_database, cleanup_empty_media_folders
+from repair_jellyfin_libraries import repair_database, cleanup_empty_media_folders, repair_system_xml
 
 
 def test_repair_database_removes_orphans_and_duplicates(tmp_path):
@@ -151,3 +151,98 @@ def test_repair_database_resets_user_password_and_unlocks(tmp_path, monkeypatch)
     assert ak_row[0] == "test-api-token-xyz"
     assert ak_row[1] == "Apex Gateway"
     conn.close()
+
+
+def test_repair_database_subsequent_boot_preserves_password(tmp_path):
+    db_file = tmp_path / "jellyfin.db"
+    marker_file = tmp_path / ".password_reset_done"
+    marker_file.write_text("2026-10-23T00:00:00Z")
+
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE BaseItems (
+            Id TEXT PRIMARY KEY,
+            Path TEXT,
+            Name TEXT,
+            type TEXT,
+            Data TEXT,
+            DateModified TEXT
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE Users (
+            Id TEXT PRIMARY KEY,
+            Username TEXT,
+            Password TEXT,
+            InvalidLoginAttemptCount INTEGER
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE Permissions (
+            UserId TEXT,
+            Kind INTEGER,
+            Value INTEGER
+        )
+    """)
+    cur.execute(
+        "INSERT INTO Users VALUES (?, ?, ?, ?)",
+        ("user-1", "admin", "$PBKDF2$custom_password_hash", 3)
+    )
+    cur.execute(
+        "INSERT INTO Permissions VALUES (?, ?, ?)",
+        ("user-1", 2, 1)
+    )
+    conn.commit()
+    conn.close()
+
+    # Repair with existing marker: password must be preserved, lockout cleared, unlocked
+    repair_database(str(db_file), marker_file=str(marker_file))
+
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("SELECT Username, Password, InvalidLoginAttemptCount FROM Users")
+    u_row = cur.fetchone()
+    assert u_row[0] == "admin"
+    assert u_row[1] == "$PBKDF2$custom_password_hash"  # Preserved!
+    assert u_row[2] == 0  # Lockout cleared
+
+    cur.execute("SELECT Value FROM Permissions WHERE Kind = 2")
+    p_row = cur.fetchone()
+    assert p_row[0] == 0  # Unlocked
+    conn.close()
+
+
+def test_repair_database_manual_force_reset_env(tmp_path, monkeypatch):
+    db_file = tmp_path / "jellyfin.db"
+    marker_file = tmp_path / ".password_reset_done"
+    marker_file.write_text("2026-10-23T00:00:00Z")
+
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE BaseItems (Id TEXT, Path TEXT, Name TEXT, type TEXT, Data TEXT, DateModified TEXT)")
+    cur.execute("CREATE TABLE Users (Id TEXT, Username TEXT, Password TEXT, InvalidLoginAttemptCount INTEGER)")
+    cur.execute("CREATE TABLE Permissions (UserId TEXT, Kind INTEGER, Value INTEGER)")
+    cur.execute("INSERT INTO Users VALUES ('user-1', 'admin', '$PBKDF2$somehash', 2)")
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("RESET_JELLYFIN_PASSWORD", "true")
+    repair_database(str(db_file), marker_file=str(marker_file))
+
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("SELECT Username, Password, InvalidLoginAttemptCount FROM Users")
+    u_row = cur.fetchone()
+    assert u_row[1] is None  # Reset to blank because force env was set
+    conn.close()
+
+
+def test_repair_system_xml(tmp_path):
+    cfg_file = tmp_path / "system.xml"
+    cfg_file.write_text("<SystemConfiguration><IsStartupWizardCompleted>false</IsStartupWizardCompleted></SystemConfiguration>")
+
+    repair_system_xml(configs=[str(cfg_file)])
+
+    content = cfg_file.read_text()
+    assert "<IsStartupWizardCompleted>true</IsStartupWizardCompleted>" in content

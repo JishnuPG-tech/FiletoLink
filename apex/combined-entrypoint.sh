@@ -2,6 +2,11 @@
 set -euo pipefail
 
 FILETOLINK_PID="${1:-}"
+JELLYFIN_PID=""
+FASTAPI_PID=""
+NGINX_PID=""
+TG_STREAMER_PID=""
+SYNC_PID=""
 export HOSTNAME="Apex"
 
 echo "[BOOT] Starting Gateway..."
@@ -43,7 +48,6 @@ restore_jellyfin_local() {
             -exec cp -a -f {} "$LOCAL_ROOT/data/" \; 2>/dev/null || true
         echo "[PERSISTENCE] Jellyfin database snapshot found ($(stat -c '%s' /data/jellyfin/data/data/jellyfin.db 2>/dev/null || echo unknown) bytes)."
         sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" "PRAGMA journal_mode=WAL; PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
-        python3 /opt/apex/repair_jellyfin_libraries.py 2>/dev/null || python3 "$(dirname "$0")/repair_jellyfin_libraries.py" 2>/dev/null || true
     else
         echo "[PERSISTENCE] No Jellyfin database snapshot found; Jellyfin will run first-time initialization."
     fi
@@ -52,6 +56,11 @@ restore_jellyfin_local() {
     fi
     if [ -d "/data/jellyfin/cache" ]; then
         cp -a -f /data/jellyfin/cache/. "$LOCAL_ROOT/cache/" 2>/dev/null || true
+    fi
+
+    # Run library and auth repair after restoring both database and config
+    if [ -f "$LOCAL_ROOT/data/data/jellyfin.db" ] || [ -f "/data/jellyfin/data/data/jellyfin.db" ]; then
+        python3 /opt/apex/repair_jellyfin_libraries.py 2>/dev/null || python3 "$(dirname "$0")/repair_jellyfin_libraries.py" 2>/dev/null || true
     fi
 
     # Permanently delete TV Shows/English and blacklisted demo episodes from media paths
@@ -303,6 +312,61 @@ echo "[HEALTH] Nginx starting..."
 nginx -g 'daemon off;' -c /app/combined-nginx.conf &
 NGINX_PID=$!
 
+perform_final_sync() {
+    echo "[PERSISTENCE] Graceful shutdown initiated. Syncing durable Jellyfin state..."
+    if [ -n "$JELLYFIN_PID" ] && kill -0 "$JELLYFIN_PID" 2>/dev/null; then
+        echo "[JELLYFIN] Sending SIGTERM to Jellyfin (PID $JELLYFIN_PID)..."
+        kill -TERM "$JELLYFIN_PID" 2>/dev/null || true
+        for i in {1..10}; do
+            if ! kill -0 "$JELLYFIN_PID" 2>/dev/null; then
+                break
+            fi
+            sleep 0.5
+        done
+        kill -9 "$JELLYFIN_PID" 2>/dev/null || true
+    fi
+
+    if [ -f "$LOCAL_ROOT/data/data/jellyfin.db" ]; then
+        sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
+        mkdir -p /data/jellyfin/data/data
+        if sqlite3 "$LOCAL_ROOT/data/data/jellyfin.db" ".backup '/data/jellyfin/data/data/jellyfin.db'" 2>/dev/null; then
+            echo "[PERSISTENCE] Successfully backed up jellyfin.db to persistent volume."
+        else
+            cp -f "$LOCAL_ROOT/data/data/jellyfin.db" /data/jellyfin/data/data/jellyfin.db 2>/dev/null || true
+        fi
+    fi
+
+    if [ -d "$LOCAL_ROOT/data" ]; then
+        find "$LOCAL_ROOT/data" -mindepth 1 -maxdepth 1 \
+            -not -name data \
+            -not -name metadata \
+            -exec cp -a -f {} /data/jellyfin/data/ \; 2>/dev/null || true
+    fi
+
+    if [ -d "$LOCAL_ROOT/data/metadata" ]; then
+        mkdir -p /data/jellyfin/data/metadata.snapshot
+        cp -a -f "$LOCAL_ROOT/data/metadata/." /data/jellyfin/data/metadata.snapshot/ 2>/dev/null || true
+    fi
+
+    if [ -d "$LOCAL_ROOT/config" ]; then
+        cp -a -f "$LOCAL_ROOT/config/." /data/jellyfin/config/ 2>/dev/null || true
+    fi
+    if [ -d "$LOCAL_ROOT/log" ]; then
+        cp -a -f "$LOCAL_ROOT/log/." /data/jellyfin/log/ 2>/dev/null || true
+    fi
+
+    for pid in "$FASTAPI_PID" "$NGINX_PID" "$TG_STREAMER_PID" "$SYNC_PID" "$FILETOLINK_PID"; do
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            kill -TERM "$pid" 2>/dev/null || true
+        fi
+    done
+
+    echo "[PERSISTENCE] Durable state successfully synced to /data. Exiting."
+    exit 0
+}
+
+trap perform_final_sync SIGTERM SIGINT SIGHUP
+
 echo "[BOOT] All services dispatched. Process Supervisor active."
 
 while true; do
@@ -343,5 +407,6 @@ while true; do
         cd /opt/apex
     fi
 
-    sleep 10
+    sleep 10 &
+    wait $! 2>/dev/null || true
 done
