@@ -157,6 +157,46 @@ def repair_database(db_path: str) -> bool:
             cur.executemany("DELETE FROM BaseItems WHERE Id = ?", [(did,) for did in dup_to_delete])
             print(f"[REPAIR] Removed {len(dup_to_delete)} duplicate movie row(s) from {db_path}.")
 
+        # Check and repair Users table: clear password and login attempt lockouts
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Users'")
+        if cur.fetchone():
+            cur.execute("PRAGMA table_info('Users')")
+            user_cols = [c[1] for c in cur.fetchall()]
+            if "Username" in user_cols and "Password" in user_cols:
+                cur.execute("SELECT Id, Username, InvalidLoginAttemptCount, Password FROM Users")
+                user_rows = cur.fetchall()
+                for u_id, u_name, u_attempts, u_pwd in user_rows:
+                    print(f"[AUTH] Found Jellyfin user '{u_name}' (locked_attempts={u_attempts}, has_password={bool(u_pwd)}) in {db_path}")
+
+                cur.execute("UPDATE Users SET Password = NULL, InvalidLoginAttemptCount = 0")
+                if user_rows:
+                    print(f"[AUTH] Reset password to blank & cleared lockouts for {len(user_rows)} user(s) in {db_path}. Sign in with a blank password is enabled.")
+
+            # Unlock permissions if locked
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Permissions'")
+            if cur.fetchone():
+                try:
+                    cur.execute("UPDATE Permissions SET Value = 0 WHERE Kind = 2")
+                except Exception:
+                    pass
+
+        # Synchronize APEX_JELLYFIN_API_KEY into ApiKeys table if present
+        api_key = os.environ.get("APEX_JELLYFIN_API_KEY", "").strip().strip('"')
+        if api_key:
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ApiKeys'")
+            if cur.fetchone():
+                try:
+                    cur.execute("SELECT Id FROM ApiKeys WHERE AccessToken = ?", (api_key,))
+                    if not cur.fetchone():
+                        now = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                        cur.execute(
+                            "INSERT INTO ApiKeys (AccessToken, Name, DateCreated, DateLastActivity) VALUES (?, ?, ?, ?)",
+                            (api_key, "Apex Gateway", now, now)
+                        )
+                        print(f"[AUTH] Registered APEX_JELLYFIN_API_KEY into ApiKeys table in {db_path}.")
+                except Exception as ak_err:
+                    print(f"[AUTH] Note inserting ApiKey: {ak_err}")
+
         conn.execute("COMMIT")
         conn.close()
         if repaired:
@@ -230,11 +270,47 @@ def purge_plugin_databases():
                     pass
 
 
+def repair_system_xml():
+    """Ensure system.xml has IsStartupWizardCompleted set to true so Jellyfin never
+    redirects to first-time setup or blocks user login."""
+    configs = [
+        "/opt/jellyfin-local/config/system.xml",
+        "/data/jellyfin/config/system.xml",
+    ]
+    for cfg in configs:
+        if not os.path.exists(cfg):
+            continue
+        try:
+            with open(cfg, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            changed = False
+            if "<IsStartupWizardCompleted>" in content:
+                if "<IsStartupWizardCompleted>false</IsStartupWizardCompleted>" in content:
+                    content = content.replace(
+                        "<IsStartupWizardCompleted>false</IsStartupWizardCompleted>",
+                        "<IsStartupWizardCompleted>true</IsStartupWizardCompleted>"
+                    )
+                    changed = True
+            elif "</SystemConfiguration>" in content:
+                content = content.replace(
+                    "</SystemConfiguration>",
+                    "  <IsStartupWizardCompleted>true</IsStartupWizardCompleted>\n</SystemConfiguration>"
+                )
+                changed = True
+            if changed:
+                with open(cfg, "w", encoding="utf-8") as f:
+                    f.write(content)
+                print(f"[REPAIR] Ensured IsStartupWizardCompleted=true in {cfg}")
+        except Exception as e:
+            print(f"[REPAIR] Note repairing {cfg}: {e}")
+
+
 def main():
     for db in TARGET_DATABASES:
         repair_database(db)
     purge_plugin_databases()
     cleanup_empty_media_folders()
+    repair_system_xml()
 
 
 if __name__ == "__main__":

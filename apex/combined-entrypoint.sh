@@ -231,6 +231,13 @@ if re.search(r"<ServerName>[^<]*</ServerName>", text):
 elif "</SystemConfiguration>" in text:
     text = text.replace("</SystemConfiguration>", f"  {name_replacement}\n</SystemConfiguration>", 1)
 
+# Ensure startup wizard is completed so Jellyfin goes straight to login
+wizard_replacement = "<IsStartupWizardCompleted>true</IsStartupWizardCompleted>"
+if re.search(r"<IsStartupWizardCompleted>[^<]*</IsStartupWizardCompleted>", text):
+    text = re.sub(r"<IsStartupWizardCompleted>[^<]*</IsStartupWizardCompleted>", wizard_replacement, text, count=1)
+elif "</SystemConfiguration>" in text:
+    text = text.replace("</SystemConfiguration>", f"  {wizard_replacement}\n</SystemConfiguration>", 1)
+
 path.write_text(text, encoding="utf-8")
 PY
     cp -f "$SYSTEM_XML" "/data/jellyfin/config/system.xml" 2>/dev/null || true
