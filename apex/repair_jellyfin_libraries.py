@@ -504,6 +504,65 @@ def heal_mismatched_media(roots=None, databases=None):
                             except Exception:
                                 pass
 
+            # 4. Heal Aadu 3 misidentification (e.g. wrongly identified as Aadu 1 or placed in Aadu (2015))
+            has_aadu_3 = False
+            for f in curr_files:
+                fl = f.lower()
+                if fl.endswith(".strm") and "aadu" in fl and ("3" in fl or "part" in fl):
+                    has_aadu_3 = True
+                    break
+            if "aadu" in dir_lower and ("3" in dir_lower or "part" in dir_lower):
+                has_aadu_3 = True
+
+            if has_aadu_3:
+                mismatched_aadu = False
+                for fn in curr_files:
+                    if fn.lower().endswith(".nfo"):
+                        nfo_p = os.path.join(dirpath, fn)
+                        try:
+                            with open(nfo_p, "r", encoding="utf-8", errors="ignore") as nf:
+                                content = nf.read()
+                            if "324976" in content or "489709" in content or ("<title>Aadu</title>" in content and "<title>Aadu 3" not in content):
+                                mismatched_aadu = True
+                                break
+                        except Exception:
+                            pass
+                is_wrong_dir = dirname in ("Aadu (2015)", "Aadu", "Aadu 2") or "/Movies/English" in dirpath
+                if mismatched_aadu or is_wrong_dir:
+                    print(f"[REPAIR] Healing Aadu 3 media from '{dirpath}'...")
+                    target_aadu_dir = "/data/jellyfin/media/Movies/Malayalam/Aadu 3 Part 1 (2026)"
+                    os.makedirs(target_aadu_dir, exist_ok=True)
+                    for fn in list(curr_files):
+                        if fn.lower().endswith(".strm"):
+                            old_s = os.path.join(dirpath, fn)
+                            new_s = os.path.join(target_aadu_dir, "Aadu 3 Part 1 (2026).strm")
+                            if old_s != new_s:
+                                try:
+                                    if not os.path.exists(new_s):
+                                        os.rename(old_s, new_s)
+                                    else:
+                                        os.remove(old_s)
+                                    print(f"[REPAIR] Relocated Aadu 3 strm: '{old_s}' -> '{new_s}'")
+                                except Exception as mv_err:
+                                    print(f"[REPAIR] Error moving Aadu 3 strm: {mv_err}")
+                    # Remove mismatched artwork/nfo from old directory
+                    for fn in curr_files:
+                        fn_l = fn.lower()
+                        if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l in ("poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg"):
+                            try:
+                                os.remove(os.path.join(dirpath, fn))
+                            except Exception:
+                                pass
+                    for db_p in db_list:
+                        if os.path.exists(db_p):
+                            try:
+                                conn = sqlite3.connect(db_p, timeout=5)
+                                conn.execute("DELETE FROM BaseItems WHERE Path LIKE '%Aadu 3%' OR (Path LIKE '%Aadu%' AND (Data LIKE '%324976%' OR Data LIKE '%489709%'))")
+                                conn.commit()
+                                conn.close()
+                            except Exception:
+                                pass
+
 
 def repair_user_subtitle_preferences(configs=None):
     """Ensure user profile config XML files have SubtitleMode set to Always so

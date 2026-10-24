@@ -324,6 +324,45 @@ class TestBestTmdbMatch:
         hit = best_tmdb_match(results, "aadu 3 part 1", "movie", 2025)
         assert hit["id"] == 1
 
+    def test_aadu_3_rejects_unnumbered_aadu_1(self):
+        # When searching for Aadu 3, candidate Aadu (2015, no digit) MUST be rejected
+        results = [
+            {
+                "id": 324976,
+                "title": "Aadu",
+                "release_date": "2015-02-06",
+                "original_language": "ml",
+            },
+        ]
+        assert best_tmdb_match(results, "aadu 3", "movie", language="ml") is None
+        assert best_tmdb_match(results, "aadu 3 part 1", "movie", language="ml") is None
+
+    def test_aadu_3_matches_aadu_3_part_1(self):
+        results = [
+            {
+                "id": 324976,
+                "title": "Aadu",
+                "release_date": "2015-02-06",
+                "original_language": "ml",
+            },
+            {
+                "id": 489709,
+                "title": "Aadu 2",
+                "release_date": "2017-12-22",
+                "original_language": "ml",
+            },
+            {
+                "id": 999999,
+                "title": "Aadu 3 Part 1",
+                "release_date": "2026-03-19",
+                "original_language": "ml",
+            },
+        ]
+        hit = best_tmdb_match(results, "aadu 3", "movie", language="ml")
+        assert hit is not None and hit["id"] == 999999
+        hit_p1 = best_tmdb_match(results, "aadu 3 part 1", "movie", language="ml")
+        assert hit_p1 is not None and hit_p1["id"] == 999999
+
     def test_year_proximity_beats_exact_mismatch(self):
         # Both films share title tokens; the ±1 year film should win over a
         # far-year film when the query year is close to one of them.

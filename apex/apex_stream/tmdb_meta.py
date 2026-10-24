@@ -621,19 +621,13 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
         q_digits = {t for t in q_toks if t.isdigit()}
         r_digits = {t for t in combined_r if t.isdigit()}
 
-        # If query has sequel digits and hit has sequel digits, they must share at least one sequel digit
-        # (e.g. "Aadu 3 Part 1" has digits {"3", "1"}, hit has {"3"} -> match on 3!)
-        if q_digits and r_digits and not (q_digits & r_digits):
-            # Query has sequel number (e.g. 3) and hit has a DIFFERENT sequel number (e.g. 2) -> REJECT
+        # If query has sequel digits (e.g. 2, 3), hit MUST also have digits and share at least one!
+        # A sequel query (e.g. "Aadu 3" or "Iron Man 3") must NEVER match an unnumbered first film (e.g. "Aadu" or "Iron Man")!
+        if q_digits and not (q_digits & r_digits):
             continue
 
-        # If query has sequel digits, but hit has NO sequel digits:
-        # Only allowed if hit is strictly contained in query (e.g. original unnumbered title on TMDB)
-        if q_digits and not r_digits and not hit_contained_in_query:
-            continue
-
-        # If query has NO sequel digits (original movie), hit must NOT be a sequel (e.g. Movie 2)
-        if r_digits and not q_digits and not query_contained_in_hit:
+        # If query has NO sequel digits (original movie), hit must NOT be a numbered sequel (e.g. Movie 2)
+        if r_digits and not q_digits:
             continue
 
         # Multi-token overlap requirements:
