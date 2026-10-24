@@ -80,6 +80,7 @@
 			let disposed = false;
 
 			const SVG_PLAY = `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M320-273v-414q0-17 12-28.5t28-11.5q5 0 10.5 1.5T381-721l326 207q9 6 13.5 15t4.5 19q0 10-4.5 19T707-446L381-239q-5 3-10.5 4.5T360-233q-16 0-28-11.5T320-273Z"/></svg>`;
+			const SVG_TRAILER = `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="m380-300 280-180-280-180v360ZM200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0 0v-560 560Z"/></svg>`;
 			const SVG_INFO = `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M423.5-703.5Q400-727 400-760t23.5-56.5Q447-840 480-840t56.5 23.5Q560-793 560-760t-23.5 56.5Q513-680 480-680t-56.5-23.5Zm14 566Q420-155 420-180v-360q0-25 17.5-42.5T480-600q25 0 42.5 17.5T540-540v360q0 25-17.5 42.5T480-120q-25 0-42.5-17.5Z"/></svg>`;
 			const SVG_RATING = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#e3e3e3"><path d="M168-144q-29 0-50.5-21.5T96-216v-528q0-29.7 21.5-50.85Q139-816 168-816h624q29 0 50.5 21.15T864-744v528q0 29-21.5 50.5T792-144H168Zm337.5-154.35Q516-308.7 516-324v-168q0-15.3-10.29-25.65Q495.42-528 480.21-528t-25.71 10.35Q444-507.3 444-492v168q0 15.3 10.29 25.65Q464.58-288 479.79-288t25.71-10.35ZM480-600q14 0 25-11t11-25.5q0-14.5-11-25T479.5-672q-14.5 0-25 10.35T444-636q0 14 10.35 25T480-600ZM168-228h72v-72h-72v72Zm552 0h72v-72h-72v72ZM168-372h72v-72h-72v72Zm552 0h72v-72h-72v72ZM168-516h72v-72h-72v72Zm552 0h72v-72h-72v72ZM168-660h72v-72h-72v72Zm552 0h72v-72h-72v72Z"/></svg>`;
 			const SVG_CLOCK = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#e3e3e3"><path d="M516-510v-174q0-15.3-10.29-25.65Q495.42-720 480.21-720t-25.71 10.35Q444-699.3 444-684v189q0 8 3 14.5t8 11.5l133.85 133.85Q600-324 614.5-324.5 629-325 640-336t11-25.5q0-14.5-11.34-25.75L516-510ZM480-96q-79.38 0-149.19-30T208.5-208.5Q156-261 126-330.96t-30-149.5Q96-560 126-630q30-70 82.5-122t122.46-82q69.96-30 149.5-30t149.55 30.24q70 30.24 121.79 82.08 51.78 51.84 81.99 121.92Q864-559.68 864-480q0 79.38-30 149.19T752-208.5Q700-156 629.87-126T480-96Z"/></svg>`;
@@ -659,6 +660,105 @@
 				navigateTo(route);
 			}
 
+			function closeTrailerModal() {
+				const existing = document.getElementById('trailer-modal-backdrop');
+				if (existing) {
+					const ifr = existing.querySelector('iframe');
+					if (ifr) ifr.src = '';
+					existing.remove();
+				}
+			}
+
+			async function openTrailerModal(item, title) {
+				closeTrailerModal();
+				const isSeries = item.Type === 'Series';
+				const tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.TmdbCollection;
+				let youtubeKey = null;
+
+				const backdrop = document.createElement('div');
+				backdrop.id = 'trailer-modal-backdrop';
+				backdrop.className = 'trailer-modal-backdrop';
+
+				const container = document.createElement('div');
+				container.className = 'trailer-modal-container';
+
+				const closeBtn = document.createElement('button');
+				closeBtn.type = 'button';
+				closeBtn.className = 'trailer-modal-close';
+				closeBtn.innerHTML = '&times;';
+				closeBtn.setAttribute('aria-label', 'Close Trailer');
+				closeBtn.onclick = closeTrailerModal;
+
+				const titleHeader = document.createElement('div');
+				titleHeader.className = 'trailer-modal-header';
+				titleHeader.textContent = `${title} — Official Trailer`;
+
+				const videoWrapper = document.createElement('div');
+				videoWrapper.className = 'trailer-video-wrapper';
+
+				const loader = document.createElement('div');
+				loader.className = 'trailer-loader';
+				loader.textContent = 'Loading Official Trailer...';
+				videoWrapper.appendChild(loader);
+
+				container.appendChild(closeBtn);
+				container.appendChild(titleHeader);
+				container.appendChild(videoWrapper);
+				backdrop.appendChild(container);
+				document.body.appendChild(backdrop);
+
+				backdrop.addEventListener('click', (e) => {
+					if (e.target === backdrop) closeTrailerModal();
+				});
+
+				const keyHandler = (e) => {
+					if (e.key === 'Escape') {
+						closeTrailerModal();
+						window.removeEventListener('keydown', keyHandler);
+					}
+				};
+				window.addEventListener('keydown', keyHandler);
+
+				const TMDB_KEY = "2e737c385b0d00f7b0f340889f074dcf";
+				if (tmdbId) {
+					try {
+						const endpoint = `https://api.themoviedb.org/3/${isSeries ? 'tv' : 'movie'}/${tmdbId}/videos?api_key=${TMDB_KEY}`;
+						const res = await fetch(endpoint, { signal: AbortSignal.timeout(6000) });
+						if (res.ok) {
+							const data = await res.json();
+							const vids = data.results || [];
+							const official = vids.find(v => v.site === 'YouTube' && v.type === 'Trailer' && v.official)
+								|| vids.find(v => v.site === 'YouTube' && v.type === 'Trailer')
+								|| vids.find(v => v.site === 'YouTube' && v.type === 'Teaser')
+								|| vids.find(v => v.site === 'YouTube');
+							if (official && official.key) {
+								youtubeKey = official.key;
+							}
+						}
+					} catch (err) {
+						console.warn('[Spotlight Trailer] TMDB video lookup fallback:', err);
+					}
+				}
+
+				let embedSrc = '';
+				if (youtubeKey) {
+					embedSrc = `https://www.youtube-nocookie.com/embed/${youtubeKey}?autoplay=1&rel=0&modestbranding=1&playsinline=1`;
+				} else {
+					const query = encodeURIComponent(`${title} official trailer`);
+					embedSrc = `https://www.youtube-nocookie.com/embed?listType=search&list=${query}&autoplay=1`;
+				}
+
+				const iframe = document.createElement('iframe');
+				iframe.src = embedSrc;
+				iframe.title = `${title} Official Trailer`;
+				iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+				iframe.allowFullscreen = true;
+				iframe.className = 'trailer-iframe';
+
+				videoWrapper.innerHTML = '';
+				videoWrapper.appendChild(iframe);
+			}
+
 			function updateContent(item, artwork) {
 				const isEpisode = item.Type === 'Episode';
 				const isSeries = item.Type === 'Series';
@@ -742,6 +842,13 @@
 					setButtonContent(playButton, SVG_PLAY, playLabel);
 					playButton.addEventListener('click', () => triggerPlayback(item, playRoute));
 
+					const trailerButton = document.createElement('button');
+					trailerButton.type = 'button';
+					trailerButton.className = 'btn btn-trailer';
+					trailerButton.setAttribute('aria-label', `Play trailer for ${title}`);
+					setButtonContent(trailerButton, SVG_TRAILER, 'Trailer');
+					trailerButton.addEventListener('click', () => openTrailerModal(item, title));
+
 					const infoButton = document.createElement('a');
 					infoButton.className = 'btn btn-info';
 					infoButton.href = `#${detailRoute}`;
@@ -751,6 +858,7 @@
 					const buttonsContainer = $('buttons');
 					while (buttonsContainer.firstChild) buttonsContainer.removeChild(buttonsContainer.firstChild);
 					buttonsContainer.appendChild(playButton);
+					buttonsContainer.appendChild(trailerButton);
 					buttonsContainer.appendChild(infoButton);
 				} catch (error) {
 					console.error('[Abyss Spotlight] buttons section failed:', error);

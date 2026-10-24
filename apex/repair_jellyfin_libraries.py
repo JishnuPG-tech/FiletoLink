@@ -218,13 +218,20 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
                         except Exception:
                             cfg = {}
                     user_cfg = cfg.setdefault("Configuration", {})
-                    if user_cfg.get("SubtitleMode") != "Always" or user_cfg.get("SubtitleLanguagePreference") != "en":
-                        user_cfg["SubtitleMode"] = "Always"
-                        user_cfg["SubtitleLanguagePreference"] = "en"
-                        user_cfg["PlayDefaultAudioTrack"] = True
-                        cfg["Configuration"] = user_cfg
-                        cur.execute("UPDATE Users SET Data = ? WHERE Id = ?", (json.dumps(cfg), u_id))
-                        print(f"[AUTH] Enabled auto-subtitles (SubtitleMode=Always, lang=en) in DB for user Id={u_id}")
+                    user_cfg["SubtitleMode"] = "Always"
+                    user_cfg["SubtitleLanguagePreference"] = "en"
+                    user_cfg["PlayDefaultAudioTrack"] = True
+
+                    # Direct-Play Zero-Transcode Optimization
+                    policy = cfg.setdefault("Policy", {})
+                    policy["EnablePlaybackRemuxing"] = True
+                    policy["EnableAudioPlaybackTranscoding"] = True
+                    policy["EnableVideoPlaybackTranscoding"] = False
+
+                    cfg["Configuration"] = user_cfg
+                    cfg["Policy"] = policy
+                    cur.execute("UPDATE Users SET Data = ? WHERE Id = ?", (json.dumps(cfg), u_id))
+                    print(f"[AUTH] Configured direct play & subtitles (Zero-Transcode, SubtitleMode=Always) in DB for user Id={u_id}")
 
             # Unlock permissions if locked
             cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Permissions'")
@@ -529,6 +536,52 @@ def repair_user_subtitle_preferences(configs=None):
                         print(f"[REPAIR] Note configuring user subtitles in {cfg_p}: {e}")
 
 
+def repair_user_policy_preferences(configs=None):
+    """Ensure user policy.xml prioritizes direct-play and stream remuxing over heavy CPU video transcoding."""
+    search_dirs = configs or [
+        "/opt/jellyfin-local/config/users",
+        "/data/jellyfin/config/users",
+    ]
+    for udir in search_dirs:
+        if not os.path.exists(udir):
+            continue
+        for root, _, files in os.walk(udir):
+            for fn in files:
+                if fn.lower() == "policy.xml":
+                    p_path = os.path.join(root, fn)
+                    try:
+                        with open(p_path, "r", encoding="utf-8", errors="ignore") as f:
+                            content = f.read()
+                        changed = False
+                        if "<EnablePlaybackRemuxing>" in content:
+                            new_content = re.sub(r"<EnablePlaybackRemuxing>.*?</EnablePlaybackRemuxing>", "<EnablePlaybackRemuxing>true</EnablePlaybackRemuxing>", content)
+                            if new_content != content: content = new_content; changed = True
+                        elif "</UserPolicy>" in content:
+                            content = content.replace("</UserPolicy>", "  <EnablePlaybackRemuxing>true</EnablePlaybackRemuxing>\n</UserPolicy>")
+                            changed = True
+
+                        if "<EnableAudioPlaybackTranscoding>" in content:
+                            new_content = re.sub(r"<EnableAudioPlaybackTranscoding>.*?</EnableAudioPlaybackTranscoding>", "<EnableAudioPlaybackTranscoding>true</EnableAudioPlaybackTranscoding>", content)
+                            if new_content != content: content = new_content; changed = True
+                        elif "</UserPolicy>" in content:
+                            content = content.replace("</UserPolicy>", "  <EnableAudioPlaybackTranscoding>true</EnableAudioPlaybackTranscoding>\n</UserPolicy>")
+                            changed = True
+
+                        if "<EnableVideoPlaybackTranscoding>" in content:
+                            new_content = re.sub(r"<EnableVideoPlaybackTranscoding>.*?</EnableVideoPlaybackTranscoding>", "<EnableVideoPlaybackTranscoding>false</EnableVideoPlaybackTranscoding>", content)
+                            if new_content != content: content = new_content; changed = True
+                        elif "</UserPolicy>" in content:
+                            content = content.replace("</UserPolicy>", "  <EnableVideoPlaybackTranscoding>false</EnableVideoPlaybackTranscoding>\n</UserPolicy>")
+                            changed = True
+
+                        if changed:
+                            with open(p_path, "w", encoding="utf-8") as f:
+                                f.write(content)
+                            print(f"[REPAIR] Optimized direct-play policy in {p_path}")
+                    except Exception as e:
+                        print(f"[REPAIR] Note configuring user policy in {p_path}: {e}")
+
+
 def repair_system_xml(configs=None):
     """Ensure system.xml has IsStartupWizardCompleted set to true so Jellyfin never
     redirects to first-time setup or blocks user login."""
@@ -593,6 +646,7 @@ def main():
     heal_subtitle_files()
     heal_mismatched_media()
     repair_user_subtitle_preferences()
+    repair_user_policy_preferences()
     repair_system_xml()
 
 

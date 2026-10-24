@@ -36,7 +36,8 @@ _RELEASE_TOKENS = {
     "bluray", "bdrip", "brrip", "web-dl", "webrip", "web", "hdtv", "dvdrip", "remux",
     "2160p", "4k", "1080p", "720p", "480p",
     "x264", "x265", "h264", "h265", "hevc", "avc", "10bit",
-    "yts", "psa", "sparks", "rarbg", "galaxyrg", "eztv", "flux", "qxr", "amzn", "nf", "dsnp"
+    "yts", "yify", "psa", "sparks", "rarbg", "galaxyrg", "eztv", "flux", "qxr", "amzn", "nf", "dsnp",
+    "ion10", "evo", "tgx", "chd", "wiki", "ctrlhd"
 }
 
 _CAM_TOKENS = {
@@ -253,12 +254,23 @@ LANG_2TO3.update({
     "zh": "chi", "ja": "jpn", "ko": "kor", "fr": "fra", "de": "ger"
 })
 
+_NAME_TO_ISO639_2 = {
+    "english": "eng", "malayalam": "mal", "hindi": "hin", "tamil": "tam",
+    "telugu": "tel", "kannada": "kan", "bengali": "ben", "punjabi": "pan",
+    "marathi": "mar", "gujarati": "guj", "urdu": "urd", "korean": "kor",
+    "japanese": "jpn", "chinese": "chi", "spanish": "spa", "french": "fra",
+    "german": "ger", "russian": "rus", "arabic": "ara", "portuguese": "por",
+    "indonesian": "ind", "italian": "ita"
+}
+
 
 def normalize_to_iso639_2(code: Optional[str]) -> str:
-    """Normalize language code to 3-letter ISO-639-2/B (e.g. 'en' -> 'eng', 'ml' -> 'mal')."""
+    """Normalize language code or name to 3-letter ISO-639-2/B (e.g. 'en' -> 'eng', 'English' -> 'eng')."""
     if not code:
         return "eng"
-    c = code.strip().lower()
+    c = str(code).strip().lower()
+    if c in _NAME_TO_ISO639_2:
+        return _NAME_TO_ISO639_2[c]
     if len(c) == 2:
         return LANG_2TO3.get(c, c)
     return c
@@ -381,6 +393,199 @@ async def fetch_msone_subtitles(
     return candidates
 
 
+async def fetch_subdl_subtitles(
+    session,
+    imdb_id: Optional[str] = None,
+    tmdb_id: Optional[str] = None,
+    film_name: Optional[str] = None,
+    year: Optional[int] = None,
+    is_tv: bool = False,
+    season: int = 1,
+    episode: int = 1,
+    target_langs: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Query SubDL API for subtitle candidates."""
+    api_key = os.environ.get("SUBDL_API_KEY", "")
+    params: Dict[str, str] = {}
+    if api_key:
+        params["api_key"] = api_key
+    if imdb_id and str(imdb_id).startswith("tt"):
+        params["imdb_id"] = str(imdb_id)
+    elif tmdb_id:
+        params["tmdb_id"] = str(tmdb_id)
+    elif film_name:
+        params["film_name"] = str(film_name)
+    else:
+        return []
+
+    params["type"] = "tv" if is_tv else "movie"
+    if is_tv:
+        params["season_number"] = str(season)
+        params["episode_number"] = str(episode)
+    if year:
+        params["year"] = str(year)
+
+    if target_langs:
+        langs_2 = [LANG_3TO2.get(normalize_to_iso639_2(l), "en") for l in target_langs]
+        params["languages"] = ",".join(sorted(set(langs_2)))
+
+    endpoint = "https://api.subdl.com/api/v1/subtitles"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+    }
+
+    norm_target = {normalize_to_iso639_2(l) for l in (target_langs or [])} if target_langs else None
+    candidates: List[Dict[str, Any]] = []
+    try:
+        async with session.get(endpoint, params=params, headers=headers, timeout=12) as resp:
+            if resp.status == 200:
+                payload = await resp.json()
+                subs = payload.get("subtitles") or payload.get("results") or []
+                for s in subs:
+                    raw_url = s.get("url") or s.get("download_url") or ""
+                    if not raw_url:
+                        continue
+                    full_url = raw_url if raw_url.startswith("http") else f"https://dl.subdl.com{raw_url}"
+                    raw_lang = s.get("lang") or s.get("language") or ""
+                    lang_3 = normalize_to_iso639_2(raw_lang)
+                    if norm_target and lang_3 not in norm_target:
+                        continue
+                    candidates.append({
+                        "id": full_url,
+                        "url": full_url,
+                        "lang": lang_3,
+                        "subtitleFileName": s.get("release_name") or s.get("name") or "",
+                        "movieReleaseName": s.get("release_name") or "",
+                        "releaseGroup": s.get("author") or "",
+                        "downloadCount": int(s.get("download_count") or s.get("downloads") or 100),
+                        "provider": "subdl",
+                    })
+    except Exception as exc:
+        logger.info(f"SubDL search note: {exc}")
+
+    return candidates
+
+
+async def fetch_opensubtitles_com(
+    session,
+    imdb_id: Optional[str] = None,
+    tmdb_id: Optional[str] = None,
+    query: Optional[str] = None,
+    is_tv: bool = False,
+    season: int = 1,
+    episode: int = 1,
+    target_langs: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Query OpenSubtitles.com REST API if OPENSUBTITLES_API_KEY is configured."""
+    api_key = os.environ.get("OPENSUBTITLES_API_KEY")
+    if not api_key:
+        return []
+
+    params: Dict[str, str] = {}
+    if imdb_id and str(imdb_id).startswith("tt"):
+        raw_numeric = re.sub(r"\D", "", str(imdb_id))
+        if raw_numeric:
+            params["imdb_id"] = raw_numeric
+    elif tmdb_id:
+        params["tmdb_id"] = str(tmdb_id)
+    elif query:
+        params["query"] = str(query)
+    else:
+        return []
+
+    if is_tv:
+        params["type"] = "episode"
+        params["season_number"] = str(season)
+        params["episode_number"] = str(episode)
+    else:
+        params["type"] = "movie"
+
+    if target_langs:
+        langs_2 = [LANG_3TO2.get(normalize_to_iso639_2(l), "en") for l in target_langs]
+        params["languages"] = ",".join(sorted(set(langs_2)))
+
+    endpoint = "https://api.opensubtitles.com/api/v1/subtitles"
+    headers = {
+        "Api-Key": api_key,
+        "User-Agent": "Jellyfin-Apex v2.1.0",
+        "Accept": "application/json",
+    }
+
+    norm_target = {normalize_to_iso639_2(l) for l in (target_langs or [])} if target_langs else None
+    candidates: List[Dict[str, Any]] = []
+    try:
+        async with session.get(endpoint, params=params, headers=headers, timeout=12) as resp:
+            if resp.status == 200:
+                payload = await resp.json()
+                data = payload.get("data") or []
+                for item in data:
+                    attrs = item.get("attributes") or {}
+                    files = attrs.get("files") or []
+                    for f in files:
+                        fid = f.get("file_id")
+                        if not fid:
+                            continue
+                        dl_url = f"https://api.opensubtitles.com/api/v1/download/{fid}"
+                        raw_lang = attrs.get("language") or ""
+                        lang_3 = normalize_to_iso639_2(raw_lang)
+                        if norm_target and lang_3 not in norm_target:
+                            continue
+                        candidates.append({
+                            "id": str(fid),
+                            "url": dl_url,
+                            "lang": lang_3,
+                            "subtitleFileName": f.get("file_name") or attrs.get("release") or "",
+                            "movieReleaseName": attrs.get("release") or "",
+                            "releaseGroup": "",
+                            "downloadCount": int(attrs.get("download_count") or 50),
+                            "provider": "opensubtitles.com",
+                        })
+    except Exception as exc:
+        logger.info(f"OpenSubtitles.com API note: {exc}")
+
+    return candidates
+
+
+TIMING_LINE_RE = re.compile(
+    r"(\d{1,2}):(\d{2}):(\d{2})([,.])(\d{3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})([,.])(\d{3})"
+)
+
+
+def adjust_srt_timing(srt_text: str, offset_seconds: float) -> str:
+    """Shift all timestamps in an SRT or WebVTT subtitle text by offset_seconds (can be positive or negative).
+
+    Timestamps are clamped to 00:00:00,000.
+    Preserves all dialogue, indices, and markup.
+    """
+    if not srt_text or not isinstance(srt_text, str) or offset_seconds == 0.0:
+        return srt_text
+
+    offset_ms = int(round(offset_seconds * 1000))
+
+    def _shift_ts(h: int, m: int, s: int, ms: int) -> Tuple[int, int, int, int]:
+        tot_ms = (h * 3600 + m * 60 + s) * 1000 + ms + offset_ms
+        tot_ms = max(0, tot_ms)
+        nh = tot_ms // 3600000
+        rem = tot_ms % 3600000
+        nm = rem // 60000
+        rem = rem % 60000
+        ns = rem // 1000
+        nms = rem % 1000
+        return nh, nm, ns, nms
+
+    def _replace_match(match: re.Match) -> str:
+        h1, m1, s1, sep1, ms1 = int(match.group(1)), int(match.group(2)), int(match.group(3)), match.group(4), int(match.group(5))
+        h2, m2, s2, sep2, ms2 = int(match.group(6)), int(match.group(7)), int(match.group(8)), match.group(9), int(match.group(10))
+
+        nh1, nm1, ns1, nms1 = _shift_ts(h1, m1, s1, ms1)
+        nh2, nm2, ns2, nms2 = _shift_ts(h2, m2, s2, ms2)
+
+        return f"{nh1:02d}:{nm1:02d}:{ns1:02d}{sep1}{nms1:03d} --> {nh2:02d}:{nm2:02d}:{ns2:02d}{sep2}{nms2:03d}"
+
+    return TIMING_LINE_RE.sub(_replace_match, srt_text)
+
+
 async def download_subtitle_file(session, url: str) -> Optional[str]:
     """Download and extract clean, validated UTF-8 SRT content from a URL."""
     if not url:
@@ -492,7 +697,35 @@ async def inject_subtitles_for_entry(
                 )
                 candidates.extend(stremio_cand)
 
-            # 2. MSone provider if language is Malayalam ('mal')
+            # 2. SubDL provider (dual redundancy fallback)
+            subdl_cand = await fetch_subdl_subtitles(
+                active_session,
+                imdb_id=imdb_id,
+                tmdb_id=entry.get("tmdb_id"),
+                film_name=entry.get("tmdb_title") or entry.get("clean_title") or entry.get("title"),
+                year=entry.get("year"),
+                is_tv=is_tv,
+                season=season,
+                episode=episode,
+                target_langs=[lang],
+            )
+            candidates.extend(subdl_cand)
+
+            # 3. OpenSubtitles.com REST API (if configured)
+            if os.environ.get("OPENSUBTITLES_API_KEY"):
+                os_cand = await fetch_opensubtitles_com(
+                    active_session,
+                    imdb_id=imdb_id,
+                    tmdb_id=entry.get("tmdb_id"),
+                    query=entry.get("tmdb_title") or entry.get("clean_title") or entry.get("title"),
+                    is_tv=is_tv,
+                    season=season,
+                    episode=episode,
+                    target_langs=[lang],
+                )
+                candidates.extend(os_cand)
+
+            # 4. MSone provider if language is Malayalam ('mal')
             if lang == "mal" and not is_tv:
                 msone_title = entry.get("tmdb_title") or entry.get("clean_title") or entry.get("title")
                 msone_cand = await fetch_msone_subtitles(active_session, msone_title, year=entry.get("year"))
@@ -511,6 +744,11 @@ async def inject_subtitles_for_entry(
 
                 srt_content = await download_subtitle_file(active_session, dl_url)
                 if srt_content and is_valid_srt(srt_content):
+                    # Check for subtitle timing offset
+                    offset_sec = float(entry.get("subtitle_offset_seconds") or 0.0)
+                    if offset_sec != 0.0:
+                        srt_content = adjust_srt_timing(srt_content, offset_sec)
+
                     try:
                         os.makedirs(target_dir, exist_ok=True)
                         tmp_sub = f"{sidecar_path}.{os.getpid()}_{uuid.uuid4().hex[:8]}.tmp"

@@ -357,7 +357,12 @@ class StreamDriver:
                 factory = self._factory_for(client.client, source_key[0], source_key[1])
                 source_run = await self.registry.get_run(source_key, next_run_start, next_run_count, factory)
                 try:
-                    await asyncio.wait_for(source_run.read_chunk(), timeout=2.0)
+                    for _ in range(next_run_count):
+                        chunk = await asyncio.wait_for(source_run.read_chunk(), timeout=2.5)
+                        if not chunk:
+                            break
+                    if hasattr(self.metrics, "inc"):
+                        self.metrics.inc("prefetch_runs")
                 finally:
                     await source_run.close()
             finally:

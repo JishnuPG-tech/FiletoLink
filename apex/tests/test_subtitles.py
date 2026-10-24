@@ -9,8 +9,12 @@ from apex_stream.subtitles import (
     extract_srt_from_payload,
     score_subtitle_candidate,
     fetch_stremio_subtitles,
+    fetch_subdl_subtitles,
+    fetch_opensubtitles_com,
     download_subtitle_file,
     inject_subtitles_for_entry,
+    adjust_srt_timing,
+    normalize_to_iso639_2,
 )
 
 
@@ -301,6 +305,96 @@ async def test_inject_subtitles_replaces_corrupt_existing_file(tmp_path):
     assert corrupt_existing.exists()
     assert is_valid_subtitle_file(str(corrupt_existing)) is True
     assert "I feel like you" in corrupt_existing.read_text(encoding="utf-8")
+
+
+def test_adjust_srt_timing():
+    srt = (
+        "1\n"
+        "00:01:20,000 --> 00:01:23,500\n"
+        "Hello World\n\n"
+        "2\n"
+        "00:02:10.200 --> 00:02:15.800\n"
+        "Second Line\n"
+    )
+
+    # Shift +2.5 seconds
+    shifted_pos = adjust_srt_timing(srt, 2.5)
+    assert "00:01:22,500 --> 00:01:26,000" in shifted_pos
+    assert "00:02:12.700 --> 00:02:18.300" in shifted_pos
+    assert "Hello World" in shifted_pos
+
+    # Shift -100.0 seconds (clamped to 0)
+    shifted_neg = adjust_srt_timing(srt, -100.0)
+    assert "00:00:00,000 --> 00:00:00,000" in shifted_neg
+
+    # Shift 0 seconds
+    assert adjust_srt_timing(srt, 0.0) == srt
+
+
+def test_normalize_to_iso639_2():
+    assert normalize_to_iso639_2("en") == "eng"
+    assert normalize_to_iso639_2("English") == "eng"
+    assert normalize_to_iso639_2("Malayalam") == "mal"
+    assert normalize_to_iso639_2("ml") == "mal"
+    assert normalize_to_iso639_2("mal") == "mal"
+    assert normalize_to_iso639_2("es") == "spa"
+
+
+@pytest.mark.asyncio
+async def test_fetch_subdl_subtitles_mock():
+    mock_payload = {
+        "status": True,
+        "subtitles": [
+            {
+                "release_name": "Iron.Man.3.2013.1080p.BluRay.x264-SPARKS",
+                "name": "Iron Man 3",
+                "lang": "English",
+                "author": "SPARKS",
+                "url": "/subtitle/iron-man-3-1080p.zip",
+                "download_count": 12000,
+            }
+        ]
+    }
+    session = MockSession({
+        "api.subdl.com": MockResponse(json_data=mock_payload)
+    })
+
+    cands = await fetch_subdl_subtitles(session, imdb_id="tt1300854", target_langs=["eng"])
+    assert len(cands) == 1
+    assert cands[0]["url"] == "https://dl.subdl.com/subtitle/iron-man-3-1080p.zip"
+    assert cands[0]["lang"] == "eng"
+    assert cands[0]["provider"] == "subdl"
+    assert cands[0]["movieReleaseName"] == "Iron.Man.3.2013.1080p.BluRay.x264-SPARKS"
+
+
+@pytest.mark.asyncio
+async def test_fetch_opensubtitles_com_mock(monkeypatch):
+    monkeypatch.setenv("OPENSUBTITLES_API_KEY", "test-api-key")
+    mock_payload = {
+        "data": [
+            {
+                "attributes": {
+                    "language": "en",
+                    "release": "Iron.Man.3.2013.1080p.BluRay",
+                    "download_count": 450,
+                    "files": [
+                        {"file_id": 98765, "file_name": "IronMan3.srt"}
+                    ]
+                }
+            }
+        ]
+    }
+    session = MockSession({
+        "api.opensubtitles.com": MockResponse(json_data=mock_payload)
+    })
+
+    cands = await fetch_opensubtitles_com(session, imdb_id="tt1300854", target_langs=["eng"])
+    assert len(cands) == 1
+    assert cands[0]["id"] == "98765"
+    assert cands[0]["url"] == "https://api.opensubtitles.com/api/v1/download/98765"
+    assert cands[0]["lang"] == "eng"
+    assert cands[0]["provider"] == "opensubtitles.com"
+
 
 
 

@@ -10,6 +10,7 @@ from repair_jellyfin_libraries import (
     heal_subtitle_files,
     heal_mismatched_media,
     repair_user_subtitle_preferences,
+    repair_user_policy_preferences,
     repair_system_xml,
 )
 
@@ -287,6 +288,20 @@ def test_repair_user_subtitle_preferences(tmp_path):
     content = cfg_file.read_text()
     assert "<SubtitleMode>Always</SubtitleMode>" in content
     assert "<SubtitleLanguagePreference>en</SubtitleLanguagePreference>" in content
+
+
+def test_repair_user_policy_preferences(tmp_path):
+    user_dir = tmp_path / "users" / "admin"
+    user_dir.mkdir(parents=True)
+    policy_file = user_dir / "policy.xml"
+    policy_file.write_text("<UserPolicy><EnableVideoPlaybackTranscoding>true</EnableVideoPlaybackTranscoding></UserPolicy>")
+
+    repair_user_policy_preferences(configs=[str(tmp_path / "users")])
+
+    content = policy_file.read_text()
+    assert "<EnableVideoPlaybackTranscoding>false</EnableVideoPlaybackTranscoding>" in content
+    assert "<EnablePlaybackRemuxing>true</EnablePlaybackRemuxing>" in content
+    assert "<EnableAudioPlaybackTranscoding>true</EnableAudioPlaybackTranscoding>" in content
 
 
 def test_heal_mismatched_media_cleans_noise_and_purges_mismatch(tmp_path):
