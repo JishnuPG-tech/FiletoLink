@@ -124,6 +124,9 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
             "OR Path LIKE '%Ms Rose%' "
             "OR (Path LIKE '%kattalan%' AND Path LIKE '%Telugu%') "
             "OR (Name LIKE '%kattalan%' AND Path LIKE '%Telugu%') "
+            "OR Name LIKE '%Generation Iron%' "
+            "OR Data LIKE '%210879%' "
+            "OR Path LIKE '%Generation Iron%' "
             "OR (Name = 'English' AND type LIKE '%Series%')"
         )
         purged = cur.rowcount
@@ -439,10 +442,13 @@ def heal_mismatched_media(roots=None, databases=None):
                             except Exception as strm_err:
                                 print(f"[REPAIR] Note renaming strm {old_strm}: {strm_err}")
 
-            # 3. Purge Generation Iron misidentification from Iron Man folders
+            # 3. Purge Generation Iron misidentification
             dir_lower = dirname.lower()
-            if "iron" in dir_lower and "man" in dir_lower:
-                has_gen_iron = False
+            is_gen_iron_folder = "generation iron" in dir_lower
+            is_iron_man_folder = "iron" in dir_lower and "man" in dir_lower
+            has_gen_iron = is_gen_iron_folder
+
+            if is_iron_man_folder or is_gen_iron_folder:
                 try:
                     curr_files = os.listdir(dirpath)
                 except Exception:
@@ -460,6 +466,27 @@ def heal_mismatched_media(roots=None, databases=None):
                             pass
                 if has_gen_iron:
                     print(f"[REPAIR] Purging mismatched 'Generation Iron' metadata from '{dirpath}'...")
+                    # If the folder on disk was named Generation Iron, rename to Iron Man 3 (2013)
+                    if is_gen_iron_folder:
+                        parent_d = os.path.dirname(dirpath)
+                        im3_dir = os.path.join(parent_d, "Iron Man 3 (2013)")
+                        for fn in list(curr_files):
+                            if fn.lower().endswith(".strm"):
+                                old_s = os.path.join(dirpath, fn)
+                                new_s = os.path.join(dirpath, "Iron Man 3 (2013).strm")
+                                if not os.path.exists(new_s):
+                                    try:
+                                        os.rename(old_s, new_s)
+                                    except Exception:
+                                        pass
+                        if not os.path.exists(im3_dir):
+                            try:
+                                os.rename(dirpath, im3_dir)
+                                dirpath = im3_dir
+                                curr_files = os.listdir(dirpath)
+                            except Exception:
+                                pass
+
                     for fn in curr_files:
                         fn_l = fn.lower()
                         if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l in ("poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg"):
@@ -471,7 +498,7 @@ def heal_mismatched_media(roots=None, databases=None):
                         if os.path.exists(db_p):
                             try:
                                 conn = sqlite3.connect(db_p, timeout=5)
-                                conn.execute("DELETE FROM BaseItems WHERE (Name LIKE '%Generation Iron%' OR Data LIKE '%210879%') AND (Path LIKE '%Iron Man%' OR Path LIKE '%iron%')")
+                                conn.execute("DELETE FROM BaseItems WHERE Name LIKE '%Generation Iron%' OR Data LIKE '%210879%' OR Path LIKE '%Generation Iron%'")
                                 conn.commit()
                                 conn.close()
                             except Exception:

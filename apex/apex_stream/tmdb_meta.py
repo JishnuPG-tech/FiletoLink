@@ -179,7 +179,8 @@ def _drop_dotted_group_tail(text: Optional[str]) -> str:
 def _sig_tokens(text: str) -> set:
     if not text:
         return set()
-    norm_text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+    cleaned_input = re.sub(r"(?i)\bspiderman\b", "spider man", text)
+    norm_text = unicodedata.normalize('NFKD', cleaned_input).encode('ascii', 'ignore').decode('ascii')
     toks = {
         _norm_tok(t)
         for t in re.findall(r"[a-z0-9]+", norm_text.lower())
@@ -188,7 +189,7 @@ def _sig_tokens(text: str) -> set:
     if not toks:
         toks = {
             _norm_tok(t)
-            for t in re.findall(r"\w+", text.lower())
+            for t in re.findall(r"\w+", cleaned_input.lower())
             if t not in _ALL_STOP
         }
     # A lone 4-digit token is a numeric title (e.g. the film "2018"), not a year.
@@ -611,9 +612,12 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
         if not overlap:
             continue
 
-        # If user query has multiple significant tokens (e.g. "Iron Man 3"), matching only 1
-        # token (like "Generation Iron" matching only "iron") is a spurious partial match.
-        if len(q_toks) >= 3 and overlap < 2:
+        # Multi-token overlap requirements:
+        # A 2-word title (e.g. "Iron Man") must match both words; matching only 1 (e.g. "Generation Iron") is a false positive.
+        if len(q_toks) == 2 and overlap < 2:
+            continue
+        # A 3+ word title (e.g. "Iron Man 3") must match at least len(q_toks) - 1 tokens.
+        if len(q_toks) >= 3 and overlap < (len(q_toks) - 1):
             continue
 
         sim_main = (2.0 * len(q_toks & r_toks)) / (len(q_toks) + len(r_toks)) if r_toks else 0.0
@@ -621,13 +625,15 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
         sim_comb = (2.0 * overlap) / (len(q_toks) + len(combined_r))
         score = max(sim_main, sim_orig, sim_comb)
 
-        # Sequel digit alignment: penalize mismatched sequel numbers (e.g. "Rocky 2" vs "Rocky 3")
+        # Sequel digit alignment:
         q_digits = {t for t in q_toks if t.isdigit()}
         r_digits = {t for t in combined_r if t.isdigit()}
-        if q_digits and r_digits and not (q_digits & r_digits):
-            score -= 0.8
-        elif q_digits and not (q_digits & r_digits):
-            score -= 0.4
+        # If query specifies sequel digits (e.g. 2, 3), hit MUST contain those exact digits
+        if q_digits and not (q_digits <= r_digits):
+            continue
+        # If query has NO sequel digits (original movie), hit must NOT be a sequel (e.g. Movie 2)
+        if r_digits and not q_digits:
+            continue
 
         if q_toks <= combined_r:
             if len(q_toks) == len(combined_r):

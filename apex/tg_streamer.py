@@ -207,13 +207,28 @@ def load_cache():
         raw_lower = raw_name.lower()
 
         # 1. Heal Generation Iron misidentification on Iron Man movies
-        if "iron" in raw_lower and "man" in raw_lower:
-            if data.get("tmdb_id") == 210879 or "generation iron" in (data.get("tmdb_title") or "").lower():
-                data["tmdb_id"] = None
-                data["tmdb_title"] = None
-                data["imdb_id"] = None
-                cache_updated = True
-                logger.info(f"[CACHE-HEAL] Reset mismatched Generation Iron metadata for '{raw_name}'")
+        is_gen_iron = (
+            data.get("tmdb_id") == 210879
+            or "generation iron" in (data.get("tmdb_title") or "").lower()
+            or "generation iron" in (data.get("title") or "").lower()
+            or "generation iron" in (data.get("strm_base") or "").lower()
+        )
+        if is_gen_iron or ("iron" in raw_lower and "man" in raw_lower and ("3" in raw_lower or data.get("year") == 2013)):
+            data["title"] = "Iron Man 3"
+            data["clean_title"] = "Iron Man 3"
+            data["search_title"] = "iron man 3"
+            data["year"] = 2013
+            data["tmdb_id"] = 68721
+            data["tmdb_title"] = "Iron Man 3"
+            data["tmdb_year"] = 2013
+            data["imdb_id"] = "tt1300854"
+            data["strm_base"] = "Iron Man 3 (2013)"
+            lang = data.get("language") or "English"
+            data["target_dir"] = os.path.join(MOVIES_DIR, lang, "Iron Man 3 (2013)")
+            data["strm_path"] = os.path.join(data["target_dir"], "Iron Man 3 (2013).strm")
+            data["_force_art_refresh"] = True
+            cache_updated = True
+            logger.info(f"[CACHE-HEAL] Corrected Generation Iron to real Iron Man 3 for '{raw_name}'")
 
         # 2. Clean release-size noise from title, clean_title, strm_base
         cur_title = data.get("title") or ""
@@ -1591,6 +1606,7 @@ async def _enrich_media_metadata(entry):
                 )
         # Tier-1: text search against candidates in English / default so Latin query
         # matches TMDB's Latin titles, with language affinity applied in best_tmdb_match.
+        target_expected = entry.get("clean_title") or entry.get("title") or entry.get("search_title") or query
         if not hit:
             for cand in candidates:
                 try:
@@ -1603,7 +1619,7 @@ async def _enrich_media_metadata(entry):
                     ai_hit = await _ai_disambiguate_candidates(
                         raw_context, results, media_type=media_type, year=entry.get("year"), language=lang_code
                     )
-                hit = ai_hit or best_tmdb_match(results, cand, media_type, entry.get("year"), language=lang_code)
+                hit = ai_hit or best_tmdb_match(results, target_expected, media_type, entry.get("year"), language=lang_code)
                 used_query = cand
                 if hit:
                     break
@@ -1622,7 +1638,7 @@ async def _enrich_media_metadata(entry):
                     ai_hit = await _ai_disambiguate_candidates(
                         raw_context, results, media_type=media_type, year=entry.get("year"), language=lang_code
                     )
-                hit = ai_hit or best_tmdb_match(results, cand, media_type, entry.get("year"), language=lang_code)
+                hit = ai_hit or best_tmdb_match(results, target_expected, media_type, entry.get("year"), language=lang_code)
                 used_query = cand
                 if hit:
                     logger.info(
@@ -1670,6 +1686,17 @@ async def _enrich_media_metadata(entry):
                         if im3_hit and im3_hit.get("id") == 68721:
                             hit = im3_hit
                             used_query = "Iron Man 3"
+                            entry["title"] = "Iron Man 3"
+                            entry["clean_title"] = "Iron Man 3"
+                            entry["search_title"] = "iron man 3"
+                            entry["strm_base"] = "Iron Man 3 (2013)"
+                            entry["tmdb_id"] = 68721
+                            entry["imdb_id"] = "tt1300854"
+                            entry["year"] = 2013
+                            entry["_force_art_refresh"] = True
+                            target_dir = strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
+                            entry["target_dir"] = target_dir
+                            entry["strm_path"] = os.path.join(target_dir, "Iron Man 3 (2013).strm")
                             logger.info("[TMDB] Resolved Iron Man 3 directly to TMDB ID 68721")
                     except Exception as _exc:
                         pass
@@ -1680,6 +1707,15 @@ async def _enrich_media_metadata(entry):
                         if im2_hit and im2_hit.get("id") == 10138:
                             hit = im2_hit
                             used_query = "Iron Man 2"
+                            entry["title"] = "Iron Man 2"
+                            entry["clean_title"] = "Iron Man 2"
+                            entry["strm_base"] = "Iron Man 2 (2010)"
+                            entry["tmdb_id"] = 10138
+                            entry["year"] = 2010
+                            entry["_force_art_refresh"] = True
+                            target_dir = strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
+                            entry["target_dir"] = target_dir
+                            entry["strm_path"] = os.path.join(target_dir, "Iron Man 2 (2010).strm")
                             logger.info("[TMDB] Resolved Iron Man 2 directly to TMDB ID 10138")
                     except Exception as _exc:
                         pass
@@ -1690,6 +1726,15 @@ async def _enrich_media_metadata(entry):
                         if im1_hit and im1_hit.get("id") == 1726:
                             hit = im1_hit
                             used_query = "Iron Man"
+                            entry["title"] = "Iron Man"
+                            entry["clean_title"] = "Iron Man"
+                            entry["strm_base"] = "Iron Man (2008)"
+                            entry["tmdb_id"] = 1726
+                            entry["year"] = 2008
+                            entry["_force_art_refresh"] = True
+                            target_dir = strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
+                            entry["target_dir"] = target_dir
+                            entry["strm_path"] = os.path.join(target_dir, "Iron Man (2008).strm")
                             logger.info("[TMDB] Resolved Iron Man directly to TMDB ID 1726")
                     except Exception as _exc:
                         pass
@@ -1878,15 +1923,21 @@ async def _enrich_media_metadata(entry):
         async with aiohttp.ClientSession(connector=connector) as session:
 
             def _best_image(detail_key):
+                # 1. Primary official asset from TMDB detail is authoritative
+                top_path = detail.get(detail_key)
+                if top_path:
+                    return f"https://image.tmdb.org/t/p/original{top_path}"
+
+                # 2. Fallback to images array, preferring English and high vote average
                 images_data = detail.get("images") or {}
                 img_type = "backdrops" if "backdrop" in detail_key else "posters"
                 img_list = list(images_data.get(img_type) or [])
-                top_path = detail.get(detail_key)
-                if top_path and not any(x.get("file_path") == top_path for x in img_list):
-                    img_list.append({"file_path": top_path, "width": 1280, "vote_average": 0})
                 if img_list:
-                    # Choose highest resolution (1080p, 4K) image, breaking ties with vote_average
-                    best = max(img_list, key=lambda x: (x.get("width", 0), x.get("vote_average", 0)))
+                    def _rank_img(x):
+                        lang = (x.get("iso_639_1") or "").lower()
+                        lang_score = 2 if lang in ("en", "") else (1 if lang in ("hi", "ml", "ta", "te") else 0)
+                        return (lang_score, float(x.get("vote_average") or 0.0), int(x.get("width") or 0))
+                    best = max(img_list, key=_rank_img)
                     base = best.get("file_path")
                     if base:
                         return f"https://image.tmdb.org/t/p/original{base}"
@@ -1923,11 +1974,19 @@ async def _enrich_media_metadata(entry):
                 nfo_path = os.path.join(show_root, "tvshow.nfo")
                 poster_path = os.path.join(show_root, "poster.jpg")
                 backdrop_path = os.path.join(show_root, "backdrop.jpg")
-                if not os.path.exists(nfo_path) or _nfo_needs_repair(nfo_path):
+                force_art = bool(entry.get("_force_art_refresh"))
+                if os.path.exists(nfo_path):
+                    try:
+                        with open(nfo_path, "r", encoding="utf-8", errors="ignore") as _efh:
+                            if str(tmdb_id) not in _efh.read(1024):
+                                force_art = True
+                    except Exception:
+                        pass
+                if not os.path.exists(nfo_path) or _nfo_needs_repair(nfo_path) or force_art:
                     with open(nfo_path, "w", encoding="utf-8") as f:
                         f.write(build_tvshow_nfo(detail))
                 poster_url = _best_image("poster_path")
-                if poster_url and not _image_is_hd(poster_path, _POSTER_MIN_WIDTH):
+                if poster_url and (force_art or not _image_is_hd(poster_path, _POSTER_MIN_WIDTH)):
                     if await _download_image(session, _resize_tmdb_image(poster_url, "original"), poster_path):
                         folder_path = os.path.join(show_root, "folder.jpg")
                         try:
@@ -1936,7 +1995,7 @@ async def _enrich_media_metadata(entry):
                         except OSError:
                             pass
                 backdrop_url = _best_image("backdrop_path")
-                if backdrop_url and not _image_is_hd(backdrop_path, _BACKDROP_MIN_WIDTH):
+                if backdrop_url and (force_art or not _image_is_hd(backdrop_path, _BACKDROP_MIN_WIDTH)):
                     if await _download_image(session, _resize_tmdb_image(backdrop_url, "original"), backdrop_path):
                         for extra in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
                             art_path = os.path.join(show_root, extra)
@@ -1999,12 +2058,22 @@ async def _enrich_media_metadata(entry):
                         with open(ep_nfo, "w", encoding="utf-8") as f:
                             f.write(build_episode_nfo(ep_detail))
             else:
+                force_art = bool(entry.get("_force_art_refresh"))
                 nfo_path = os.path.join(
                     target_dir, f"{entry.get('strm_base', strm_base(entry))}.nfo"
                 )
+                movie_nfo = os.path.join(target_dir, "movie.nfo")
+                for _chk_nfo in (nfo_path, movie_nfo):
+                    if os.path.exists(_chk_nfo):
+                        try:
+                            with open(_chk_nfo, "r", encoding="utf-8", errors="ignore") as _efh:
+                                if str(tmdb_id) not in _efh.read(1024):
+                                    force_art = True
+                        except Exception:
+                            pass
+
                 with open(nfo_path, "w", encoding="utf-8") as f:
                     f.write(build_movie_nfo(detail))
-                movie_nfo = os.path.join(target_dir, "movie.nfo")
                 try:
                     with open(nfo_path, "rb") as src, open(movie_nfo, "wb") as dst:
                         dst.write(src.read())
@@ -2012,7 +2081,7 @@ async def _enrich_media_metadata(entry):
                     pass
                 poster_url = _best_image("poster_path")
                 movie_poster = os.path.join(target_dir, "poster.jpg")
-                if poster_url and not _image_is_hd(movie_poster, _POSTER_MIN_WIDTH):
+                if poster_url and (force_art or not _image_is_hd(movie_poster, _POSTER_MIN_WIDTH)):
                     if await _download_image(session, _resize_tmdb_image(poster_url, "original"), movie_poster):
                         folder_path = os.path.join(target_dir, "folder.jpg")
                         try:
@@ -2022,7 +2091,7 @@ async def _enrich_media_metadata(entry):
                             pass
                 backdrop_url = _best_image("backdrop_path")
                 movie_backdrop = os.path.join(target_dir, "backdrop.jpg")
-                if backdrop_url and not _image_is_hd(movie_backdrop, _BACKDROP_MIN_WIDTH):
+                if backdrop_url and (force_art or not _image_is_hd(movie_backdrop, _BACKDROP_MIN_WIDTH)):
                     if await _download_image(session, _resize_tmdb_image(backdrop_url, "original"), movie_backdrop):
                         for extra in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
                             art_path = os.path.join(target_dir, extra)
@@ -2724,8 +2793,8 @@ async def refresh_jellyfin_item_by_path(strm_path, alt_paths=None, retries=12, d
                     continue
                 refresh_params = {
                     "metadataRefreshMode": "FullRefresh",
-                    "replaceAllMetadata": "false",
-                    "replaceAllImages": "false",
+                    "replaceAllMetadata": "true",
+                    "replaceAllImages": "true",
                 }
                 async with session.post(
                     f"http://127.0.0.1:8096/Items/{item_id}/Refresh",
@@ -4647,6 +4716,8 @@ async def _reconcile_and_upgrade_library():
 
             suspicious = False
             raw_name_lower = (data.get("file_name") or data.get("title") or "").lower()
+            if not suspicious and (data.get("tmdb_id") == 210879 or "generation iron" in tmdb_title or "generation iron" in nfo_text or "210879" in nfo_text):
+                suspicious = True
             if not suspicious and "obsession" in raw_name_lower:
                 if data.get("tmdb_id") != 1339713:
                     suspicious = True
