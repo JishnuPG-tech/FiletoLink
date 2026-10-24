@@ -839,3 +839,33 @@ async def ops_space_restart(request: Request):
                 return JSONResponse({"ok": resp.status < 300, "status": resp.status, "detail": body[:400]})
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"restart call failed: {exc}"}, status_code=502)
+
+
+@router.get("/apex/ops/subtitles/status")
+async def ops_subtitles_status(request: Request):
+    """Query current subtitle coverage from the streaming bot."""
+    if not _is_admin(request):
+        return _denied()
+    import aiohttp
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("http://127.0.0.1:8082/subtitles/status", timeout=10) as resp:
+                data = await resp.json()
+                return JSONResponse(data)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
+
+
+@router.post("/apex/ops/subtitles/sync")
+async def ops_subtitles_sync(request: Request):
+    """Trigger background subtitle scan & download for all library items."""
+    if not _is_admin(request):
+        return _denied()
+    import aiohttp
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post("http://127.0.0.1:8082/subtitles/sync", timeout=10) as resp:
+                data = await resp.json()
+                return JSONResponse(data)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)

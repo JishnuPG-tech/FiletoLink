@@ -69,6 +69,7 @@ from apex_stream.tmdb_meta import (
     nfo_needs_repair,
     parse_media_meta,
 )
+from apex_stream.subtitles import inject_subtitles_for_entry
 
 logger = logging.getLogger("TG_Drive_Streamer")
 if not logger.handlers:
@@ -1751,6 +1752,16 @@ async def _enrich_media_metadata(entry):
             logger.info(f"[TMDB] No detail for tmdb_id={tmdb_id} ({query})")
             return False
 
+        imdb_id = detail.get("imdb_id")
+        if is_tv and not imdb_id:
+            try:
+                ext_ids = await _tmdb_get(f"/tv/{tmdb_id}/external_ids", {})
+                imdb_id = ext_ids.get("imdb_id") if isinstance(ext_ids, dict) else None
+            except Exception:
+                pass
+        if imdb_id:
+            entry["imdb_id"] = imdb_id
+
         # Filename tags are only a hint. TMDB's original_language is the
         # authoritative fallback for files such as a Malayalam movie whose
         # filename does not contain "Malayalam", "mal", or a language code.
@@ -1972,6 +1983,8 @@ async def _enrich_media_metadata(entry):
         prev = FILE_ID_CACHE.get(key)
         if isinstance(prev, dict):
             prev["tmdb_id"] = tmdb_id
+            if imdb_id:
+                prev["imdb_id"] = imdb_id
             prev["tmdb_title"] = (
                 detail.get("name") or detail.get("title") or hit.get("name") or hit.get("title")
             )
@@ -1982,7 +1995,7 @@ async def _enrich_media_metadata(entry):
                 # the stale-language copy from an un-updated cache entry).
                 for _field in (
                     "language", "target_dir", "show_root", "strm_path",
-                    "_prev_strm_path", "strm_base",
+                    "_prev_strm_path", "strm_base", "imdb_id",
                 ):
                     if _field in entry:
                         prev[_field] = entry[_field]
@@ -1990,6 +2003,23 @@ async def _enrich_media_metadata(entry):
             FILE_ID_CACHE[key] = prev
             await save_cache_async()
         logger.info(f"[TMDB] ✅ Enriched {'TV' if is_tv else 'Movie'} metadata for '{query}' (tmdb_id={tmdb_id})")
+
+        # Automated subtitle fetch & injection
+        try:
+            injected = await inject_subtitles_for_entry(session, entry)
+            if injected:
+                logger.info(f"[SUBTITLE-AUTO] Injected {len(injected)} subtitle(s) for '{entry.get('title')}': {injected}")
+                for s_path in injected:
+                    s_name = os.path.basename(s_path)
+                    SUBTITLE_CACHE[f"auto_{entry.get('msg_id')}_{s_name}"] = {
+                        "file_name": s_name,
+                        "placed": True,
+                        "target": s_path,
+                        "video_msg": entry.get("msg_id"),
+                    }
+                await save_subtitle_cache_async()
+        except Exception as sub_exc:
+            logger.warning(f"[SUBTITLE-AUTO] Notice injecting subtitles: {sub_exc}")
         # The ingest scan may have happened before TMDB enrichment completed,
         # and the debounced /Library/Refresh can be dropped by the 15s coalesce
         # window. Force an item-level FullRefresh (by .strm path) so Jellyfin
@@ -4041,6 +4071,114 @@ async def reconcile(request):
     })
 
 
+async def backfill_missing_subtitles(force: bool = False):
+    """Scan all indexed media in FILE_ID_CACHE and automatically inject missing subtitles."""
+    logger.info("[SUBTITLES] Starting automated subtitle backfill scan across all library items...")
+    total_injected = 0
+    connector = aiohttp.TCPConnector(family=socket.AF_INET)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        for key, entry in list(FILE_ID_CACHE.items()):
+            if not isinstance(entry, dict):
+                continue
+            target_dir = entry.get("target_dir") or strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
+            base = entry.get("strm_base") or strm_base(entry)
+            if not target_dir or not base:
+                continue
+
+            # Check if primary subtitle (.eng.srt) already exists
+            eng_sub = os.path.join(target_dir, f"{base}.eng.srt")
+            en_sub = os.path.join(target_dir, f"{base}.en.srt")
+            if not force and (os.path.exists(eng_sub) or os.path.exists(en_sub)):
+                continue
+
+            # Check if video .strm exists
+            strm_path = entry.get("strm_path") or os.path.join(target_dir, f"{base}.strm")
+            if not os.path.exists(strm_path):
+                continue
+
+            # If IMDb ID is missing, try resolving from TMDB detail
+            if not entry.get("imdb_id") and entry.get("tmdb_id"):
+                try:
+                    if entry.get("is_tv"):
+                        ext_ids = await _tmdb_get(f"/tv/{entry['tmdb_id']}/external_ids", {})
+                        entry["imdb_id"] = ext_ids.get("imdb_id") if isinstance(ext_ids, dict) else None
+                    else:
+                        m_detail = await _tmdb_get(f"/movie/{entry['tmdb_id']}", {})
+                        entry["imdb_id"] = m_detail.get("imdb_id") if isinstance(m_detail, dict) else None
+                    if entry.get("imdb_id"):
+                        FILE_ID_CACHE[key]["imdb_id"] = entry["imdb_id"]
+                        await save_cache_async()
+                except Exception:
+                    pass
+
+            try:
+                injected = await inject_subtitles_for_entry(session, entry, force=force)
+                if injected:
+                    total_injected += len(injected)
+                    logger.info(f"[SUBTITLE-BACKFILL] Injected {len(injected)} subtitle(s) for '{entry.get('title')}'")
+                    for s_path in injected:
+                        s_name = os.path.basename(s_path)
+                        SUBTITLE_CACHE[f"auto_{entry.get('msg_id')}_{s_name}"] = {
+                            "file_name": s_name,
+                            "placed": True,
+                            "target": s_path,
+                            "video_msg": entry.get("msg_id"),
+                        }
+                    await save_subtitle_cache_async()
+                    # Refresh Jellyfin item so subtitle shows immediately
+                    await refresh_jellyfin_item_by_path(strm_path)
+                    # Polite rate pacing between downloads
+                    await asyncio.sleep(1.0)
+            except Exception as e:
+                logger.warning(f"[SUBTITLE-BACKFILL] Error for '{entry.get('title')}': {e}")
+
+    logger.info(f"[SUBTITLES] Completed subtitle backfill scan: {total_injected} subtitle(s) injected.")
+    return total_injected
+
+
+@routes.get("/subtitles/status")
+async def subtitles_status(request):
+    """Return summary of subtitle coverage across media in library."""
+    total_items = 0
+    with_subtitles = 0
+    missing_subtitles = 0
+    for key, entry in FILE_ID_CACHE.items():
+        if not isinstance(entry, dict):
+            continue
+        total_items += 1
+        target_dir = entry.get("target_dir") or strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
+        base = entry.get("strm_base") or strm_base(entry)
+        has_sub = False
+        if target_dir and base and os.path.exists(target_dir):
+            for f in os.listdir(target_dir):
+                if f.lower().endswith((".srt", ".vtt", ".ass")) and base.lower() in f.lower():
+                    has_sub = True
+                    break
+        if has_sub:
+            with_subtitles += 1
+        else:
+            missing_subtitles += 1
+
+    return web.json_response({
+        "ok": True,
+        "total_items": total_items,
+        "with_subtitles": with_subtitles,
+        "missing_subtitles": missing_subtitles,
+        "coverage_percentage": round((with_subtitles / max(1, total_items)) * 100, 1),
+    })
+
+
+@routes.post("/subtitles/sync")
+@routes.get("/subtitles/sync")
+async def subtitles_sync(request):
+    """Trigger background backfill scan for missing subtitles."""
+    asyncio.create_task(backfill_missing_subtitles())
+    return web.json_response({
+        "ok": True,
+        "message": "Subtitle synchronization triggered in background",
+    })
+
+
 async def _prune_orphan_strms(movies_dir, shows_dir, keep):
     """Delete .strm files that point at our streamer but aren't in `keep`.
 
@@ -4726,11 +4864,27 @@ async def start_background_tasks(app):
             await start_pyrogram()
         except Exception as e:
             logger.exception(f"[PYROGRAM] start_pyrogram crashed: {e}")
+
+    async def _delayed_subtitle_backfill():
+        # Allow Jellyfin to complete initial startup before running backfill
+        await asyncio.sleep(25)
+        try:
+            await backfill_missing_subtitles()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(f"[SUBTITLES] Startup backfill notice: {exc}")
+
     app['pyrogram_task'] = asyncio.create_task(_guard())
     app['reconciliation_task'] = asyncio.create_task(_reconciliation_loop())
     app['channel_sync_task'] = asyncio.create_task(_configured_channel_sync_loop())
+    app['subtitle_backfill_task'] = asyncio.create_task(_delayed_subtitle_backfill())
 
 async def cleanup_background_tasks(app):
+    task = app.get("subtitle_backfill_task")
+    if task:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
     task = app.get("reconciliation_task")
     if task:
         task.cancel()
