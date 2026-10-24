@@ -8,6 +8,7 @@ PhysicalLocationsList points directly to /data/jellyfin/media/... locations.
 import os
 import sys
 import json
+import re
 import sqlite3
 import datetime
 
@@ -207,6 +208,24 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
                     cur.execute("UPDATE Users SET InvalidLoginAttemptCount = 0")
                     print(f"[AUTH] Preserved user password(s); cleared failed attempt lockouts in {db_path}.")
 
+            if "Data" in user_cols:
+                cur.execute("SELECT Id, Data FROM Users")
+                for u_id, u_data in cur.fetchall():
+                    cfg = {}
+                    if u_data:
+                        try:
+                            cfg = json.loads(u_data)
+                        except Exception:
+                            cfg = {}
+                    user_cfg = cfg.setdefault("Configuration", {})
+                    if user_cfg.get("SubtitleMode") != "Always" or user_cfg.get("SubtitleLanguagePreference") != "en":
+                        user_cfg["SubtitleMode"] = "Always"
+                        user_cfg["SubtitleLanguagePreference"] = "en"
+                        user_cfg["PlayDefaultAudioTrack"] = True
+                        cfg["Configuration"] = user_cfg
+                        cur.execute("UPDATE Users SET Data = ? WHERE Id = ?", (json.dumps(cfg), u_id))
+                        print(f"[AUTH] Enabled auto-subtitles (SubtitleMode=Always, lang=en) in DB for user Id={u_id}")
+
             # Unlock permissions if locked
             cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Permissions'")
             if cur.fetchone():
@@ -305,6 +324,106 @@ def purge_plugin_databases():
                     pass
 
 
+def heal_subtitle_files(roots=None):
+    """Purge 0-byte, corrupt, or invalid subtitle files that break Jellyfin SubtitleResolver."""
+    search_roots = roots or [
+        "/data/jellyfin/media/Movies",
+        "/data/jellyfin/media/TV Shows",
+        "/data/movies",
+        "/data/tvshows",
+        "/opt/jellyfin-local/media",
+    ]
+    purged = 0
+    timestamp_re = re.compile(r"\d{1,2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{1,2}:\d{2}:\d{2}[,.]\d{3}")
+    for root_dir in search_roots:
+        if not os.path.exists(root_dir):
+            continue
+        for dirpath, _, filenames in os.walk(root_dir):
+            for fn in filenames:
+                lower = fn.lower()
+                if lower.endswith((".srt", ".vtt", ".sub", ".ass")):
+                    full_p = os.path.join(dirpath, fn)
+                    try:
+                        sz = os.path.getsize(full_p)
+                        is_broken_suffix = ".eng.0.srt" in lower or ".0.srt" in lower
+                        is_invalid = False
+                        if sz < 20 or is_broken_suffix:
+                            is_invalid = True
+                        else:
+                            with open(full_p, "r", encoding="utf-8", errors="ignore") as sf:
+                                sample = sf.read(4096)
+                            if not timestamp_re.search(sample):
+                                is_invalid = True
+                            elif any(tag in sample.lower() for tag in ("<html", "<body", "cloudflare", "502 bad gateway", "404 not found")):
+                                is_invalid = True
+                        if is_invalid:
+                            os.remove(full_p)
+                            purged += 1
+                            print(f"[REPAIR] Purged corrupt/empty subtitle file: {full_p}")
+                    except Exception as err:
+                        print(f"[REPAIR] Note cleaning subtitle {full_p}: {err}")
+    if purged:
+        print(f"[REPAIR] Purged {purged} corrupt/broken subtitle files across media directories.")
+
+
+def repair_user_subtitle_preferences(configs=None):
+    """Ensure user profile config XML files have SubtitleMode set to Always so
+    subtitles automatically appear when playing any video."""
+    search_dirs = configs or [
+        "/opt/jellyfin-local/config/users",
+        "/data/jellyfin/config/users",
+    ]
+    for udir in search_dirs:
+        if not os.path.exists(udir):
+            continue
+        for root, _, files in os.walk(udir):
+            for fn in files:
+                if fn.lower() == "config.xml":
+                    cfg_p = os.path.join(root, fn)
+                    try:
+                        with open(cfg_p, "r", encoding="utf-8", errors="ignore") as f:
+                            content = f.read()
+                        changed = False
+                        if "<SubtitleMode>" in content:
+                            new_content = re.sub(
+                                r"<SubtitleMode>.*?</SubtitleMode>",
+                                "<SubtitleMode>Always</SubtitleMode>",
+                                content
+                            )
+                            if new_content != content:
+                                content = new_content
+                                changed = True
+                        elif "</UserConfiguration>" in content:
+                            content = content.replace(
+                                "</UserConfiguration>",
+                                "  <SubtitleMode>Always</SubtitleMode>\n</UserConfiguration>"
+                            )
+                            changed = True
+
+                        if "<SubtitleLanguagePreference>" in content:
+                            new_content = re.sub(
+                                r"<SubtitleLanguagePreference>.*?</SubtitleLanguagePreference>",
+                                "<SubtitleLanguagePreference>en</SubtitleLanguagePreference>",
+                                content
+                            )
+                            if new_content != content:
+                                content = new_content
+                                changed = True
+                        elif "</UserConfiguration>" in content:
+                            content = content.replace(
+                                "</UserConfiguration>",
+                                "  <SubtitleLanguagePreference>en</SubtitleLanguagePreference>\n</UserConfiguration>"
+                            )
+                            changed = True
+
+                        if changed:
+                            with open(cfg_p, "w", encoding="utf-8") as f:
+                                f.write(content)
+                            print(f"[REPAIR] Enabled SubtitleMode=Always in {cfg_p}")
+                    except Exception as e:
+                        print(f"[REPAIR] Note configuring user subtitles in {cfg_p}: {e}")
+
+
 def repair_system_xml(configs=None):
     """Ensure system.xml has IsStartupWizardCompleted set to true so Jellyfin never
     redirects to first-time setup or blocks user login."""
@@ -366,6 +485,8 @@ def main():
 
     purge_plugin_databases()
     cleanup_empty_media_folders()
+    heal_subtitle_files()
+    repair_user_subtitle_preferences()
     repair_system_xml()
 
 

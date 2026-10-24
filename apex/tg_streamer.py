@@ -11,6 +11,7 @@ import urllib.parse
 import time
 import hmac
 import hashlib
+import uuid
 import aiohttp
 from aiohttp import web
 import httpx
@@ -69,7 +70,11 @@ from apex_stream.tmdb_meta import (
     nfo_needs_repair,
     parse_media_meta,
 )
-from apex_stream.subtitles import inject_subtitles_for_entry
+from apex_stream.subtitles import (
+    inject_subtitles_for_entry,
+    is_valid_subtitle_file,
+    purge_corrupted_subtitles,
+)
 
 logger = logging.getLogger("TG_Drive_Streamer")
 if not logger.handlers:
@@ -195,7 +200,7 @@ def load_cache():
 def _save_cache_sync():
     try:
         os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
-        tmp = f"{CACHE_FILE}.tmp"
+        tmp = f"{CACHE_FILE}.{os.getpid()}_{uuid.uuid4().hex[:8]}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(FILE_ID_CACHE, f, indent=2)
             f.flush()
@@ -283,7 +288,8 @@ def _load_subtitle_cache():
 
 def _save_subtitle_cache_sync():
     try:
-        tmp = f"{SUBTITLE_CACHE_FILE}.tmp"
+        os.makedirs(os.path.dirname(SUBTITLE_CACHE_FILE), exist_ok=True)
+        tmp = f"{SUBTITLE_CACHE_FILE}.{os.getpid()}_{uuid.uuid4().hex[:8]}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(SUBTITLE_CACHE, f, indent=2)
             f.flush()
@@ -4085,10 +4091,11 @@ async def backfill_missing_subtitles(force: bool = False):
             if not target_dir or not base:
                 continue
 
-            # Check if primary subtitle (.eng.srt) already exists
+            # Check if primary subtitle (.eng.srt) already exists and is valid
             eng_sub = os.path.join(target_dir, f"{base}.eng.srt")
             en_sub = os.path.join(target_dir, f"{base}.en.srt")
-            if not force and (os.path.exists(eng_sub) or os.path.exists(en_sub)):
+            has_valid_sub = is_valid_subtitle_file(eng_sub) or is_valid_subtitle_file(en_sub)
+            if not force and has_valid_sub:
                 continue
 
             # Check if video .strm exists
@@ -4152,8 +4159,9 @@ async def subtitles_status(request):
         if target_dir and base and os.path.exists(target_dir):
             for f in os.listdir(target_dir):
                 if f.lower().endswith((".srt", ".vtt", ".ass")) and base.lower() in f.lower():
-                    has_sub = True
-                    break
+                    if is_valid_subtitle_file(os.path.join(target_dir, f)):
+                        has_sub = True
+                        break
         if has_sub:
             with_subtitles += 1
         else:

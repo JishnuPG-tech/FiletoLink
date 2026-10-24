@@ -74,6 +74,11 @@ restore_jellyfin_local() {
         find "/data/jellyfin/media/Movies/English" -mindepth 1 -maxdepth 1 -type d -exec bash -c 'for d; do [ -z "$(find "$d" -name "*.strm" 2>/dev/null)" ] && rm -rf "$d"; done' _ {} + 2>/dev/null || true
     fi
 
+    # Clean up corrupt, 0-byte, or broken suffix subtitle files that cause ffprobe failure
+    find /data/jellyfin/media /opt/jellyfin-local/media /data/movies /data/tvshows -type f \( -name "*.srt" -o -name "*.vtt" -o -name "*.ass" \) -size 0 -delete 2>/dev/null || true
+    find /data/jellyfin/media /opt/jellyfin-local/media /data/movies /data/tvshows -type f \( -name "*.srt" -o -name "*.vtt" -o -name "*.ass" \) -size -50c -delete 2>/dev/null || true
+    find /data/jellyfin/media /opt/jellyfin-local/media /data/movies /data/tvshows -type f -name "*.0.srt" -delete 2>/dev/null || true
+
     # Purge old low-res Jellyfin image cache so newly fetched HD/4K artwork is displayed immediately
     rm -rf "$LOCAL_ROOT/cache/images"/* /data/jellyfin/cache/images/* 2>/dev/null || true
 

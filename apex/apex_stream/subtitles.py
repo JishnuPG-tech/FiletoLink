@@ -12,8 +12,11 @@ Provides a multi-provider subtitle engine:
 import io
 import os
 import re
+import uuid
+import socket
 import zipfile
 import logging
+import aiohttp
 from typing import Optional, Dict, List, Tuple, Any
 
 logger = logging.getLogger("ApexSubtitles")
@@ -104,11 +107,60 @@ def is_valid_srt(text: Optional[str]) -> bool:
     """Validate that text contains actual subtitle entries with timestamp intervals."""
     if not text or not isinstance(text, str):
         return False
+    if len(text.strip()) < 15:
+        return False
     # Quick filter against HTML error documents
-    if "<html" in text.lower() or "<body" in text.lower() or "cloudflare" in text.lower():
+    lower = text.lower()
+    if "<html" in lower or "<body" in lower or "cloudflare" in lower or "502 bad gateway" in lower or "404 not found" in lower:
         return False
     # Must find at least one valid subtitle time boundary
     return bool(SRT_TIMESTAMP_RE.search(text))
+
+
+def is_valid_subtitle_file(file_path: Optional[str]) -> bool:
+    """Check whether a subtitle file on disk exists, is non-empty, and contains valid timestamps."""
+    if not file_path or not os.path.isfile(file_path):
+        return False
+    try:
+        size = os.path.getsize(file_path)
+        if size < 20:
+            return False
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            sample = f.read(4096)
+        return is_valid_srt(sample)
+    except Exception:
+        return False
+
+
+def purge_corrupted_subtitles(search_roots: Optional[List[str]] = None) -> int:
+    """Scan media folders and remove 0-byte, corrupt, or invalid subtitle files."""
+    roots = search_roots or [
+        "/data/jellyfin/media/Movies",
+        "/data/jellyfin/media/TV Shows",
+        "/data/movies",
+        "/data/tvshows",
+        "/opt/jellyfin-local/media",
+    ]
+    purged = 0
+    for root_dir in roots:
+        if not os.path.exists(root_dir):
+            continue
+        for dirpath, _, filenames in os.walk(root_dir):
+            for fn in filenames:
+                lower = fn.lower()
+                if lower.endswith((".srt", ".vtt", ".sub", ".ass")):
+                    full_p = os.path.join(dirpath, fn)
+                    try:
+                        sz = os.path.getsize(full_p)
+                        # Remove 0-byte or corrupted subtitle files, or broken .0.srt / .forced.srt
+                        is_broken_suffix = ".eng.0.srt" in lower or ".0.srt" in lower
+                        if sz < 50 or is_broken_suffix or not is_valid_subtitle_file(full_p):
+                            os.remove(full_p)
+                            purged += 1
+                            logger.info(f"[SUBTITLES] Purged corrupt/empty subtitle file: {full_p}")
+                    except Exception as err:
+                        logger.warning(f"[SUBTITLES] Could not remove {full_p}: {err}")
+    return purged
 
 
 def clean_and_normalize_srt(data: Any) -> str:
@@ -332,8 +384,8 @@ async def download_subtitle_file(session, url: str) -> Optional[str]:
 
 
 async def inject_subtitles_for_entry(
-    session,
-    entry: Dict[str, Any],
+    session: Any = None,
+    entry: Optional[Dict[str, Any]] = None,
     target_langs: Optional[List[str]] = None,
     force: bool = False,
 ) -> List[str]:
@@ -361,50 +413,88 @@ async def inject_subtitles_for_entry(
 
     normalized_langs = [normalize_to_iso639_2(l) for l in langs]
 
+    managed_session = None
+    if session is None or getattr(session, "closed", False):
+        connector = aiohttp.TCPConnector(family=socket.AF_INET)
+        managed_session = aiohttp.ClientSession(connector=connector)
+        active_session = managed_session
+    else:
+        active_session = session
+
     injected_paths = []
-    for lang in normalized_langs:
-        sidecar_path = os.path.join(target_dir, f"{base}.{lang}.srt")
-        if os.path.exists(sidecar_path) and not force:
-            continue
+    try:
+        for lang in normalized_langs:
+            sidecar_path = os.path.join(target_dir, f"{base}.{lang}.srt")
+            if os.path.exists(sidecar_path):
+                if not is_valid_subtitle_file(sidecar_path):
+                    try:
+                        os.remove(sidecar_path)
+                        logger.info(f"[SUBTITLES] Removed corrupt/empty existing subtitle: {sidecar_path}")
+                    except Exception:
+                        pass
+                elif not force:
+                    continue
 
-        # Gather candidates from all available providers
-        candidates: List[Dict[str, Any]] = []
+            # Remove any orphan/corrupted .0.srt or .forced.srt left behind by older plugins
+            for orphan in (f"{base}.{lang}.0.srt", f"{base}.0.srt", f"{base}.{lang}.forced.srt", f"{base}.forced.srt"):
+                orphan_path = os.path.join(target_dir, orphan)
+                if os.path.exists(orphan_path) and not is_valid_subtitle_file(orphan_path):
+                    try:
+                        os.remove(orphan_path)
+                        logger.info(f"[SUBTITLES] Cleaned up broken orphan subtitle: {orphan_path}")
+                    except Exception:
+                        pass
 
-        # 1. Stremio OpenSubtitles v3 (using IMDb ID)
-        if imdb_id and imdb_id.startswith("tt"):
-            stremio_cand = await fetch_stremio_subtitles(
-                session, imdb_id, is_tv=is_tv, season=season, episode=episode, target_langs=[lang]
-            )
-            candidates.extend(stremio_cand)
+            # Gather candidates from all available providers
+            candidates: List[Dict[str, Any]] = []
 
-        # 2. MSone provider if language is Malayalam ('mal')
-        if lang == "mal" and not is_tv:
-            msone_title = entry.get("tmdb_title") or entry.get("clean_title") or entry.get("title")
-            msone_cand = await fetch_msone_subtitles(session, msone_title, year=entry.get("year"))
-            candidates.extend(msone_cand)
+            # 1. Stremio OpenSubtitles v3 (using IMDb ID)
+            if imdb_id and imdb_id.startswith("tt"):
+                stremio_cand = await fetch_stremio_subtitles(
+                    active_session, imdb_id, is_tv=is_tv, season=season, episode=episode, target_langs=[lang]
+                )
+                candidates.extend(stremio_cand)
 
-        if not candidates:
-            continue
+            # 2. MSone provider if language is Malayalam ('mal')
+            if lang == "mal" and not is_tv:
+                msone_title = entry.get("tmdb_title") or entry.get("clean_title") or entry.get("title")
+                msone_cand = await fetch_msone_subtitles(active_session, msone_title, year=entry.get("year"))
+                candidates.extend(msone_cand)
 
-        # Score and pick the best synchronized release
-        candidates.sort(key=lambda c: score_subtitle_candidate(c, video_filename), reverse=True)
-
-        for best_cand in candidates[:3]:
-            dl_url = best_cand.get("url")
-            if not dl_url:
+            if not candidates:
                 continue
 
-            srt_content = await download_subtitle_file(session, dl_url)
-            if srt_content and is_valid_srt(srt_content):
-                try:
-                    os.makedirs(target_dir, exist_ok=True)
-                    with open(sidecar_path, "w", encoding="utf-8") as f:
-                        f.write(srt_content)
-                    logger.info(f"✅ Injected subtitle: {sidecar_path} (provider={best_cand.get('provider')})")
-                    injected_paths.append(sidecar_path)
-                    break
-                except Exception as write_err:
-                    logger.warning(f"Error writing subtitle to {sidecar_path}: {write_err}")
+            # Score and pick the best synchronized release
+            candidates.sort(key=lambda c: score_subtitle_candidate(c, video_filename), reverse=True)
+
+            for best_cand in candidates[:3]:
+                dl_url = best_cand.get("url")
+                if not dl_url:
+                    continue
+
+                srt_content = await download_subtitle_file(active_session, dl_url)
+                if srt_content and is_valid_srt(srt_content):
+                    try:
+                        os.makedirs(target_dir, exist_ok=True)
+                        tmp_sub = f"{sidecar_path}.{os.getpid()}_{uuid.uuid4().hex[:8]}.tmp"
+                        with open(tmp_sub, "w", encoding="utf-8") as f:
+                            f.write(srt_content)
+                            f.flush()
+                            os.fsync(f.fileno())
+                        os.replace(tmp_sub, sidecar_path)
+                        try:
+                            os.chmod(sidecar_path, 0o664)
+                        except Exception:
+                            pass
+
+                        logger.info(f"✅ Injected subtitle: {sidecar_path} (provider={best_cand.get('provider')})")
+                        injected_paths.append(sidecar_path)
+                        break
+                    except Exception as write_err:
+                        logger.warning(f"Error writing subtitle to {sidecar_path}: {write_err}")
+    finally:
+        if managed_session:
+            await managed_session.close()
 
     return injected_paths
 

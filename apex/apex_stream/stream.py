@@ -316,11 +316,18 @@ class StreamDriver:
                         and type(exc).__name__ == "FloodWait"
                         else None
                     )
-                    await self.pool.note_failure(
-                        active_client.client_id,
-                        telegram_error=True,
-                        cooldown_seconds=cooldown_seconds,
-                    )
+                    if type(exc).__name__ in ("AuthKeyUnregistered", "AuthKeyDuplicated", "UserDeactivated"):
+                        from apex_stream.pool import UNAVAILABLE
+                        await self.pool.set_state(active_client.client_id, UNAVAILABLE)
+                        self.log.error(
+                            f"[STREAM] client={active_client.client_id} decommissioned due to {type(exc).__name__}"
+                        )
+                    else:
+                        await self.pool.note_failure(
+                            active_client.client_id,
+                            telegram_error=True,
+                            cooldown_seconds=cooldown_seconds,
+                        )
                     self.log.warning(
                         f"[STREAM] failover for {source_key}: {type(exc).__name__}: {exc} "
                         f"({retries_left} retries left)"

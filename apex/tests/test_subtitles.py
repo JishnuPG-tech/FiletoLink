@@ -3,6 +3,8 @@ import io
 import zipfile
 from apex_stream.subtitles import (
     is_valid_srt,
+    is_valid_subtitle_file,
+    purge_corrupted_subtitles,
     clean_and_normalize_srt,
     extract_srt_from_payload,
     score_subtitle_candidate,
@@ -215,6 +217,91 @@ def test_normalize_to_iso639_2():
     assert normalize_to_iso639_2("hi") == "hin"
     assert normalize_to_iso639_2("") == "eng"
     assert normalize_to_iso639_2(None) == "eng"
+
+
+def test_is_valid_subtitle_file(tmp_path):
+    empty_file = tmp_path / "empty.srt"
+    empty_file.write_text("")
+    assert is_valid_subtitle_file(str(empty_file)) is False
+
+    corrupt_file = tmp_path / "corrupt.srt"
+    corrupt_file.write_text("<html><body>Error 502 Bad Gateway</body></html>")
+    assert is_valid_subtitle_file(str(corrupt_file)) is False
+
+    valid_file = tmp_path / "valid.srt"
+    valid_file.write_text("1\n00:00:01,000 --> 00:00:03,000\nThis is valid\n")
+    assert is_valid_subtitle_file(str(valid_file)) is True
+
+
+def test_purge_corrupted_subtitles(tmp_path):
+    movie_dir = tmp_path / "Movies" / "Iron Man (2008)"
+    movie_dir.mkdir(parents=True)
+
+    # Corrupt 0-byte files and broken suffix
+    zero_sub = movie_dir / "Iron Man (2008).eng.0.srt"
+    zero_sub.write_text("")
+    forced_sub = movie_dir / "Iron Man (2008).eng.forced.srt"
+    forced_sub.write_text("Not valid subtitle content")
+    broken_sub = movie_dir / "Iron Man (2008).eng.srt"
+    broken_sub.write_text("")
+
+    # Legitimate subtitle file
+    good_sub = movie_dir / "Iron Man (2008).mal.srt"
+    good_sub.write_text("1\n00:00:05,000 --> 00:00:08,000\nValid malayalam line\n")
+
+    purged = purge_corrupted_subtitles([str(tmp_path)])
+    assert purged == 3
+    assert not zero_sub.exists()
+    assert not forced_sub.exists()
+    assert not broken_sub.exists()
+    assert good_sub.exists()
+
+
+@pytest.mark.asyncio
+async def test_inject_subtitles_replaces_corrupt_existing_file(tmp_path):
+    media_dir = tmp_path / "Movies" / "Iron Man (2008)"
+    media_dir.mkdir(parents=True)
+    strm_file = media_dir / "Iron Man (2008).strm"
+    strm_file.write_text("http://stream/120")
+
+    # Existing corrupt 0-byte file (reproducing the user's issue)
+    corrupt_existing = media_dir / "Iron Man (2008).eng.srt"
+    corrupt_existing.write_text("")
+
+    raw_srt = b"1\n00:01:19,240 --> 00:01:21,760\nI feel like you\n"
+    mock_json = {
+        "subtitles": [
+            {
+                "id": "111",
+                "url": "https://subs.strem.io/ironman.srt",
+                "lang": "eng",
+                "subtitleFileName": "Iron.Man.1080p.srt",
+                "downloadCount": 1000,
+            }
+        ]
+    }
+    session = MockSession({
+        "opensubtitles-v3.strem.io": MockResponse(json_data=mock_json),
+        "https://subs.strem.io/ironman.srt": MockResponse(bytes_data=raw_srt),
+    })
+
+    entry = {
+        "title": "Iron Man",
+        "year": 2008,
+        "is_tv": False,
+        "imdb_id": "tt0371746",
+        "strm_base": "Iron Man (2008)",
+        "target_dir": str(media_dir),
+        "file_name": "Iron.Man.2008.1080p.mkv",
+    }
+
+    # Should detect corrupt existing file, delete it, and download healthy replacement
+    injected = await inject_subtitles_for_entry(session, entry, target_langs=["eng"])
+    assert len(injected) == 1
+    assert corrupt_existing.exists()
+    assert is_valid_subtitle_file(str(corrupt_existing)) is True
+    assert "I feel like you" in corrupt_existing.read_text(encoding="utf-8")
+
 
 
 

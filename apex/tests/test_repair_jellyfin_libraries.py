@@ -4,7 +4,13 @@ import shutil
 import tempfile
 import pytest
 
-from repair_jellyfin_libraries import repair_database, cleanup_empty_media_folders, repair_system_xml
+from repair_jellyfin_libraries import (
+    repair_database,
+    cleanup_empty_media_folders,
+    heal_subtitle_files,
+    repair_user_subtitle_preferences,
+    repair_system_xml,
+)
 
 
 def test_repair_database_removes_orphans_and_duplicates(tmp_path):
@@ -246,3 +252,38 @@ def test_repair_system_xml(tmp_path):
 
     content = cfg_file.read_text()
     assert "<IsStartupWizardCompleted>true</IsStartupWizardCompleted>" in content
+
+
+def test_heal_subtitle_files_purges_corrupt_files(tmp_path):
+    movie_dir = tmp_path / "Iron Man (2008)"
+    movie_dir.mkdir()
+
+    # 0-byte broken file
+    f0 = movie_dir / "Iron Man (2008).eng.0.srt"
+    f0.write_text("")
+    # corrupt forced file
+    ff = movie_dir / "Iron Man (2008).eng.forced.srt"
+    ff.write_text("broken content without timestamp")
+    # valid file
+    fv = movie_dir / "Iron Man (2008).eng.srt"
+    fv.write_text("1\n00:00:01,000 --> 00:00:03,000\nValid line\n")
+
+    heal_subtitle_files(roots=[str(tmp_path)])
+
+    assert not f0.exists()
+    assert not ff.exists()
+    assert fv.exists()
+
+
+def test_repair_user_subtitle_preferences(tmp_path):
+    user_dir = tmp_path / "users" / "admin"
+    user_dir.mkdir(parents=True)
+    cfg_file = user_dir / "config.xml"
+    cfg_file.write_text("<UserConfiguration><SubtitleMode>Default</SubtitleMode></UserConfiguration>")
+
+    repair_user_subtitle_preferences(configs=[str(tmp_path / "users")])
+
+    content = cfg_file.read_text()
+    assert "<SubtitleMode>Always</SubtitleMode>" in content
+    assert "<SubtitleLanguagePreference>en</SubtitleLanguagePreference>" in content
+
