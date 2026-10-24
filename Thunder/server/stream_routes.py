@@ -252,7 +252,13 @@ async def _serve_media_response(
 
 @routes.get("/", allow_head=True)
 async def root_redirect(request):
-    raise web.HTTPFound("https://github.com/fyaz05/FileToLink")
+    return web.json_response({
+        "server": {
+            "status": "operational",
+            "name": "FileToLink",
+            "version": __version__,
+        }
+    })
 
 
 @routes.get("/status", allow_head=True)

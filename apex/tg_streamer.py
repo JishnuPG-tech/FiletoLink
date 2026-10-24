@@ -2640,15 +2640,24 @@ def _create_strm_file_sync(entry):
 
     # Avoid rewriting unchanged .strm files to prevent Jellyfin filesystem watcher
     # from detecting file change and pruning extracted metadata & posters.
-    if os.path.exists(strm_path):
+    if os.path.exists(strm_path) and os.path.getsize(strm_path) > 10:
         try:
             with open(strm_path, "r", encoding="utf-8") as f:
-                if f.read().strip() == stream_url.strip():
-                    entry["target_dir"] = target_dir
-                    entry["show_root"] = show_root
-                    entry["strm_base"] = strm_base_name
-                    entry["strm_path"] = strm_path
-                    return strm_filename, target_dir, show_root
+                existing_content = f.read().strip()
+            is_valid_target = False
+            if chat_id and f"/{chat_id}/{msg_id}" in existing_content:
+                is_valid_target = True
+            elif not chat_id and file_id and str(file_id) in existing_content:
+                is_valid_target = True
+            elif existing_content.split("?")[0] == stream_url.split("?")[0]:
+                is_valid_target = True
+
+            if is_valid_target:
+                entry["target_dir"] = target_dir
+                entry["show_root"] = show_root
+                entry["strm_base"] = strm_base_name
+                entry["strm_path"] = strm_path
+                return strm_filename, target_dir, show_root
         except Exception:
             pass
 
