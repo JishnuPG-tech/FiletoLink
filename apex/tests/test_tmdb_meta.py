@@ -204,6 +204,18 @@ class TestParseMediaMeta:
         assert "ms" not in meta["search_candidates"]
         assert "mmax" not in meta["search_candidates"]
 
+    def test_iron_man_3_size_tag_stripped_cleanly(self):
+        raw = "Iron Man 3 (2013) English BluRay 720p x264 780MB.mkv"
+        meta = parse_media_meta(raw)
+        assert meta["title"] == "Iron Man 3"
+        assert meta["clean_title"] == "Iron Man 3"
+        assert meta["search_title"] == "iron man 3"
+        assert meta["year"] == 2013
+        assert meta["language"] == "English"
+        assert "iron man 3" in meta["search_candidates"]
+        assert "780mb" not in meta["search_candidates"]
+        assert "780" not in meta["search_candidates"]
+
 
 class TestBestTmdbMatch:
     def test_exact_film(self):
@@ -215,6 +227,19 @@ class TestBestTmdbMatch:
         hit = best_tmdb_match(results, "spiderman homecoming", "movie", 2017)
         assert hit is not None
         assert hit["id"] == 1
+
+    def test_iron_man_3_rejects_generation_iron(self):
+        results = [
+            {"id": 210879, "title": "Generation Iron", "release_date": "2013-09-20"},
+            {"id": 68721, "title": "Iron Man 3", "release_date": "2013-04-18"},
+        ]
+        hit = best_tmdb_match(results, "iron man 3", "movie", 2013)
+        assert hit is not None
+        assert hit["id"] == 68721
+
+        # Even if Generation Iron is the only hit returned, it must not match
+        lone_gen = [{"id": 210879, "title": "Generation Iron", "release_date": "2013-09-20"}]
+        assert best_tmdb_match(lone_gen, "iron man 3", "movie", 2013) is None
 
     def test_type_filter_excludes_wrong_media(self):
         results = [

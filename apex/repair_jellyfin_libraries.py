@@ -366,6 +366,111 @@ def heal_subtitle_files(roots=None):
         print(f"[REPAIR] Purged {purged} corrupt/broken subtitle files across media directories.")
 
 
+def heal_mismatched_media(roots=None, databases=None):
+    """Clean folder/file release-size noise and purge misidentified metadata (e.g. Generation Iron on Iron Man 3)."""
+    search_roots = roots or [
+        "/data/jellyfin/media/Movies",
+        "/data/jellyfin/media/TV Shows",
+        "/data/movies",
+        "/data/tvshows",
+        "/opt/jellyfin-local/media",
+    ]
+    db_list = databases or TARGET_DATABASES
+    size_re = re.compile(r"(?i)\b\d+(?:\.\d+)?\s*(?:mb|gb|kib|mib|gib|tb)\b")
+
+    for root_dir in search_roots:
+        if not os.path.exists(root_dir):
+            continue
+
+        for dirpath, dirnames, filenames in list(os.walk(root_dir, topdown=True)):
+            dirname = os.path.basename(dirpath)
+            if not dirname or dirpath == root_dir:
+                continue
+
+            # 1. Rename directories containing release-size noise: "Iron Man 3 780Mb (2013)" -> "Iron Man 3 (2013)"
+            if size_re.search(dirname):
+                clean_name = size_re.sub("", dirname)
+                clean_name = re.sub(r"\s+", " ", clean_name).strip(" -_.")
+                if clean_name and clean_name != dirname:
+                    parent_dir = os.path.dirname(dirpath)
+                    new_dirpath = os.path.join(parent_dir, clean_name)
+                    if not os.path.exists(new_dirpath):
+                        try:
+                            os.rename(dirpath, new_dirpath)
+                            print(f"[REPAIR] Cleaned folder name: '{dirpath}' -> '{new_dirpath}'")
+                            dirpath = new_dirpath
+                            dirname = clean_name
+                            try:
+                                filenames = os.listdir(new_dirpath)
+                            except Exception:
+                                pass
+                        except Exception as ren_err:
+                            print(f"[REPAIR] Note renaming folder {dirpath}: {ren_err}")
+
+            # 2. Rename .strm files inside directory that contain release-size noise
+            for fn in list(filenames):
+                if fn.endswith(".strm") and size_re.search(fn):
+                    base_no_ext, ext = os.path.splitext(fn)
+                    clean_strm_base = size_re.sub("", base_no_ext)
+                    clean_strm_base = re.sub(r"\s+", " ", clean_strm_base).strip(" -_.")
+                    if clean_strm_base and clean_strm_base != base_no_ext:
+                        old_strm = os.path.join(dirpath, fn)
+                        new_strm = os.path.join(dirpath, f"{clean_strm_base}{ext}")
+                        if not os.path.exists(new_strm):
+                            try:
+                                os.rename(old_strm, new_strm)
+                                print(f"[REPAIR] Cleaned strm file: '{fn}' -> '{clean_strm_base}{ext}'")
+                                for db_p in db_list:
+                                    if os.path.exists(db_p):
+                                        try:
+                                            conn = sqlite3.connect(db_p, timeout=5)
+                                            conn.execute("UPDATE BaseItems SET Path = ? WHERE Path = ?", (new_strm, old_strm))
+                                            conn.commit()
+                                            conn.close()
+                                        except Exception:
+                                            pass
+                            except Exception as strm_err:
+                                print(f"[REPAIR] Note renaming strm {old_strm}: {strm_err}")
+
+            # 3. Purge Generation Iron misidentification from Iron Man folders
+            dir_lower = dirname.lower()
+            if "iron" in dir_lower and "man" in dir_lower:
+                has_gen_iron = False
+                try:
+                    curr_files = os.listdir(dirpath)
+                except Exception:
+                    curr_files = []
+                for fn in curr_files:
+                    if fn.lower().endswith(".nfo"):
+                        nfo_p = os.path.join(dirpath, fn)
+                        try:
+                            with open(nfo_p, "r", encoding="utf-8", errors="ignore") as nf:
+                                content = nf.read()
+                            if "210879" in content or "generation iron" in content.lower() or "tt2205904" in content:
+                                has_gen_iron = True
+                                break
+                        except Exception:
+                            pass
+                if has_gen_iron:
+                    print(f"[REPAIR] Purging mismatched 'Generation Iron' metadata from '{dirpath}'...")
+                    for fn in curr_files:
+                        fn_l = fn.lower()
+                        if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l in ("poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg"):
+                            try:
+                                os.remove(os.path.join(dirpath, fn))
+                            except Exception:
+                                pass
+                    for db_p in db_list:
+                        if os.path.exists(db_p):
+                            try:
+                                conn = sqlite3.connect(db_p, timeout=5)
+                                conn.execute("DELETE FROM BaseItems WHERE (Name LIKE '%Generation Iron%' OR Data LIKE '%210879%') AND (Path LIKE '%Iron Man%' OR Path LIKE '%iron%')")
+                                conn.commit()
+                                conn.close()
+                            except Exception:
+                                pass
+
+
 def repair_user_subtitle_preferences(configs=None):
     """Ensure user profile config XML files have SubtitleMode set to Always so
     subtitles automatically appear when playing any video."""
@@ -486,6 +591,7 @@ def main():
     purge_plugin_databases()
     cleanup_empty_media_folders()
     heal_subtitle_files()
+    heal_mismatched_media()
     repair_user_subtitle_preferences()
     repair_system_xml()
 

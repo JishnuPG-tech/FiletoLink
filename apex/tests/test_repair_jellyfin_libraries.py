@@ -8,6 +8,7 @@ from repair_jellyfin_libraries import (
     repair_database,
     cleanup_empty_media_folders,
     heal_subtitle_files,
+    heal_mismatched_media,
     repair_user_subtitle_preferences,
     repair_system_xml,
 )
@@ -286,4 +287,66 @@ def test_repair_user_subtitle_preferences(tmp_path):
     content = cfg_file.read_text()
     assert "<SubtitleMode>Always</SubtitleMode>" in content
     assert "<SubtitleLanguagePreference>en</SubtitleLanguagePreference>" in content
+
+
+def test_heal_mismatched_media_cleans_noise_and_purges_mismatch(tmp_path):
+    movies_dir = tmp_path / "media" / "Movies" / "English"
+    movies_dir.mkdir(parents=True)
+
+    # 1. Directory with size noise: "Iron Man 3 780Mb (2013)"
+    im3_dir = movies_dir / "Iron Man 3 780Mb (2013)"
+    im3_dir.mkdir()
+    strm_file = im3_dir / "Iron Man 3 780Mb (2013).strm"
+    strm_file.write_text("http://localhost:8080/stream/123")
+    nfo_file = im3_dir / "movie.nfo"
+    nfo_file.write_text("<movie><title>Generation Iron</title><tmdbid>210879</tmdbid><id>tt2205904</id></movie>")
+    poster_file = im3_dir / "poster.jpg"
+    poster_file.write_bytes(b"fake poster bytes")
+    sub_file = im3_dir / "Iron Man 3 780Mb (2013).eng.srt"
+    sub_file.write_text("1\n00:00:01,000 --> 00:00:03,000\nWrong dialogue\n")
+
+    db_file = tmp_path / "jellyfin.db"
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE BaseItems (
+            Id TEXT PRIMARY KEY,
+            Path TEXT,
+            Name TEXT,
+            type TEXT,
+            Data TEXT,
+            DateModified TEXT
+        )
+    """)
+    cur.execute(
+        "INSERT INTO BaseItems VALUES (?, ?, ?, ?, ?, ?)",
+        ("im3-id", str(strm_file), "Generation Iron", "MediaBrowser.Controller.Entities.Movies.Movie", '{"tmdb_id": 210879}', "2026-10-24T00:00:00Z")
+    )
+    conn.commit()
+    conn.close()
+
+    # Run heal_mismatched_media
+    heal_mismatched_media(roots=[str(movies_dir)], databases=[str(db_file)])
+
+    # Directory and strm must be cleaned of size noise
+    clean_dir = movies_dir / "Iron Man 3 (2013)"
+    assert clean_dir.exists()
+    assert not im3_dir.exists()
+    clean_strm = clean_dir / "Iron Man 3 (2013).strm"
+    assert clean_strm.exists()
+    assert clean_strm.read_text() == "http://localhost:8080/stream/123"
+
+    # Mismatched Generation Iron NFO, poster, and subtitle must be purged from disk
+    assert not (clean_dir / "movie.nfo").exists()
+    assert not (clean_dir / "poster.jpg").exists()
+    assert not (clean_dir / "Iron Man 3 (2013).eng.srt").exists()
+
+    # In database, Generation Iron row must be purged
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("SELECT Id, Name, Path FROM BaseItems")
+    rows = cur.fetchall()
+    conn.close()
+    assert len(rows) == 0
+
 

@@ -91,6 +91,11 @@ def nfo_needs_repair(nfo_path) -> bool:
         return True
     if "<tmdbid></tmdbid>" in text or "<tmdbid/>" in text or "<tmdbid>0</tmdbid>" in text:
         return True
+    # Mismatched Generation Iron on Iron Man releases
+    lower_path = str(nfo_path).lower()
+    if "iron" in lower_path and "man" in lower_path:
+        if "generation iron" in text.lower() or "<tmdbid>210879</tmdbid>" in text:
+            return True
     return False
 
 # TV patterns, in priority order. All return (show_name, season, episode) or None.
@@ -201,6 +206,10 @@ _MEDIA_EXT_RE = re.compile(
     r"(?i)\.(?:mkv|mp4|avi|mov|m4v|webm|ts|m2ts|mpg|mpeg|wmv|flv|iso|rar|zip|7z)\s*$"
 )
 
+_SIZE_RE = re.compile(
+    r"(?i)\b\d+(?:\.\d+)?\s*(?:mb|gb|kib|mib|gib|tb)\b"
+)
+
 
 _URL_NOISE_RE = re.compile(
     r"(?i)\b(?:https?://\S+|www\.\S+|\S+\.(?:com|org|net|vip|in|me|xyz|top|site|cc|to|is|pm|ms|link))\b"
@@ -211,7 +220,7 @@ _WATERMARK_PAREN_RE = re.compile(
 
 
 def _strip_noise(text: str) -> str:
-    """Strip group tags ([...], @Handle), the real media extension and collapse
+    """Strip group tags ([...], @Handle), the real media extension, file sizes and collapse
     whitespace.
 
     The media extension must be removed BEFORE dots are turned into spaces, or
@@ -221,7 +230,8 @@ def _strip_noise(text: str) -> str:
     keeping them produces dotted folder names and breaks both Jellyfin
     matching and TMDB search queries.
     """
-    t = _URL_NOISE_RE.sub(" ", text)
+    t = _SIZE_RE.sub(" ", text)
+    t = _URL_NOISE_RE.sub(" ", t)
     t = _WATERMARK_PAREN_RE.sub(" ", t)
     t = re.sub(r"\[[^\]]*\]", " ", t)
     t = re.sub(r"@[\w.\-]+", " ", t)
@@ -364,6 +374,7 @@ def _detect_year(text: Optional[str]) -> Optional[int]:
 
 def _clean_search_title(text: str) -> str:
     """A title ready to send to the TMDB search API (no year/release tags)."""
+    text = _SIZE_RE.sub(" ", text)
     text = _strip_noise(_drop_dotted_group_tail(text))
     text = YEAR_RE.sub(" ", text)
     text = re.sub(r"\(\s*\)", " ", text)
@@ -387,26 +398,31 @@ def _clean_search_title(text: str) -> str:
 
 
 def _significant_token_stream(text: str):
-    """Yield non-stop, non-digit words that are likely part of the real title."""
+    """Yield non-stop words and sequel part numbers that are likely part of the real title."""
     seen = set()
     stop_tokens = _ALL_STOP
-    cleaned = _strip_noise(_drop_dotted_group_tail(text or ""))
+    cleaned = _SIZE_RE.sub(" ", text or "")
+    cleaned = _strip_noise(_drop_dotted_group_tail(cleaned))
     for tok in re.findall(r"[a-z0-9]+", cleaned.lower()):
-        if tok in stop_tokens or (tok.isdigit() and len(tok) != 4) or len(tok) <= 1:
+        if tok.isdigit():
+            # Drop 4-digit years (e.g. 2013) or numbers > 2 digits (e.g. 780, 1080)
+            if len(tok) == 4 or len(tok) > 2:
+                continue
+        elif tok in stop_tokens or len(tok) <= 1:
             continue
         if _CHANNEL_TOKEN_RE.match(tok):
             continue
-        # Drop ambiguous fragments ripped off a release token ("1080p"->"p",
-        # "DTS-MA"->"ma", "WEB-DL"->"dl") that add no matching value and only
-        # widen the wrong-hit window on the TMDB search.
-        if any(
+        # Drop ambiguous alpha fragments ripped off a release token ("DTS-MA"->"ma",
+        # "WEB-DL"->"dl") that add no matching value. Digits (sequels) are never checked here.
+        if tok.isalpha() and len(tok) <= 2 and any(
             w != tok and (w.startswith(tok) or w.endswith(tok))
             for w in stop_tokens
         ):
             continue
-        if tok not in seen:
-            seen.add(tok)
-            yield _norm_tok(tok)
+        norm = _norm_tok(tok)
+        if norm not in seen:
+            seen.add(norm)
+            yield norm
 
 
 _TAGLINE_PATTERNS = re.compile(
@@ -595,10 +611,23 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
         if not overlap:
             continue
 
+        # If user query has multiple significant tokens (e.g. "Iron Man 3"), matching only 1
+        # token (like "Generation Iron" matching only "iron") is a spurious partial match.
+        if len(q_toks) >= 3 and overlap < 2:
+            continue
+
         sim_main = (2.0 * len(q_toks & r_toks)) / (len(q_toks) + len(r_toks)) if r_toks else 0.0
         sim_orig = (2.0 * len(q_toks & orig_toks)) / (len(q_toks) + len(orig_toks)) if orig_toks else 0.0
         sim_comb = (2.0 * overlap) / (len(q_toks) + len(combined_r))
         score = max(sim_main, sim_orig, sim_comb)
+
+        # Sequel digit alignment: penalize mismatched sequel numbers (e.g. "Rocky 2" vs "Rocky 3")
+        q_digits = {t for t in q_toks if t.isdigit()}
+        r_digits = {t for t in combined_r if t.isdigit()}
+        if q_digits and r_digits and not (q_digits & r_digits):
+            score -= 0.8
+        elif q_digits and not (q_digits & r_digits):
+            score -= 0.4
 
         if q_toks <= combined_r:
             if len(q_toks) == len(combined_r):

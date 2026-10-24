@@ -197,6 +197,47 @@ def load_cache():
     if normalized:
         logger.info(f"[CACHE] Normalized {normalized} inverted msg_id/chat_id cache entries.")
 
+    # Clean release-size noise and heal misidentified metadata in cache
+    cache_updated = False
+    size_pattern = re.compile(r"(?i)\b\d+(?:\.\d+)?\s*(?:mb|gb|kib|mib|gib|tb)\b")
+    for key, data in list(FILE_ID_CACHE.items()):
+        if not isinstance(data, dict):
+            continue
+        raw_name = data.get("file_name") or data.get("raw_name") or data.get("title") or ""
+        raw_lower = raw_name.lower()
+
+        # 1. Heal Generation Iron misidentification on Iron Man movies
+        if "iron" in raw_lower and "man" in raw_lower:
+            if data.get("tmdb_id") == 210879 or "generation iron" in (data.get("tmdb_title") or "").lower():
+                data["tmdb_id"] = None
+                data["tmdb_title"] = None
+                data["imdb_id"] = None
+                cache_updated = True
+                logger.info(f"[CACHE-HEAL] Reset mismatched Generation Iron metadata for '{raw_name}'")
+
+        # 2. Clean release-size noise from title, clean_title, strm_base
+        cur_title = data.get("title") or ""
+        cur_clean = data.get("clean_title") or ""
+        cur_base = data.get("strm_base") or ""
+        if size_pattern.search(cur_title) or size_pattern.search(cur_clean) or size_pattern.search(cur_base):
+            meta = parse_media_meta(raw_name)
+            if meta.get("title") and meta["title"] != cur_title:
+                data["title"] = meta["title"]
+                data["clean_title"] = meta["clean_title"]
+                data["search_title"] = meta["search_title"]
+                data["strm_base"] = meta["clean_title"]
+                if meta.get("year"):
+                    data["year"] = meta["year"]
+                new_tgt = strm_dir(MOVIES_DIR, SHOWS_DIR, data)
+                new_strm = os.path.join(new_tgt, f"{data['strm_base']}.strm")
+                data["target_dir"] = new_tgt
+                data["strm_path"] = new_strm
+                cache_updated = True
+                logger.info(f"[CACHE-HEAL] Cleaned size noise for '{raw_name}' -> '{meta['title']}'")
+
+    if cache_updated:
+        _save_cache_sync()
+
 def _save_cache_sync():
     try:
         os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
@@ -1616,6 +1657,42 @@ async def _enrich_media_metadata(entry):
                         logger.info("[TMDB] Resolved Kattalan directly to TMDB ID 1065834 (Malayalam 2026)")
                 except Exception as _exc:
                     pass
+
+        # "Iron Man 3" (2013 Marvel movie, TMDB ID 68721, IMDb tt1300854):
+        # Prevent any misclassification to bodybuilding documentary "Generation Iron" (TMDB 210879)
+        if "iron" in raw_name_lower and "man" in raw_name_lower:
+            if hit and hit.get("id") == 210879:
+                hit = None
+            if "3" in raw_name_lower or entry.get("year") == 2013:
+                if not hit or hit.get("id") != 68721:
+                    try:
+                        im3_hit = await _tmdb_get("/movie/68721", {})
+                        if im3_hit and im3_hit.get("id") == 68721:
+                            hit = im3_hit
+                            used_query = "Iron Man 3"
+                            logger.info("[TMDB] Resolved Iron Man 3 directly to TMDB ID 68721")
+                    except Exception as _exc:
+                        pass
+            elif "2" in raw_name_lower or entry.get("year") == 2010:
+                if not hit or hit.get("id") != 10138:
+                    try:
+                        im2_hit = await _tmdb_get("/movie/10138", {})
+                        if im2_hit and im2_hit.get("id") == 10138:
+                            hit = im2_hit
+                            used_query = "Iron Man 2"
+                            logger.info("[TMDB] Resolved Iron Man 2 directly to TMDB ID 10138")
+                    except Exception as _exc:
+                        pass
+            elif entry.get("year") in (2008, None) and "3" not in raw_name_lower and "2" not in raw_name_lower:
+                if not hit or hit.get("id") != 1726:
+                    try:
+                        im1_hit = await _tmdb_get("/movie/1726", {})
+                        if im1_hit and im1_hit.get("id") == 1726:
+                            hit = im1_hit
+                            used_query = "Iron Man"
+                            logger.info("[TMDB] Resolved Iron Man directly to TMDB ID 1726")
+                    except Exception as _exc:
+                        pass
 
         # AI-tier-2 fallback: rule parsing + TMDB all missed; ask the LLM to
         # resolve the canonical title (it knows real-world films and handles ANY
@@ -4095,7 +4172,14 @@ async def backfill_missing_subtitles(force: bool = False):
             eng_sub = os.path.join(target_dir, f"{base}.eng.srt")
             en_sub = os.path.join(target_dir, f"{base}.en.srt")
             has_valid_sub = is_valid_subtitle_file(eng_sub) or is_valid_subtitle_file(en_sub)
-            if not force and has_valid_sub:
+            
+            # If entry was previously mismatched to Generation Iron, force re-injection
+            raw_check = (entry.get("file_name") or entry.get("title") or "").lower()
+            entry_force = force
+            if "iron" in raw_check and "man" in raw_check:
+                if entry.get("tmdb_id") == 210879 or "generation iron" in (entry.get("tmdb_title") or "").lower():
+                    entry_force = True
+            if not entry_force and has_valid_sub:
                 continue
 
             # Check if video .strm exists
@@ -4119,7 +4203,7 @@ async def backfill_missing_subtitles(force: bool = False):
                     pass
 
             try:
-                injected = await inject_subtitles_for_entry(session, entry, force=force)
+                injected = await inject_subtitles_for_entry(session, entry, force=entry_force)
                 if injected:
                     total_injected += len(injected)
                     logger.info(f"[SUBTITLE-BACKFILL] Injected {len(injected)} subtitle(s) for '{entry.get('title')}'")
@@ -4621,10 +4705,17 @@ async def _reconcile_and_upgrade_library():
 
 
 def _unresolved_enrich_entries():
-    """Cache entries lacking any TMDB/AI resolution, worth one more match pass."""
+    """Cache entries lacking any TMDB/AI resolution or carrying mismatched metadata, worth one more match pass."""
     entries = []
     for key, data in FILE_ID_CACHE.items():
-        if not isinstance(data, dict) or data.get("tmdb_id") or data.get("tmdb_title"):
+        if not isinstance(data, dict):
+            continue
+        is_mismatched = False
+        raw_check = (data.get("file_name") or data.get("title") or "").lower()
+        if "iron" in raw_check and "man" in raw_check:
+            if data.get("tmdb_id") == 210879 or "generation iron" in (data.get("tmdb_title") or "").lower():
+                is_mismatched = True
+        if not is_mismatched and (data.get("tmdb_id") or data.get("tmdb_title")):
             continue
         if not (data.get("file_id") and (data.get("file_name") or data.get("title"))):
             continue

@@ -39,7 +39,10 @@ _RELEASE_TOKENS = {
     "yts", "psa", "sparks", "rarbg", "galaxyrg", "eztv", "flux", "qxr", "amzn", "nf", "dsnp"
 }
 
-_CAM_TOKENS = {"cam", "camrip", "ts", "telesync", "hdcam", "hdts"}
+_CAM_TOKENS = {
+    "cam", "camrip", "ts", "telesync", "hdcam", "hdts",
+    "line", "hdscr", "scr", "screener", "r6", "telecine", "tc",
+}
 
 
 def extract_release_tokens(text: Optional[str]) -> set:
@@ -66,11 +69,27 @@ def score_subtitle_candidate(candidate: Dict[str, Any], video_filename: str) -> 
 
     score = 50.0
 
-    # Penalize low-quality CAM/TS subtitles unless the source video is also explicitly a CAM
+    # Penalize low-quality CAM/TS/LINE/R6 subtitles unless the source video is also explicitly a CAM
     video_is_cam = bool(video_tokens & _CAM_TOKENS)
     sub_is_cam = bool(sub_tokens & _CAM_TOKENS)
     if sub_is_cam and not video_is_cam:
         score -= 100.0
+
+    # Source type alignment bonuses: rewarding matching retail cuts (BluRay vs BluRay, WEB vs WEB)
+    video_is_bluray = bool(video_tokens & {"bluray", "bdrip", "brrip"})
+    sub_is_bluray = bool(sub_tokens & {"bluray", "bdrip", "brrip"})
+    if video_is_bluray and sub_is_bluray:
+        score += 35.0
+
+    video_is_web = bool(video_tokens & {"web", "webdl", "web-dl", "webrip"})
+    sub_is_web = bool(sub_tokens & {"web", "webdl", "web-dl", "webrip"})
+    if video_is_web and sub_is_web:
+        score += 35.0
+
+    video_is_hdtv = bool(video_tokens & {"hdtv", "hdtvrip"})
+    sub_is_hdtv = bool(sub_tokens & {"hdtv", "hdtvrip"})
+    if video_is_hdtv and sub_is_hdtv:
+        score += 30.0
 
     # Matching release signature tokens
     matching_tokens = (video_tokens & sub_tokens) & _RELEASE_TOKENS
@@ -403,6 +422,24 @@ async def inject_subtitles_for_entry(
     season = int(entry.get("season") or 1)
     episode = int(entry.get("episode") or 1)
     video_filename = entry.get("file_name") or f"{base}.mkv"
+
+    # Fallback to resolve IMDb ID from TMDB if entry has tmdb_id but missing imdb_id
+    if (not imdb_id or not imdb_id.startswith("tt")) and entry.get("tmdb_id"):
+        tmdb_key = os.environ.get("TMDB_API_KEY") or os.environ.get("APEX_TMDB_API_KEY") or "2e737c385b0d00f7b0f340889f074dcf"
+        try:
+            if is_tv:
+                u = f"https://api.themoviedb.org/3/tv/{entry['tmdb_id']}/external_ids?api_key={tmdb_key}"
+            else:
+                u = f"https://api.themoviedb.org/3/movie/{entry['tmdb_id']}?api_key={tmdb_key}"
+            async with active_session.get(u, timeout=6) as tmdb_r:
+                if tmdb_r.status == 200:
+                    tmdb_data = await tmdb_r.json()
+                    fetched_imdb = tmdb_data.get("imdb_id")
+                    if fetched_imdb and str(fetched_imdb).startswith("tt"):
+                        imdb_id = str(fetched_imdb)
+                        entry["imdb_id"] = imdb_id
+        except Exception:
+            pass
 
     # Default languages: English is mandatory; add Malayalam if original is foreign or requested
     langs = list(target_langs) if target_langs else ["eng"]
