@@ -612,28 +612,46 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
         if not overlap:
             continue
 
+        # Check containment: either all hit tokens are in query (e.g. "Aadu 3" in "Aadu 3 Part 1"),
+        # or all query tokens are in hit title
+        hit_contained_in_query = bool(combined_r <= q_toks)
+        query_contained_in_hit = bool(q_toks <= combined_r)
+
+        # Sequel digit alignment:
+        q_digits = {t for t in q_toks if t.isdigit()}
+        r_digits = {t for t in combined_r if t.isdigit()}
+
+        # If query has sequel digits and hit has sequel digits, they must share at least one sequel digit
+        # (e.g. "Aadu 3 Part 1" has digits {"3", "1"}, hit has {"3"} -> match on 3!)
+        if q_digits and r_digits and not (q_digits & r_digits):
+            # Query has sequel number (e.g. 3) and hit has a DIFFERENT sequel number (e.g. 2) -> REJECT
+            continue
+
+        # If query has sequel digits, but hit has NO sequel digits:
+        # Only allowed if hit is strictly contained in query (e.g. original unnumbered title on TMDB)
+        if q_digits and not r_digits and not hit_contained_in_query:
+            continue
+
+        # If query has NO sequel digits (original movie), hit must NOT be a sequel (e.g. Movie 2)
+        if r_digits and not q_digits and not query_contained_in_hit:
+            continue
+
         # Multi-token overlap requirements:
-        # A 2-word title (e.g. "Iron Man") must match both words; matching only 1 (e.g. "Generation Iron") is a false positive.
-        if len(q_toks) == 2 and overlap < 2:
-            continue
-        # A 3+ word title (e.g. "Iron Man 3") must match at least len(q_toks) - 1 tokens.
-        if len(q_toks) >= 3 and overlap < (len(q_toks) - 1):
-            continue
+        if not hit_contained_in_query and not query_contained_in_hit:
+            # A 2-word title (e.g. "Iron Man") must match both words; matching only 1 (e.g. "Generation Iron") is a false positive
+            if len(q_toks) == 2 and overlap < 2:
+                continue
+            # A 3+ word title (e.g. "Iron Man 3") must match at least 2 tokens
+            if len(q_toks) >= 3 and overlap < 2:
+                continue
 
         sim_main = (2.0 * len(q_toks & r_toks)) / (len(q_toks) + len(r_toks)) if r_toks else 0.0
         sim_orig = (2.0 * len(q_toks & orig_toks)) / (len(q_toks) + len(orig_toks)) if orig_toks else 0.0
         sim_comb = (2.0 * overlap) / (len(q_toks) + len(combined_r))
         score = max(sim_main, sim_orig, sim_comb)
 
-        # Sequel digit alignment:
-        q_digits = {t for t in q_toks if t.isdigit()}
-        r_digits = {t for t in combined_r if t.isdigit()}
-        # If query specifies sequel digits (e.g. 2, 3), hit MUST contain those exact digits
-        if q_digits and not (q_digits <= r_digits):
-            continue
-        # If query has NO sequel digits (original movie), hit must NOT be a sequel (e.g. Movie 2)
-        if r_digits and not q_digits:
-            continue
+        if hit_contained_in_query or query_contained_in_hit:
+            score += 0.35
 
         if q_toks <= combined_r:
             if len(q_toks) == len(combined_r):

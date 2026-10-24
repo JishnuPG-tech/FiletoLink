@@ -956,6 +956,11 @@ def allowed_chat(chat) -> bool:
     return str(chat.id) in allowed
 
 
+VIDEO_EXTENSIONS = {
+    ".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".ts", ".m4v", ".3gp", ".mpeg", ".mpg"
+}
+
+
 async def process_telegram_media(message, is_channel_post):
     """Shared media handler for Pyrogram DM + channel post updates."""
     try:
@@ -987,7 +992,19 @@ async def process_telegram_media(message, is_channel_post):
             logger.info(f"[PYROGRAM] 🎞️ Subtitle handled: {file_name} placed={placed}")
             return
 
-        strm_name = index_media(message.id, chat_id, media.file_id, media.file_size or 0, file_name)
+        # Ensure media is an actual video file (not zip/rar/apk/audio/sample clip)
+        ext = os.path.splitext(file_name)[1].lower()
+        if ext and ext not in VIDEO_EXTENSIONS:
+            logger.info(f"[MEDIA-SKIP] Dropped non-video file: {file_name} ({ext})")
+            return
+
+        file_size = int(getattr(media, "file_size", 0) or 0)
+        # Drop preview clips and promotional samples (< 25MB with 'sample' in name, or < 10MB)
+        if file_size < 10 * 1024 * 1024 or (file_size < 25 * 1024 * 1024 and "sample" in file_name.lower()):
+            logger.info(f"[SAMPLE-DROP] Dropped short video sample/clip: {file_name} ({file_size} bytes)")
+            return
+
+        strm_name = index_media(message.id, chat_id, media.file_id, file_size, file_name)
         if strm_name:
             logger.info(f"[PYROGRAM] 🎉 Ingested '{strm_name}' from chat {chat_id}")
             try:
@@ -1541,24 +1558,27 @@ async def _enrich_media_metadata(entry):
             logger.info(f"[TMDB] No target_dir for '{entry.get('title')}' - skipping enrich")
             return False
 
-# Idempotency gate: if metadata is on disk AND has valid tmdb_id,
+        # Idempotency gate: if metadata is on disk AND has valid tmdb_id,
         # avoid re-hitting the TMDB API on restart.
         has_tmdb = bool(entry.get("tmdb_id") or (isinstance(FILE_ID_CACHE.get(key), dict) and FILE_ID_CACHE[key].get("tmdb_id")))
-        if has_tmdb:
+        known_tmdb = int(entry.get("tmdb_id") or (FILE_ID_CACHE[key].get("tmdb_id") if isinstance(FILE_ID_CACHE.get(key), dict) else 0) or 0)
+        force_art = bool(entry.get("_force_art_refresh"))
+
+        if has_tmdb and not force_art:
             if is_tv and show_root:
                 tv_nfo = os.path.join(show_root, "tvshow.nfo")
                 tv_backdrop = os.path.join(show_root, "backdrop.jpg")
-                has_hd_backdrop = os.path.exists(tv_backdrop) and os.path.getsize(tv_backdrop) >= 300000
-                if os.path.exists(tv_nfo) and _poster_art_ok(show_root) and has_hd_backdrop and not _nfo_needs_repair(tv_nfo):
+                has_backdrop = os.path.exists(tv_backdrop) and os.path.getsize(tv_backdrop) >= 15000
+                if os.path.exists(tv_nfo) and _poster_art_ok(show_root) and has_backdrop and not _nfo_needs_repair(tv_nfo):
                     return True
             elif not is_tv:
                 movie_nfo = os.path.join(
                     target_dir, f"{entry.get('strm_base', strm_base(entry))}.nfo"
                 )
                 movie_backdrop = os.path.join(target_dir, "backdrop.jpg")
-                has_hd_backdrop = os.path.exists(movie_backdrop) and os.path.getsize(movie_backdrop) >= 300000
+                has_backdrop = os.path.exists(movie_backdrop) and os.path.getsize(movie_backdrop) >= 15000
                 if (os.path.exists(movie_nfo) and _poster_art_ok(target_dir)
-                        and has_hd_backdrop and not _nfo_needs_repair(movie_nfo)):
+                        and has_backdrop and not _nfo_needs_repair(movie_nfo)):
                     return True
 
         query = entry.get("search_title") or entry.get("show_name") or entry.get("title")
@@ -1577,6 +1597,13 @@ async def _enrich_media_metadata(entry):
         used_query = ""
         media_type = "tv" if is_tv else "movie"
         lang_code = tmdb_language_code(entry.get("language") or DEFAULT_LANGUAGE)
+
+        # If this item was already verified with a valid TMDB ID, lock directly to that ID
+        # NEVER re-run fuzzy text search against candidates for an already verified movie!
+        if known_tmdb and known_tmdb not in (210879,):
+            hit = {"id": known_tmdb}
+            used_query = f"tmdb:{known_tmdb}"
+            logger.info(f"[TMDB-LOCK] Preserved verified identity tmdb_id={known_tmdb} for '{entry.get('title')}'")
         # Tier-0: an embedded IMDb id (Radarr-style "{imdb-tt12345678}",
         # "[tt1234567]") resolves deterministically through /find, bypassing
         # every transliteration/spacing ambiguity of fuzzy text search.
@@ -4676,8 +4703,11 @@ async def _reconcile_and_upgrade_library():
             logo = os.path.join(target_dir, "logo.png")
             poster = os.path.join(target_dir, "poster.jpg")
 
-            # Mirror backdrop to thumb/landscape/fanart if backdrop is already HD
-            if os.path.exists(backdrop) and os.path.getsize(backdrop) >= 100000:
+            # If the movie already has a valid TMDB ID and valid artwork, mirror to thumb/folder and DO NOT re-enrich!
+            has_valid_poster = os.path.exists(poster) and os.path.getsize(poster) >= 15000
+            has_valid_backdrop = os.path.exists(backdrop) and os.path.getsize(backdrop) >= 15000
+
+            if has_valid_backdrop:
                 for extra in (fanart, landscape, thumb):
                     if not os.path.exists(extra):
                         try:
@@ -4685,16 +4715,20 @@ async def _reconcile_and_upgrade_library():
                                 d.write(s.read())
                         except OSError:
                             pass
+            if has_valid_poster:
+                folder_jpg = os.path.join(target_dir, "folder.jpg")
+                if not os.path.exists(folder_jpg):
+                    try:
+                        with open(poster, "rb") as s, open(folder_jpg, "wb") as d:
+                            d.write(s.read())
+                    except OSError:
+                        pass
 
+            # Only enrich if truly missing TMDB identity or completely missing poster/backdrop
             needs_hd = (
-                not os.path.exists(backdrop)
-                or os.path.getsize(backdrop) < 300000
-                or not os.path.exists(thumb)
-                or not os.path.exists(landscape)
-                or not os.path.exists(logo)
-                or not os.path.exists(poster)
-                or os.path.getsize(poster) < 80000
-                or not data.get("tmdb_id")
+                not data.get("tmdb_id")
+                or not has_valid_poster
+                or not has_valid_backdrop
             )
 
             # Check if this item had a suspicious match or mismatched NFO on disk
