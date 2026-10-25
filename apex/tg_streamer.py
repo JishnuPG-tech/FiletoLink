@@ -2025,6 +2025,7 @@ async def _enrich_media_metadata(entry):
                 return None
 
             art_dir = show_root if is_tv else target_dir
+            force_art = bool(entry.get("_force_art_refresh"))
 
             # Download English / official clear logo so title shows sharp English branding
             images_data = detail.get("images") or {}
@@ -2040,7 +2041,7 @@ async def _enrich_media_metadata(entry):
                     logo_url = f"https://image.tmdb.org/t/p/original{logo_path}"
                     logo_dst = os.path.join(art_dir, "logo.png")
                     clearlogo_dst = os.path.join(art_dir, "clearlogo.png")
-                    if not os.path.exists(logo_dst) or os.path.getsize(logo_dst) < 5000:
+                    if force_art or not os.path.exists(logo_dst) or os.path.getsize(logo_dst) < 5000:
                         if await _download_image(session, logo_url, logo_dst):
                             try:
                                 with open(logo_dst, "rb") as s, open(clearlogo_dst, "wb") as d:

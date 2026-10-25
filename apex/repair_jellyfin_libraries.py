@@ -489,7 +489,7 @@ def heal_mismatched_media(roots=None, databases=None):
 
                     for fn in curr_files:
                         fn_l = fn.lower()
-                        if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l in ("poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg"):
+                        if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l in ("poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg", "logo.png", "clearlogo.png"):
                             try:
                                 os.remove(os.path.join(dirpath, fn))
                             except Exception:
@@ -500,6 +500,36 @@ def heal_mismatched_media(roots=None, databases=None):
                                 conn = sqlite3.connect(db_p, timeout=5)
                                 conn.execute("DELETE FROM BaseItems WHERE Name LIKE '%Generation Iron%' OR Data LIKE '%210879%' OR Path LIKE '%Generation Iron%'")
                                 conn.commit()
+                                try:
+                                    conn.execute("UPDATE BaseItems SET Images = NULL WHERE Path LIKE '%Iron Man%'")
+                                    conn.commit()
+                                except Exception:
+                                    pass
+                                conn.close()
+                            except Exception:
+                                pass
+
+                # If this is Iron Man 3 folder, ensure stale Generation Iron logo is purged so official Iron Man 3 logo is downloaded
+                is_im3 = "iron" in dir_lower and "man" in dir_lower and ("3" in dir_lower or "2013" in dir_lower)
+                if is_im3:
+                    for fn in curr_files:
+                        if fn.lower() in ("logo.png", "clearlogo.png"):
+                            try:
+                                os.remove(os.path.join(dirpath, fn))
+                                print(f"[REPAIR] Purged stale logo from '{dirpath}' to force clean Iron Man 3 logo fetch.")
+                            except Exception:
+                                pass
+                    for db_p in db_list:
+                        if os.path.exists(db_p):
+                            try:
+                                conn = sqlite3.connect(db_p, timeout=5)
+                                conn.execute("DELETE FROM BaseItems WHERE Name LIKE '%Generation Iron%' OR Data LIKE '%210879%'")
+                                conn.commit()
+                                try:
+                                    conn.execute("UPDATE BaseItems SET Images = NULL WHERE Path LIKE '%Iron Man 3%'")
+                                    conn.commit()
+                                except Exception:
+                                    pass
                                 conn.close()
                             except Exception:
                                 pass

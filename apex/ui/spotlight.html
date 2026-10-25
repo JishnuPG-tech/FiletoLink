@@ -796,8 +796,15 @@
 				try {
 					if (artwork.logo) {
 						logo.src = artwork.logo;
+						logo.alt = title;
 						logo.style.display = 'block';
 						titleElement.style.display = 'none';
+						logo.onerror = () => {
+							logo.removeAttribute('src');
+							logo.style.display = 'none';
+							titleElement.style.display = 'block';
+							titleElement.textContent = title;
+						};
 					} else {
 						logo.removeAttribute('src');
 						logo.style.display = 'none';
