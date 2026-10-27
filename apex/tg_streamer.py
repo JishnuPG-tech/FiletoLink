@@ -416,11 +416,31 @@ def load_cache():
             data["target_dir"] = os.path.join(show_root, f"Season {s_num:02d}")
             data["strm_base"] = f"What If...? S{s_num:02d}E{e_num:02d}"
             data["strm_path"] = os.path.join(data["target_dir"], f"{data['strm_base']}.strm")
-            data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BMTEzNDc3MjAtMWRhKQ@@._V1_.jpg"
+            data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BYWFiOTcwNzItMTg5Mi00ZTU4LThkZWYtYWNmZWQ1ODE5ZTVmXkEyXkFqcGc@._V1_.jpg"
             data["backdrop_url"] = "https://images.metahub.space/background/medium/tt10168312/img"
             data["_force_art_refresh"] = True
             cache_updated = True
             logger.info(f"[CACHE-HEAL] Corrected What If...? metadata and artwork for '{raw_name}' -> S{s_num:02d}E{e_num:02d}")
+
+        # 2g. Purge or heal any "Summer I Turned Pretty" entry in cache
+        if "summer i turned pretty" in raw_lower or "the summer i turned pretty" in title_l or "summer i turned pretty" in title_l:
+            if "derry" in raw_lower:
+                data["title"] = "It: Welcome to Derry"
+                data["clean_title"] = "It: Welcome to Derry"
+                data["show_name"] = "It: Welcome to Derry"
+                data["is_tv"] = True
+                data["year"] = 2025
+                data["imdb_id"] = "tt19244304"
+                data["tmdb_id"] = 194766
+                data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BZWE0ZWM1MjUtNmYzYS00NzU3LTkxYmQtNmI3NTc0ZTY1NmVlXkEyXkFqcGc@._V1_.jpg"
+                data["backdrop_url"] = "https://images.metahub.space/background/medium/tt19244304/img"
+                data["_force_art_refresh"] = True
+                cache_updated = True
+            else:
+                logger.info(f"[CACHE-PURGE] Purging rogue Summer I Turned Pretty entry: {key}")
+                FILE_ID_CACHE.pop(key, None)
+                cache_updated = True
+                continue
 
         # 3. Clean release-size noise from title, clean_title, strm_base
         cur_title = data.get("title") or ""
@@ -2982,22 +3002,45 @@ def _meta_to_entry(msg_id, chat_id, file_id, file_size, file_name):
     except (TypeError, ValueError):
         pass
     meta = parse_media_meta(file_name)
+    ext = extract_media_info(file_name)
+
+    is_tv = bool(ext.get("is_tv") or meta.get("is_tv"))
+    clean_title = ext.get("title") or meta.get("clean_title") or meta.get("title")
+    year = ext.get("year") or meta.get("year")
+    season = ext.get("season") or meta.get("season")
+    episode = ext.get("episode") or meta.get("episode")
+
+    if is_tv:
+        show_name = clean_title
+        s_num = int(season or 1)
+        e_num = int(episode or 1)
+        title = f"{show_name} - S{s_num:02d}E{e_num:02d}"
+    else:
+        show_name = None
+        s_num = None
+        e_num = None
+        title = f"{clean_title} ({year})" if year else clean_title
+
+    candidates = _search_candidates(file_name)
+    if clean_title and clean_title not in candidates:
+        candidates.insert(0, clean_title)
+
     return {
         "file_id": file_id,
         "chat_id": chat_id,
         "msg_id": msg_id,
         "file_size": file_size,
         "file_name": file_name,
-        "title": meta["title"],
-        "clean_title": meta["clean_title"],
-        "search_title": meta["search_title"],
-        "search_candidates": meta.get("search_candidates") or [],
-        "is_tv": meta["is_tv"],
-        "show_name": meta["show_name"],
-        "season": meta["season"],
-        "episode": meta["episode"],
-        "year": meta["year"],
-        "language": meta["language"],
+        "title": title,
+        "clean_title": clean_title,
+        "search_title": clean_title,
+        "search_candidates": candidates,
+        "is_tv": is_tv,
+        "show_name": show_name,
+        "season": s_num,
+        "episode": e_num,
+        "year": year,
+        "language": meta.get("language") or DEFAULT_LANGUAGE,
         "_cache_key": _cache_key(chat_id, msg_id),
     }
 
@@ -6002,24 +6045,26 @@ async def start_background_tasks(app):
         except Exception as exc:
             logger.warning(f"[SUBTITLES] Startup backfill notice: {exc}")
 
+    async def _startup_reconcile():
+        await asyncio.sleep(5)
+        try:
+            logger.info("[RECONCILE] Running startup library reconciliation & IMDb upgrade...")
+            await _reconcile_and_upgrade_library()
+        except Exception as exc:
+            logger.warning(f"[RECONCILE] Startup reconciliation notice: {exc}")
+
     app['pyrogram_task'] = asyncio.create_task(_guard())
     app['reconciliation_task'] = asyncio.create_task(_reconciliation_loop())
     app['channel_sync_task'] = asyncio.create_task(_configured_channel_sync_loop())
     app['subtitle_backfill_task'] = asyncio.create_task(_delayed_subtitle_backfill())
+    app['startup_reconcile_task'] = asyncio.create_task(_startup_reconcile())
 
 async def cleanup_background_tasks(app):
-    task = app.get("subtitle_backfill_task")
-    if task:
-        task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
-    task = app.get("reconciliation_task")
-    if task:
-        task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
-    task = app.get("channel_sync_task")
-    if task:
-        task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
+    for task_name in ("subtitle_backfill_task", "reconciliation_task", "channel_sync_task", "startup_reconcile_task"):
+        task = app.get(task_name)
+        if task:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
     await stop_pyrogram()
 
 app = web.Application()

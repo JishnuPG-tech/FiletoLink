@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import re
+import shutil
 import sqlite3
 import datetime
 
@@ -285,8 +286,21 @@ def cleanup_empty_media_folders(roots=None):
             media_files = [f for f in filenames if f.endswith((".strm", ".mp4", ".mkv", ".avi", ".ts"))]
             if not media_files and not dirnames:
                 try:
-                    import shutil
                     shutil.rmtree(dirpath, ignore_errors=True)
+                except Exception:
+                    pass
+
+    # Purge corrupt metadata library cache entries
+    meta_roots = ["/opt/jellyfin-local/data/metadata/library", "/data/jellyfin/data/metadata/library"]
+    for mroot in meta_roots:
+        if not os.path.exists(mroot):
+            continue
+        for dirpath, _, _ in list(os.walk(mroot)):
+            dir_l = os.path.basename(dirpath).lower()
+            if "summer i turned pretty" in dir_l or "the summer i turned pretty" in dir_l or "what if (2024)" in dir_l:
+                try:
+                    shutil.rmtree(dirpath, ignore_errors=True)
+                    print(f"[REPAIR] Purged stale metadata cache folder: {dirpath}")
                 except Exception:
                     pass
 
@@ -592,6 +606,120 @@ def heal_mismatched_media(roots=None, databases=None):
                                 conn.close()
                             except Exception:
                                 pass
+
+            # 5. Heal It: Welcome to Derry and purge accidental "The Summer I Turned Pretty" misidentification
+            has_derry_strm = any("derry" in f.lower() for f in curr_files if f.lower().endswith(".strm"))
+            is_summer_folder = "summer i turned pretty" in dir_lower or "the summer i turned pretty" in dir_lower
+            is_derry_folder = "derry" in dir_lower or "welcome to derry" in dir_lower
+
+            if is_summer_folder or has_derry_strm or (is_derry_folder and any("summer" in f.lower() for f in curr_files)):
+                print(f"[REPAIR] Healing Derry / Summer I Turned Pretty from '{dirpath}'...")
+                target_derry_root = "/data/jellyfin/media/TV Shows/It Welcome to Derry (2025)"
+                target_derry_s1 = os.path.join(target_derry_root, "Season 01")
+                os.makedirs(target_derry_s1, exist_ok=True)
+
+                for fn in list(curr_files):
+                    if fn.lower().endswith(".strm"):
+                        old_s = os.path.join(dirpath, fn)
+                        new_s = os.path.join(target_derry_s1, "It Welcome to Derry S01E01.strm")
+                        if old_s != new_s:
+                            try:
+                                if not os.path.exists(new_s):
+                                    os.rename(old_s, new_s)
+                                else:
+                                    os.remove(old_s)
+                                print(f"[REPAIR] Relocated Derry strm: '{old_s}' -> '{new_s}'")
+                            except Exception as mv_err:
+                                print(f"[REPAIR] Error relocating Derry strm: {mv_err}")
+
+                if is_summer_folder:
+                    try:
+                        shutil.rmtree(dirpath, ignore_errors=True)
+                        print(f"[REPAIR] Removed corrupt 'The Summer I Turned Pretty' directory: {dirpath}")
+                    except Exception as rm_err:
+                        print(f"[REPAIR] Error removing corrupt Summer folder: {rm_err}")
+                else:
+                    for fn in curr_files:
+                        fn_l = fn.lower()
+                        if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l in ("poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg"):
+                            try:
+                                os.remove(os.path.join(dirpath, fn))
+                            except Exception:
+                                pass
+
+                for db_p in db_list:
+                    if os.path.exists(db_p):
+                        try:
+                            conn = sqlite3.connect(db_p, timeout=5)
+                            conn.execute("DELETE FROM BaseItems WHERE Name LIKE '%Summer I Turned Pretty%' OR Path LIKE '%Summer I Turned Pretty%'")
+                            conn.execute("DELETE FROM BaseItems WHERE Name LIKE '%Welcome to Derry%' OR Path LIKE '%Derry%'")
+                            conn.commit()
+                            conn.close()
+                        except Exception as dbe:
+                            print(f"[REPAIR] DB cleanup notice for Derry/Summer: {dbe}")
+
+            # 6. Heal What If...? (2021) Marvel and purge Chinese Romance drama (2024, tt27122945)
+            has_whatif_strm = any("what" in f.lower() and "if" in f.lower() for f in curr_files if f.lower().endswith(".strm"))
+            is_whatif_2024 = "what if (2024)" in dir_lower or (("what if" in dir_lower or "what.if" in dir_lower) and "2024" in dirpath)
+            is_whatif_folder = ("what if" in dir_lower or "what.if" in dir_lower) and "christmas" not in dir_lower
+
+            has_chinese_meta = False
+            for fn in curr_files:
+                if fn.lower().endswith(".nfo"):
+                    try:
+                        with open(os.path.join(dirpath, fn), "r", encoding="utf-8", errors="ignore") as nff:
+                            nfc = nff.read()
+                        if "27122945" in nfc or "2024" in nfc or "xia guo" in nfc.lower():
+                            has_chinese_meta = True
+                            break
+                    except Exception:
+                        pass
+
+            if is_whatif_2024 or has_chinese_meta or (is_whatif_folder and has_whatif_strm):
+                print(f"[REPAIR] Healing What If...? media from '{dirpath}'...")
+                target_whatif_root = "/data/jellyfin/media/TV Shows/What If (2021)"
+                target_whatif_s1 = os.path.join(target_whatif_root, "Season 01")
+                os.makedirs(target_whatif_s1, exist_ok=True)
+
+                for fn in list(curr_files):
+                    if fn.lower().endswith(".strm"):
+                        old_s = os.path.join(dirpath, fn)
+                        new_s = os.path.join(target_whatif_s1, "What If S01E01.strm")
+                        if old_s != new_s:
+                            try:
+                                if not os.path.exists(new_s):
+                                    os.rename(old_s, new_s)
+                                else:
+                                    os.remove(old_s)
+                                print(f"[REPAIR] Relocated What If strm: '{old_s}' -> '{new_s}'")
+                            except Exception as mv_err:
+                                print(f"[REPAIR] Error relocating What If strm: {mv_err}")
+
+                if is_whatif_2024 or has_chinese_meta:
+                    for fn in curr_files:
+                        fn_l = fn.lower()
+                        if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l in ("poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg"):
+                            try:
+                                os.remove(os.path.join(dirpath, fn))
+                            except Exception:
+                                pass
+                    if is_whatif_2024:
+                        try:
+                            shutil.rmtree(dirpath, ignore_errors=True)
+                            print(f"[REPAIR] Removed corrupt 'What If (2024)' folder: {dirpath}")
+                        except Exception:
+                            pass
+
+                for db_p in db_list:
+                    if os.path.exists(db_p):
+                        try:
+                            conn = sqlite3.connect(db_p, timeout=5)
+                            conn.execute("DELETE FROM BaseItems WHERE (Name LIKE '%What If%' AND (Path LIKE '%2024%' OR Data LIKE '%27122945%'))")
+                            conn.execute("DELETE FROM BaseItems WHERE Name LIKE '%What If%' OR Path LIKE '%What If%'")
+                            conn.commit()
+                            conn.close()
+                        except Exception as dbe:
+                            print(f"[REPAIR] DB cleanup notice for What If: {dbe}")
 
 
 def repair_user_subtitle_preferences(configs=None):
