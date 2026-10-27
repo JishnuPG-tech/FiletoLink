@@ -214,7 +214,7 @@ _SIZE_RE = re.compile(
 
 
 _URL_NOISE_RE = re.compile(
-    r"(?i)\b(?:https?://\S+|www\.\S+|\S+\.(?:com|org|net|vip|in|me|xyz|top|site|cc|to|is|pm|ms|link))\b"
+    r"(?i)\b(?:https?://\S+|www\.[a-z0-9\-]+(?:\.[a-z0-9\-]+)+|(?:t\.me|telegram\.me)/\S+|[a-z0-9\-]{2,}\.(?:com|org|net|vip|xyz|top|site|club|online|store|link|tv|pro|info))\b"
 )
 _WATERMARK_PAREN_RE = re.compile(
     r"(?i)\s*\([^)]*(?:www\.|t\.me|https?://|\.com|\.org|\.net|\.vip|\.in|\.xyz|tamil|bolly|cinema|esub|dual[- ]?audio|clean[- ]?audio|hq[- ]?line|rip)[^)]*\)"

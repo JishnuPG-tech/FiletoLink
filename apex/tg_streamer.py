@@ -291,21 +291,37 @@ def load_cache():
             cache_updated = True
             logger.info(f"[CACHE-HEAL] Corrected The Paradise metadata and artwork for '{raw_name}'")
 
-        # 2c. Heal Ne Zha 2 metadata
+        # 2c. Heal Ne Zha 1 and 2 metadata
         if "nezha" in raw_lower or ("ne" in raw_lower and "zha" in raw_lower):
-            data["title"] = "Ne Zha 2"
-            data["clean_title"] = "Ne Zha 2"
-            data["search_title"] = "ne zha 2"
-            data["imdb_id"] = "tt34956443"
-            data["year"] = 2025
-            data["strm_base"] = "Ne Zha 2 (2025)"
-            lang = data.get("language") or "Chinese"
-            data["target_dir"] = os.path.join(MOVIES_DIR, lang, "Ne Zha 2 (2025)")
-            data["strm_path"] = os.path.join(data["target_dir"], "Ne Zha 2 (2025).strm")
-            data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BNmU2N2RkNDYtMzM2My00OWRlLWE4YmMtOGQxM2EyNjgzZTk2XkEyXkFqcGc@._V1_.jpg"
-            data["_force_art_refresh"] = True
-            cache_updated = True
-            logger.info(f"[CACHE-HEAL] Corrected Ne Zha 2 metadata and artwork for '{raw_name}'")
+            is_sequel = "2" in raw_lower or "2025" in raw_lower or data.get("year") == 2025
+            if is_sequel:
+                data["title"] = "Ne Zha 2"
+                data["clean_title"] = "Ne Zha 2"
+                data["search_title"] = "ne zha 2"
+                data["imdb_id"] = "tt34956443"
+                data["year"] = 2025
+                data["strm_base"] = "Ne Zha 2 (2025)"
+                lang = data.get("language") or "Chinese"
+                data["target_dir"] = os.path.join(MOVIES_DIR, lang, "Ne Zha 2 (2025)")
+                data["strm_path"] = os.path.join(data["target_dir"], "Ne Zha 2 (2025).strm")
+                data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BNmU2N2RkNDYtMzM2My00OWRlLWE4YmMtOGQxM2EyNjgzZTk2XkEyXkFqcGc@._V1_.jpg"
+                data["_force_art_refresh"] = True
+                cache_updated = True
+                logger.info(f"[CACHE-HEAL] Corrected Ne Zha 2 metadata and artwork for '{raw_name}'")
+            else:
+                data["title"] = "Ne Zha"
+                data["clean_title"] = "Ne Zha"
+                data["search_title"] = "ne zha"
+                data["imdb_id"] = "tt9262630"
+                data["year"] = 2019
+                data["strm_base"] = "Ne Zha (2019)"
+                lang = data.get("language") or "Chinese"
+                data["target_dir"] = os.path.join(MOVIES_DIR, lang, "Ne Zha (2019)")
+                data["strm_path"] = os.path.join(data["target_dir"], "Ne Zha (2019).strm")
+                data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BNjgzNTQ1YjEtNDFmMS00MDhmLWE3YTctN2I4OGY5MDFjMTg4XkEyXkFqcGc@._V1_.jpg"
+                data["_force_art_refresh"] = True
+                cache_updated = True
+                logger.info(f"[CACHE-HEAL] Corrected Ne Zha (2019) metadata and artwork for '{raw_name}'")
 
         # 2d. Heal It: Welcome to Derry metadata and artwork
         is_derry = "derry" in raw_lower or "welcome to derry" in (data.get("title") or "").lower() or "it: welcome to derry" in (data.get("title") or "").lower()
@@ -320,8 +336,13 @@ def load_cache():
             data["year"] = 2025
             lang = data.get("language") or "English"
             data["language"] = lang
-            s_num = int(data.get("season") or 1)
-            e_num = int(data.get("episode") or 1)
+            s_match = re.search(r"(?i)[sS](\d{1,2})[eE](\d{1,2})", raw_name)
+            if s_match:
+                s_num = int(s_match.group(1))
+                e_num = int(s_match.group(2))
+            else:
+                s_num = int(data.get("season") or 1)
+                e_num = int(data.get("episode") or 1)
             data["season"] = s_num
             data["episode"] = e_num
             show_root = tv_show_root(SHOWS_DIR, lang, "It: Welcome to Derry", 2025)
@@ -333,7 +354,39 @@ def load_cache():
             data["backdrop_url"] = "https://images.metahub.space/background/medium/tt19244304/img"
             data["_force_art_refresh"] = True
             cache_updated = True
-            logger.info(f"[CACHE-HEAL] Corrected It: Welcome to Derry metadata and artwork for '{raw_name}'")
+            logger.info(f"[CACHE-HEAL] Corrected It: Welcome to Derry metadata and artwork for '{raw_name}' -> S{s_num:02d}E{e_num:02d}")
+
+        # 2e. Heal Wednesday metadata (e.g. S02E07 previously misparsed as The Money)
+        is_wednesday = "wednesday" in raw_lower or "wednesday" in (data.get("title") or "").lower() or ("money" in (data.get("title") or "").lower() and "wednesday" in raw_name.lower())
+        if is_wednesday:
+            data["is_tv"] = True
+            data["show_name"] = "Wednesday"
+            data["title"] = "Wednesday"
+            data["clean_title"] = "Wednesday"
+            data["search_title"] = "wednesday"
+            data["imdb_id"] = "tt13443470"
+            data["year"] = 2022
+            lang = data.get("language") or "English"
+            data["language"] = lang
+            s_match = re.search(r"(?i)[sS](\d{1,2})[eE](\d{1,2})", raw_name)
+            if s_match:
+                s_num = int(s_match.group(1))
+                e_num = int(s_match.group(2))
+            else:
+                s_num = int(data.get("season") or 2)
+                e_num = int(data.get("episode") or 7)
+            data["season"] = s_num
+            data["episode"] = e_num
+            show_root = tv_show_root(SHOWS_DIR, lang, "Wednesday", 2022)
+            data["show_root"] = show_root
+            data["target_dir"] = os.path.join(show_root, f"Season {s_num:02d}")
+            data["strm_base"] = f"Wednesday S{s_num:02d}E{e_num:02d}"
+            data["strm_path"] = os.path.join(data["target_dir"], f"{data['strm_base']}.strm")
+            data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BMDE1NjNmNmQtMGQ5OC00NzczLTgwMDItNTI3NDZjNDk2NDYyXkEyXkFqcGc@._V1_.jpg"
+            data["backdrop_url"] = "https://images.metahub.space/background/medium/tt13443470/img"
+            data["_force_art_refresh"] = True
+            cache_updated = True
+            logger.info(f"[CACHE-HEAL] Corrected Wednesday metadata and artwork for '{raw_name}' -> S{s_num:02d}E{e_num:02d}")
 
         # 3. Clean release-size noise from title, clean_title, strm_base
         cur_title = data.get("title") or ""
@@ -3072,22 +3125,37 @@ def create_strm_file(entry):
         pass
     return strm_filename
 
-async def trigger_jellyfin_scan():
-    """Trigger Jellyfin Library Scan automatically with retry while Jellyfin boots."""
-    headers = _jellyfin_auth_header()
-    for attempt in range(8):
-        try:
-            connector = aiohttp.TCPConnector(family=socket.AF_INET)
-            async with aiohttp.ClientSession(connector=connector) as session:
-                async with session.post("http://127.0.0.1:8096/Library/Refresh", headers=headers, timeout=15) as resp:
-                    logger.info(f"Jellyfin library refresh triggered: {resp.status}")
-                    if resp.status in (200, 204):
-                        return
-        except Exception as e:
-            if attempt < 7:
-                await asyncio.sleep(5)
-                continue
-            logger.warning(f"Could not trigger Jellyfin library refresh after retries: {e}")
+_last_jf_scan_time = 0.0
+_jf_scan_lock = None
+
+async def trigger_jellyfin_scan(debounce_seconds: float = 15.0):
+    """Trigger Jellyfin Library Scan automatically with debounce and retry while Jellyfin boots."""
+    global _last_jf_scan_time, _jf_scan_lock
+    if _jf_scan_lock is None:
+        _jf_scan_lock = asyncio.Lock()
+    now = time.monotonic()
+    if now - _last_jf_scan_time < debounce_seconds:
+        logger.info(f"[JELLYFIN-SCAN] Scan request debounced ({now - _last_jf_scan_time:.1f}s < {debounce_seconds}s)")
+        return
+    async with _jf_scan_lock:
+        now = time.monotonic()
+        if now - _last_jf_scan_time < debounce_seconds:
+            return
+        _last_jf_scan_time = now
+        headers = _jellyfin_auth_header()
+        for attempt in range(8):
+            try:
+                connector = aiohttp.TCPConnector(family=socket.AF_INET)
+                async with aiohttp.ClientSession(connector=connector) as session:
+                    async with session.post("http://127.0.0.1:8096/Library/Refresh", headers=headers, timeout=15) as resp:
+                        logger.info(f"Jellyfin library refresh triggered: {resp.status}")
+                        if resp.status in (200, 204):
+                            return
+            except Exception as e:
+                if attempt < 7:
+                    await asyncio.sleep(5)
+                    continue
+                logger.warning(f"Could not trigger Jellyfin library refresh after retries: {e}")
 
 
 async def purge_media_item(
@@ -5064,16 +5132,6 @@ async def restore_cached_strm_files():
     # whose local poster is missing or below HD are re-enriched in the same
     # pass so artwork is refreshed at full resolution automatically.
     try:
-        requeue = {
-            e["_cache_key"]: e
-            for e in (_unresolved_enrich_entries() + _insufficient_art_entries())
-        }
-        if requeue:
-            asyncio.create_task(_re_enrich_unresolved(list(requeue.values())))
-    except Exception as exc:
-        logger.warning(f"[RESTORE] could not queue re-enrichment: {exc}")
-
-    try:
         asyncio.create_task(_reconcile_and_upgrade_library())
     except Exception as exc:
         logger.warning(f"[RESTORE] could not queue library upgrade: {exc}")
@@ -5088,14 +5146,18 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
     """
     logger.info(f"[IMDB-REINDEX] Starting full IMDb re-indexing pass (force_all={force_all})...")
     # Step 1: Scan and purge corrupted directories on disk
-    corrupted_patterns = ["queer", "siege", "the money (1976)", "ms.rose", "ms rose", "wwe", "money in the bank", "money_in_the_bank", "wwe money in the bank 2014"]
+    corrupted_patterns = [
+        "queer", "siege", "the money (1976)", "the money (2014)", "the money",
+        "ms.rose", "ms rose", "wwe", "money in the bank", "money_in_the_bank",
+        "wwe money in the bank 2014", "derry girls"
+    ]
     for root in (MOVIES_DIR, SHOWS_DIR):
         if not os.path.isdir(root):
             continue
         for dp, dns, _ in os.walk(root, topdown=False):
             for dn in dns:
                 dn_l = dn.lower()
-                if any(cp in dn_l for cp in corrupted_patterns):
+                if any(cp in dn_l for cp in corrupted_patterns) or (dn_l == "derry" and "shows" in dp.lower()):
                     full_p = os.path.join(dp, dn)
                     try:
                         shutil.rmtree(full_p, ignore_errors=True)
@@ -5150,15 +5212,15 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
         for key, data in list(FILE_ID_CACHE.items()):
             if not isinstance(data, dict):
                 continue
-            is_tv = bool(data.get("is_tv"))
-            mtype = "tv" if is_tv else "movie"
             raw_name = data.get("file_name") or data.get("raw_name") or data.get("title") or ""
+            raw_lower = raw_name.lower()
             parsed = parse_media_meta(raw_name)
+            is_tv = bool(data.get("is_tv") or parsed.get("is_tv"))
+            mtype = "tv" if is_tv else "movie"
             title = parsed.get("clean_title") or data.get("clean_title") or data.get("title") or ""
             year = parsed.get("year") or data.get("year")
             lang = data.get("language") or parsed.get("language") or DEFAULT_LANGUAGE
 
-            raw_lower = raw_name.lower()
             imdb_hit = None
             if "khalifa" in raw_lower:
                 imdb_hit = {
@@ -5185,12 +5247,21 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                 }
                 lang = "English"
             elif "nezha" in raw_lower or ("ne" in raw_lower and "zha" in raw_lower):
-                imdb_hit = {
-                    "id": "tt34956443",
-                    "l": "Ne Zha 2",
-                    "y": 2025,
-                    "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BNmU2N2RkNDYtMzM2My00OWRlLWE4YmMtOGQxM2EyNjgzZTk2XkEyXkFqcGc@._V1_.jpg"}
-                }
+                is_sequel = "2" in raw_lower or "2025" in raw_lower or year == 2025
+                if is_sequel:
+                    imdb_hit = {
+                        "id": "tt34956443",
+                        "l": "Ne Zha 2",
+                        "y": 2025,
+                        "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BNmU2N2RkNDYtMzM2My00OWRlLWE4YmMtOGQxM2EyNjgzZTk2XkEyXkFqcGc@._V1_.jpg"}
+                    }
+                else:
+                    imdb_hit = {
+                        "id": "tt9262630",
+                        "l": "Ne Zha",
+                        "y": 2019,
+                        "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BNjgzNTQ1YjEtNDFmMS00MDhmLWE3YTctN2I4OGY5MDFjMTg4XkEyXkFqcGc@._V1_.jpg"}
+                    }
                 lang = "Chinese"
             elif "derry" in raw_lower or "welcome to derry" in title.lower():
                 imdb_hit = {
@@ -5203,9 +5274,20 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                 is_tv = True
                 data["is_tv"] = True
                 data["tmdb_id"] = 194766
+            elif "wednesday" in raw_lower or ("money" in title.lower() and "wednesday" in raw_name.lower()):
+                imdb_hit = {
+                    "id": "tt13443470",
+                    "l": "Wednesday",
+                    "y": 2022,
+                    "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BMDE1NjNmNmQtMGQ5OC00NzczLTgwMDItNTI3NDZjNDk2NDYyXkEyXkFqcGc@._V1_.jpg"}
+                }
+                lang = "English"
+                is_tv = True
+                data["is_tv"] = True
+                data["show_name"] = "Wednesday"
 
             if not imdb_hit:
-                query_str = title
+                query_str = (parsed.get("show_name") or data.get("show_name") or title) if is_tv else title
                 imdb_hit = await _fetch_imdb_suggestion(query_str, year, mtype)
                 if not imdb_hit and parsed.get("title") and parsed["title"] != query_str:
                     imdb_hit = await _fetch_imdb_suggestion(parsed["title"], year, mtype)
