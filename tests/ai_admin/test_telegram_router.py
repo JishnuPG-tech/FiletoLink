@@ -868,3 +868,50 @@ async def test_real_pyrogram_dispatcher_group_priority_and_stop_propagation(mock
     # Confirm group 0 was NOT called
     assert len(group_zero_called) == 0
 
+
+@pytest.mark.asyncio
+async def test_conversational_private_message_without_slash_command(mock_router_setup):
+    """Verify conversational messages without /ai prefix are processed in private admin chat."""
+    router, _, _, _, _ = mock_router_setup
+    client = MagicMock()
+    msg = make_mock_message(
+        user_id=12345,
+        chat_id=12345,
+        chat_type=ChatType.PRIVATE,
+        text="hii can you find the movie khalifa where the poster, thumbnail are not related so find best one and use that",
+    )
+
+    with pytest.raises(StopPropagation):
+        await router.handle_ai_command(client, msg)
+
+    assert msg.reply_text.called
+    reply = msg.reply_text.call_args[0][0]
+    # Verify it processed the instruction
+    assert len(reply) > 0
+
+
+@pytest.mark.asyncio
+async def test_webhook_conversational_private_message(monkeypatch):
+    """Verify handle_webhook_update routes conversational messages without /ai in private chats."""
+    from ai_admin.telegram_router import handle_webhook_update
+
+    monkeypatch.setenv("AI_ENABLED", "true")
+    monkeypatch.setenv("AI_ADMIN_TELEGRAM_IDS", "12345")
+
+    data = {
+        "message": {
+            "message_id": 999,
+            "text": "can you find movie khalifa",
+            "chat": {"id": 12345, "type": "private"},
+            "from": {"id": 12345},
+        }
+    }
+
+    client = MagicMock()
+    client.is_connected = True
+    client.send_message = AsyncMock()
+
+    handled = await handle_webhook_update(data, client=client)
+    assert handled is True
+
+

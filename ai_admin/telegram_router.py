@@ -170,8 +170,11 @@ class TelegramAIAdminRouter:
         self._registered_handlers: List[Tuple[Any, int]] = []
 
     def register_handlers(self, client: Client, group: int = -1) -> None:
-        """Register /ai command and ai:* callback query handlers in group -1."""
-        cmd_h = MessageHandler(self.handle_ai_command, filters=filters.command(["ai"]))
+        """Register /ai command, private conversational chat, and ai:* callback query handlers in group -1."""
+        cmd_filter = filters.command(["ai"]) | (
+            filters.private & filters.text & ~filters.command(["start", "help", "stream", "login", "restart", "cancel", "status_bot"])
+        )
+        cmd_h = MessageHandler(self.handle_ai_command, filters=cmd_filter)
         cb_h = CallbackQueryHandler(self.handle_callback_query, filters=filters.regex(r"^ai:"))
 
         client.add_handler(cmd_h, group=group)
@@ -191,7 +194,7 @@ class TelegramAIAdminRouter:
         self._registered_handlers.clear()
 
     async def handle_ai_command(self, client: Client, message: Message) -> None:
-        """Handle incoming /ai commands in group -1."""
+        """Handle incoming /ai commands and private conversational messages in group -1."""
         try:
             # 1. Config enabled check
             if not self.config.enabled:
@@ -249,9 +252,11 @@ class TelegramAIAdminRouter:
 
             # 6. Parse command instruction
             raw_text = getattr(message, "text", "") or ""
-            # Strip '/ai' or '/ai@BotUsername'
-            parts = raw_text.split(maxsplit=1)
-            instruction = parts[1].strip() if len(parts) > 1 else ""
+            if raw_text.startswith("/ai"):
+                parts = raw_text.split(maxsplit=1)
+                instruction = parts[1].strip() if len(parts) > 1 else ""
+            else:
+                instruction = raw_text.strip()
 
             # 7. Execute via isolated AIAdminHandler
             handled, response = await self.handler.handle_message(
@@ -438,10 +443,10 @@ async def handle_webhook_update(
             except Exception as e:
                 logger.warning(f"[AI-ADMIN] Failed to send webhook reply: {e}")
 
-    # 1. Message (/ai command)
+    # 1. Message (/ai command or private conversational message)
     if message_dict:
         raw_text = (message_dict.get("text") or "").strip()
-        if not raw_text.startswith("/ai"):
+        if not raw_text:
             return False
 
         chat = message_dict.get("chat") or {}
@@ -450,25 +455,34 @@ async def handle_webhook_update(
         from_user = message_dict.get("from") or {}
         user_id = from_user.get("id")
 
+        is_ai_command = raw_text.startswith("/ai")
+        # Ignore other slash commands (e.g. /start, /stream) so default bot plugins handle them
+        if raw_text.startswith("/") and not is_ai_command:
+            return False
+
+        # In non-private chats, only explicit /ai commands are processed
+        if not is_ai_command and chat_type != "private":
+            return False
+
         # Config enabled check
         if not config.enabled:
-            if chat_type == "private" and chat_id:
+            if chat_type == "private" and chat_id and is_ai_command:
                 await _send_reply(
                     chat_id,
                     "⚠️ <b>AI Administrator is currently disabled (AI_ENABLED=false).</b>\n\n"
                     "To enable, set <code>AI_ENABLED=true</code> in your Hugging Face Space variables.",
                 )
-            return True
+            return is_ai_command
 
         # Config validity check
         if not config.is_valid or not config.admin_telegram_ids:
-            if chat_type == "private" and chat_id:
+            if chat_type == "private" and chat_id and is_ai_command:
                 await _send_reply(
                     chat_id,
                     f"⚠️ <b>AI Administrator configuration is invalid:</b> {config.validation_error or 'Missing admin IDs'}\n\n"
                     "Set <code>AI_ADMIN_TELEGRAM_IDS</code> to your Telegram User ID in your Space variables.",
                 )
-            return True
+            return is_ai_command
 
         # Private chat only
         if chat_type != "private":
@@ -494,17 +508,21 @@ async def handle_webhook_update(
             is_anonymous_admin=False,
         )
         if not auth_ok:
-            logger.warning(f"[AI-ADMIN] Unauthorized /ai attempt by user={user_id} in chat={chat_id}: {reason}")
-            if chat_id:
-                await _send_reply(
-                    chat_id,
-                    "⛔ <b>Access Denied:</b> You are not authorized to use the AI Administrator.\n\n"
-                    f"Your Telegram User ID is <code>{user_id}</code>. Add this ID to <code>AI_ADMIN_TELEGRAM_IDS</code> in your Space variables.",
-                )
-            return True
+            if is_ai_command:
+                logger.warning(f"[AI-ADMIN] Unauthorized /ai attempt by user={user_id} in chat={chat_id}: {reason}")
+                if chat_id:
+                    await _send_reply(
+                        chat_id,
+                        "⛔ <b>Access Denied:</b> You are not authorized to use the AI Administrator.\n\n"
+                        f"Your Telegram User ID is <code>{user_id}</code>. Add this ID to <code>AI_ADMIN_TELEGRAM_IDS</code> in your Space variables.",
+                    )
+            return is_ai_command
 
-        parts = raw_text.split(maxsplit=1)
-        instruction = parts[1].strip() if len(parts) > 1 else ""
+        if is_ai_command:
+            parts = raw_text.split(maxsplit=1)
+            instruction = parts[1].strip() if len(parts) > 1 else ""
+        else:
+            instruction = raw_text.strip()
 
         from Thunder.bot.plugins.ai_admin import setup_ai_admin
         router = setup_ai_admin(client)

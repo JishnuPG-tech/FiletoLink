@@ -137,20 +137,24 @@ class AIAdminHandler:
                 return True, f"✅ *{tool_name}*\n```json\n{json.dumps(result, indent=2)}\n```"
             return True, f"⚠️ {msg}"
 
-        # 4. LLM Planner resolution (if available)
+        # 4. Conversational LLM Planner resolution (if available)
         schemas = self.registry.get_schemas_for_planner()
         history = self.context_store.get_history(user_id, chat_id)
-        planned_ok, tool_calls, plan_msg = await self.omniroute.plan_action(
+        planned_ok, tool_calls, reply_or_err = await self.omniroute.chat_or_plan(
             instruction=cleaned_text,
             context_history=history,
             tool_schemas=schemas,
         )
 
         if not planned_ok:
-            return True, f"⚠️ Could not resolve instruction deterministically ({plan_msg})."
+            return True, f"⚠️ Could not resolve instruction ({reply_or_err})."
 
+        # Direct conversational response (no tools needed)
         if not tool_calls:
-            return True, "ℹ️ No operational action required for this instruction."
+            fallback_msg = reply_or_err or "I didn't detect any specific action needed."
+            self.context_store.add_turn(user_id, chat_id, "user", cleaned_text)
+            self.context_store.add_turn(user_id, chat_id, "assistant", fallback_msg)
+            return True, fallback_msg
 
         results = []
         for call in tool_calls:
@@ -161,9 +165,22 @@ class AIAdminHandler:
                 chat_id=chat_id,
             )
             results.append({"tool": call["name"], "success": ok, "result": res, "message": msg})
+            if ok and isinstance(res, dict) and "items" in res and res["items"]:
+                items_list = res["items"]
+                self.context_store.set_selected_item(user_id, chat_id, items_list[0].get("id"), items_list[0].get("name"))
+                self.context_store.set_search_results(user_id, chat_id, items_list)
+
+        # Synthesize conversational response from tool outputs
+        synth_ok, synthesized_reply = await self.omniroute.synthesize_response(
+            instruction=cleaned_text,
+            context_history=history,
+            tool_results=results,
+        )
+
+        final_reply = synthesized_reply if (synth_ok and synthesized_reply) else f"✅ Executed {len(results)} action(s):\n```json\n{json.dumps(results, indent=2)}\n```"
 
         # Save turn to history
         self.context_store.add_turn(user_id, chat_id, "user", cleaned_text)
-        self.context_store.add_turn(user_id, chat_id, "assistant", json.dumps(results)[:300])
+        self.context_store.add_turn(user_id, chat_id, "assistant", final_reply)
 
-        return True, f"✅ Executed {len(results)} action(s):\n```json\n{json.dumps(results, indent=2)}\n```"
+        return True, final_reply
