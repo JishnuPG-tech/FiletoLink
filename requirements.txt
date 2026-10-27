@@ -13,3 +13,4 @@ httpx
 uvicorn[standard]
 websockets
 Pillow
+guessit

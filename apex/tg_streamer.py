@@ -77,6 +77,7 @@ from apex_stream.subtitles import (
     is_valid_subtitle_file,
     purge_corrupted_subtitles,
 )
+from apex_stream.extractor import extract_media_info
 
 logger = logging.getLogger("TG_Drive_Streamer")
 if not logger.handlers:
@@ -387,6 +388,39 @@ def load_cache():
             data["_force_art_refresh"] = True
             cache_updated = True
             logger.info(f"[CACHE-HEAL] Corrected Wednesday metadata and artwork for '{raw_name}' -> S{s_num:02d}E{e_num:02d}")
+
+        # 2f. Heal What If...? (tt10168312) if misidentified as 2024 Chinese drama
+        is_what_if = "what if" in raw_lower or "what.if" in raw_lower or "what_if" in raw_lower or "what if" in (data.get("title") or "").lower()
+        if is_what_if and (data.get("year") == 2024 or data.get("imdb_id") == "tt27122945" or not data.get("imdb_id")):
+            data["is_tv"] = True
+            data["show_name"] = "What If...?"
+            data["title"] = "What If...?"
+            data["clean_title"] = "What If...?"
+            data["search_title"] = "what if"
+            data["imdb_id"] = "tt10168312"
+            data["tmdb_id"] = 91363
+            data["year"] = 2021
+            lang = data.get("language") or "English"
+            data["language"] = lang
+            s_match = re.search(r"(?i)[sS](\d{1,2})[eE](\d{1,2})", raw_name)
+            if s_match:
+                s_num = int(s_match.group(1))
+                e_num = int(s_match.group(2))
+            else:
+                s_num = int(data.get("season") or 1)
+                e_num = int(data.get("episode") or 1)
+            data["season"] = s_num
+            data["episode"] = e_num
+            show_root = tv_show_root(SHOWS_DIR, lang, "What If...?", 2021)
+            data["show_root"] = show_root
+            data["target_dir"] = os.path.join(show_root, f"Season {s_num:02d}")
+            data["strm_base"] = f"What If...? S{s_num:02d}E{e_num:02d}"
+            data["strm_path"] = os.path.join(data["target_dir"], f"{data['strm_base']}.strm")
+            data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BMTEzNDc3MjAtMWRhKQ@@._V1_.jpg"
+            data["backdrop_url"] = "https://images.metahub.space/background/medium/tt10168312/img"
+            data["_force_art_refresh"] = True
+            cache_updated = True
+            logger.info(f"[CACHE-HEAL] Corrected What If...? metadata and artwork for '{raw_name}' -> S{s_num:02d}E{e_num:02d}")
 
         # 3. Clean release-size noise from title, clean_title, strm_base
         cur_title = data.get("title") or ""
@@ -1444,10 +1478,7 @@ async def _tmdb_find(external_id):
 
 
 async def _fetch_imdb_suggestion(query: str, year: Optional[int] = None, media_type: str = "movie") -> Optional[Dict[str, Any]]:
-    """Query official, free IMDb suggestion API (from omkarcloud/imdb-scraper).
-    URL: https://v3.sg.media-imdb.com/suggestion/x/{query}.json
-    Returns matching IMDb item with official Amazon/IMDb poster, cast, and details.
-    """
+    """Query official IMDb suggestion API with composite disambiguation scoring."""
     if not query:
         return None
     clean = re.sub(r"[^a-zA-Z0-9]+", "_", query).strip("_").lower()
@@ -1462,9 +1493,10 @@ async def _fetch_imdb_suggestion(query: str, year: Optional[int] = None, media_t
                 if resp.status == 200:
                     data = await resp.json()
                     suggestions = data.get("d") or []
+                    target_tokens = set(re.findall(r"[a-z0-9]+", query.lower()))
+                    target_str = " ".join(re.findall(r"[a-z0-9]+", query.lower()))
                     candidates = []
-                    target_plain = clean.replace("_", " ")
-                    for s in suggestions:
+                    for idx, s in enumerate(suggestions):
                         sid = s.get("id")
                         if not sid or not sid.startswith("tt"):
                             continue
@@ -1473,16 +1505,46 @@ async def _fetch_imdb_suggestion(query: str, year: Optional[int] = None, media_t
                             continue
                         if media_type == "movie" and stype in ("tvSeries", "tvMiniSeries", "series"):
                             continue
+
                         s_year = s.get("y")
-                        s_title = (s.get("l") or "").lower()
-                        exact_title = 2 if s_title == target_plain else (1 if target_plain in s_title else 0)
-                        has_img = 1 if (s.get("i") or {}).get("imageUrl") else 0
-                        year_diff = abs(int(s_year) - int(year)) if (year and s_year) else 4
-                        year_score = -year_diff if year else 0
-                        candidates.append((exact_title, year_score, has_img, s))
+                        s_raw = s.get("l") or ""
+                        s_tokens = set(re.findall(r"[a-z0-9]+", s_raw.lower()))
+                        s_norm = " ".join(re.findall(r"[a-z0-9]+", s_raw.lower()))
+
+                        # 1. Punctuation-agnostic Title Match
+                        if s_norm == target_str:
+                            title_score = 3.0
+                        elif target_tokens and target_tokens.issubset(s_tokens):
+                            extra = len(s_tokens - target_tokens)
+                            title_score = 2.0 - min(1.0, extra * 0.2)
+                        elif target_tokens and s_tokens and len(target_tokens & s_tokens) / len(target_tokens) >= 0.6:
+                            title_score = 1.0
+                        else:
+                            title_score = 0.0
+
+                        if title_score <= 0.0:
+                            continue
+
+                        # 2. Year alignment score
+                        if year and s_year:
+                            ydiff = abs(int(s_year) - int(year))
+                            year_score = 2.0 if ydiff == 0 else (1.0 if ydiff == 1 else (0.0 if ydiff <= 3 else -2.0))
+                        else:
+                            year_score = 0.0
+
+                        # 3. Prominence score (IMDb native rank order)
+                        rank_score = max(0.0, 0.5 - (idx * 0.08))
+                        # 4. Poster availability bonus
+                        has_img = 0.2 if (s.get("i") or {}).get("imageUrl") else 0.0
+
+                        total_score = title_score + year_score + rank_score + has_img
+                        candidates.append((total_score, idx, s))
+
                     if candidates:
-                        candidates.sort(key=lambda c: (c[0], c[1], c[2]), reverse=True)
-                        return candidates[0][3]
+                        candidates.sort(key=lambda c: (c[0], -c[1]), reverse=True)
+                        best = candidates[0][2]
+                        logger.info(f"[IMDB-SUGGEST] Matched '{query}' ({year or 'any'}) -> '{best.get('l')}' ({best.get('y')}) [{best.get('id')}] (score={candidates[0][0]:.2f})")
+                        return best
     except Exception as e:
         logger.debug(f"[IMDB-SUGGEST] Notice for '{query}': {e}")
     return None
@@ -5149,7 +5211,7 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
     corrupted_patterns = [
         "queer", "siege", "the money (1976)", "the money (2014)", "the money",
         "ms.rose", "ms rose", "wwe", "money in the bank", "money_in_the_bank",
-        "wwe money in the bank 2014", "derry girls"
+        "wwe money in the bank 2014", "derry girls", "what if (2024)", "the summer i turned pretty"
     ]
     for root in (MOVIES_DIR, SHOWS_DIR):
         if not os.path.isdir(root):
@@ -5215,82 +5277,20 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
             raw_name = data.get("file_name") or data.get("raw_name") or data.get("title") or ""
             raw_lower = raw_name.lower()
             parsed = parse_media_meta(raw_name)
-            is_tv = bool(data.get("is_tv") or parsed.get("is_tv"))
+            ext = extract_media_info(raw_name)
+            is_tv = bool(ext.get("is_tv") or data.get("is_tv") or parsed.get("is_tv"))
             mtype = "tv" if is_tv else "movie"
-            title = parsed.get("clean_title") or data.get("clean_title") or data.get("title") or ""
-            year = parsed.get("year") or data.get("year")
+            title = ext.get("title") or parsed.get("clean_title") or data.get("clean_title") or data.get("title") or ""
+            year = ext.get("year") or parsed.get("year") or data.get("year")
+            season = ext.get("season") or data.get("season") or 1
+            episode = ext.get("episode") or data.get("episode") or 1
             lang = data.get("language") or parsed.get("language") or DEFAULT_LANGUAGE
 
-            imdb_hit = None
-            if "khalifa" in raw_lower:
-                imdb_hit = {
-                    "id": "tt22797990",
-                    "l": "Khalifa",
-                    "y": 2026,
-                    "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BMWM2ZDY1MjQtN2RkZS00MWVmLWEzOWItZDIyZGNkNTQ3OWIwXkEyXkFqcGc@._V1_.jpg"}
-                }
-                lang = "Malayalam"
-            elif "paradise" in raw_lower and ("2026" in raw_lower or year == 2026 or "the paradise" in title.lower()) and "siege" not in raw_lower:
-                imdb_hit = {
-                    "id": "tt31969655",
-                    "l": "The Paradise",
-                    "y": 2026,
-                    "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BMGI3N2I1ZWUtYzMyZS00MTRlLThlNDUtNWZhY2MxZTlmMDJjXkEyXkFqcGc@._V1_.jpg"}
-                }
-                lang = "Telugu"
-            elif "iron" in raw_lower and "man" in raw_lower and ("3" in raw_lower or year == 2013):
-                imdb_hit = {
-                    "id": "tt1300854",
-                    "l": "Iron Man 3",
-                    "y": 2013,
-                    "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BMjE5MzcyNjk1M15BMl5BanBnXkFtZTcwMjQ4MjcxOQ@@._V1_.jpg"}
-                }
-                lang = "English"
-            elif "nezha" in raw_lower or ("ne" in raw_lower and "zha" in raw_lower):
-                is_sequel = "2" in raw_lower or "2025" in raw_lower or year == 2025
-                if is_sequel:
-                    imdb_hit = {
-                        "id": "tt34956443",
-                        "l": "Ne Zha 2",
-                        "y": 2025,
-                        "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BNmU2N2RkNDYtMzM2My00OWRlLWE4YmMtOGQxM2EyNjgzZTk2XkEyXkFqcGc@._V1_.jpg"}
-                    }
-                else:
-                    imdb_hit = {
-                        "id": "tt9262630",
-                        "l": "Ne Zha",
-                        "y": 2019,
-                        "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BNjgzNTQ1YjEtNDFmMS00MDhmLWE3YTctN2I4OGY5MDFjMTg4XkEyXkFqcGc@._V1_.jpg"}
-                    }
-                lang = "Chinese"
-            elif "derry" in raw_lower or "welcome to derry" in title.lower():
-                imdb_hit = {
-                    "id": "tt19244304",
-                    "l": "It: Welcome to Derry",
-                    "y": 2025,
-                    "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BZWE0ZWM1MjUtNmYzYS00NzU3LTkxYmQtNmI3NTc0ZTY1NmVlXkEyXkFqcGc@._V1_.jpg"}
-                }
-                lang = "English"
-                is_tv = True
-                data["is_tv"] = True
-                data["tmdb_id"] = 194766
-            elif "wednesday" in raw_lower or ("money" in title.lower() and "wednesday" in raw_name.lower()):
-                imdb_hit = {
-                    "id": "tt13443470",
-                    "l": "Wednesday",
-                    "y": 2022,
-                    "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BMDE1NjNmNmQtMGQ5OC00NzczLTgwMDItNTI3NDZjNDk2NDYyXkEyXkFqcGc@._V1_.jpg"}
-                }
-                lang = "English"
-                is_tv = True
-                data["is_tv"] = True
-                data["show_name"] = "Wednesday"
-
-            if not imdb_hit:
-                query_str = (parsed.get("show_name") or data.get("show_name") or title) if is_tv else title
-                imdb_hit = await _fetch_imdb_suggestion(query_str, year, mtype)
-                if not imdb_hit and parsed.get("title") and parsed["title"] != query_str:
-                    imdb_hit = await _fetch_imdb_suggestion(parsed["title"], year, mtype)
+            imdb_hit = await _fetch_imdb_suggestion(title, year, mtype)
+            if not imdb_hit and year:
+                imdb_hit = await _fetch_imdb_suggestion(title, None, mtype)
+            if not imdb_hit and parsed.get("title") and parsed["title"] != title:
+                imdb_hit = await _fetch_imdb_suggestion(parsed["title"], year, mtype)
 
             official_title = (imdb_hit.get("l") if imdb_hit else None) or title
             official_year = (imdb_hit.get("y") if imdb_hit else None) or year
@@ -5322,9 +5322,12 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                 data["backdrop_url"] = str(backdrop_url)
 
             old_target = data.get("target_dir")
+            old_imdb = data.get("imdb_id")
             if is_tv:
-                s_num = int(data.get("season") or 1)
-                e_num = int(data.get("episode") or 1)
+                s_num = int(season or data.get("season") or 1)
+                e_num = int(episode or data.get("episode") or 1)
+                data["is_tv"] = True
+                data["show_name"] = official_title
                 data["season"] = s_num
                 data["episode"] = e_num
                 new_strm_base = f"{official_title} S{s_num:02d}E{e_num:02d}"
@@ -5366,6 +5369,7 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                 "original_name": official_title,
                 "release_date": f"{official_year}-01-01" if official_year else "",
                 "first_air_date": f"{official_year}-01-01" if official_year else "",
+                "year": official_year or "",
                 "overview": overview,
                 "imdb_id": imdb_id or "",
                 "id": data.get("tmdb_id") or "",
@@ -5377,9 +5381,9 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                     nf.write(build_tvshow_nfo(nfo_detail))
                 ep_nfo = os.path.join(target_dir, f"{new_strm_base}.nfo")
                 ep_detail = {
-                    "season_number": data.get("season", 1),
-                    "episode_number": data.get("episode", 1),
-                    "name": f"Episode {data.get('episode', 1)}",
+                    "season_number": s_num,
+                    "episode_number": e_num,
+                    "name": f"Episode {e_num}",
                     "overview": overview,
                     "id": data.get("tmdb_id") or "",
                 }
@@ -5392,6 +5396,15 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
 
             # Download genuine Amazon poster & backdrop
             art_dir = show_root if is_tv else target_dir
+            if force_all or (old_imdb and imdb_id and old_imdb != imdb_id):
+                for stale_art in ("poster.jpg", "folder.jpg", "thumb.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "season01-poster.jpg", "season-all-poster.jpg"):
+                    for check_dir in (art_dir, target_dir):
+                        stale_p = os.path.join(check_dir, stale_art)
+                        if os.path.exists(stale_p):
+                            try:
+                                os.remove(stale_p)
+                            except OSError:
+                                pass
             if poster_url:
                 p_dst = os.path.join(art_dir, "poster.jpg")
                 if force_all or not os.path.exists(p_dst) or os.path.getsize(p_dst) < 15000:

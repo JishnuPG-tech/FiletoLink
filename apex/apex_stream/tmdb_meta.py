@@ -801,8 +801,15 @@ def build_tvshow_nfo(data: Dict) -> str:
     g = lambda k: str(data.get(k) or "")
     genres = [_gen(x) for x in (data.get("genres") or []) if _gen(x)]
     genre_lines = "".join("  <genre>%s</genre>\n" % xml_escape(x) for x in genres)
-    imdb_id = xml_escape(str(data.get("imdb_id") or ""))
+    imdb_id = xml_escape(str(data.get("imdb_id") or data.get("imdbid") or ""))
+    tmdb_id = xml_escape(str(data.get("id") or data.get("tmdb_id") or data.get("tmdbid") or ""))
     imdb_unique = f'  <uniqueid type="imdb" default="true">{imdb_id}</uniqueid>\n' if imdb_id else ""
+    tmdb_unique = f'  <uniqueid type="tmdb">{tmdb_id}</uniqueid>\n' if tmdb_id else ""
+    title_val = g("title") or g("name") or g("original_name") or g("original_title") or "Unknown"
+    orig_title_val = g("original_name") or g("original_title") or title_val
+    premiered_val = g("first_air_date") or g("premiered") or g("release_date") or ""
+    year_val = str(data.get("year") or "") or premiered_val[:4]
+    plot_val = g("overview") or g("plot") or ""
     return """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <tvshow>
   <title>%(title)s</title>
@@ -815,23 +822,23 @@ def build_tvshow_nfo(data: Dict) -> str:
   <plot>%(plot)s</plot>
   <imdbid>%(imdbid)s</imdbid>
   <tmdbid>%(tmdbid)s</tmdbid>
-  <uniqueid type="tmdb">%(tmdbid)s</uniqueid>
-%(imdb_unique)s  %(genres)s  <art>
+%(tmdb_unique)s%(imdb_unique)s  %(genres)s  <art>
     <poster>poster.jpg</poster>
     <backdrop>backdrop.jpg</backdrop>
   </art>
 </tvshow>
 """ % {
-        "title": xml_escape(g("name")),
-        "original_title": xml_escape(g("original_name")),
-        "year": xml_escape(g("first_air_date"))[:4],
-        "premiered": xml_escape(g("first_air_date")),
-        "rating": xml_escape(g("vote_average")),
-        "votes": xml_escape(g("vote_count")),
+        "title": xml_escape(title_val),
+        "original_title": xml_escape(orig_title_val),
+        "year": xml_escape(year_val),
+        "premiered": xml_escape(premiered_val),
+        "rating": xml_escape(g("vote_average") or g("rating")),
+        "votes": xml_escape(g("vote_count") or g("votes")),
         "runtime": xml_escape(_tv_runtime(data)),
-        "plot": xml_escape(g("overview")),
+        "plot": xml_escape(plot_val),
         "imdbid": imdb_id,
-        "tmdbid": xml_escape(str(data.get("id") or "")),
+        "tmdbid": tmdb_id,
+        "tmdb_unique": tmdb_unique,
         "imdb_unique": imdb_unique,
         "genres": genre_lines,
     }
