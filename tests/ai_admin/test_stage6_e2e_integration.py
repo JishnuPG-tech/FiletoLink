@@ -120,8 +120,8 @@ def test_stage6_exact_tool_count_and_absence_of_mutations(monkeypatch, tmp_path)
     registry = router.handler.registry
     registered_tools = registry.list_tools()
 
-    # Must contain exactly 8 tools
-    assert len(registered_tools) == 8, f"Expected 8 tools, got {len(registered_tools)}: {[t.name for t in registered_tools]}"
+    # Must contain exactly 13 read-only tools
+    assert len(registered_tools) == 13, f"Expected 13 tools, got {len(registered_tools)}: {[t.name for t in registered_tools]}"
 
     expected_tool_names = {
         "jellyfin_search",
@@ -130,13 +130,18 @@ def test_stage6_exact_tool_count_and_absence_of_mutations(monkeypatch, tmp_path)
         "jellyfin_get_media_info",
         "tmdb_search",
         "tmdb_get_details",
+        "tmdb_get_images",
+        "cinemeta_search",
+        "cinemeta_get_meta",
+        "tvmaze_search",
+        "artwork_search",
         "fanart_get_images",
         "opensubtitles_search",
     }
     actual_tool_names = {t.name for t in registered_tools}
     assert actual_tool_names == expected_tool_names
 
-    # All 8 tools must be strictly read-only
+    # All tools must be strictly read-only
     for tool in registered_tools:
         assert tool.read_only is True
         assert tool.mutates is False

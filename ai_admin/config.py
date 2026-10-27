@@ -10,12 +10,10 @@ logger = logging.getLogger("AIAdmin.Config")
 
 DEFAULT_WORKING_MODELS: List[str] = [
     "oc/gemini-3.5-flash-lite",
-    "oc/gemini-3.5-flash",
+    "oc/gemini-3.7-flash",
     "oc/gemini-3.6-flash",
-    "oc/claude-sonnet-4-6",
-    "oc/grok-4.5",
-    "oc/glm-5.3-flash",
     "oc/kimi-k3",
+    "oc/glm-5.3-flash",
 ]
 
 
@@ -62,6 +60,7 @@ class AIAdminConfig:
     ai_model: str = "oc/gemini-3.5-flash-lite"
     ai_models: List[str] = field(default_factory=list)
     ai_max_tokens: int = 1024
+    omniroute_timeout_seconds: int = 18
 
     # Storage and Lifetimes
     data_dir: str = "/data/ai_admin"
@@ -126,6 +125,12 @@ class AIAdminConfig:
         except ValueError:
             max_tokens = 1024
 
+        try:
+            timeout_env = int(os.environ.get("OMNIROUTE_TIMEOUT_SECONDS", "18"))
+            omniroute_timeout = max(5, min(timeout_env, 60))
+        except ValueError:
+            omniroute_timeout = 18
+
         data_dir = os.environ.get("AI_DATA_DIR") or "/data/ai_admin"
 
         try:
@@ -164,6 +169,7 @@ class AIAdminConfig:
             ai_model=primary_model,
             ai_models=ai_models,
             ai_max_tokens=max_tokens,
+            omniroute_timeout_seconds=omniroute_timeout,
             data_dir=data_dir,
             confirm_ttl_seconds=confirm_ttl,
             context_ttl_seconds=context_ttl,

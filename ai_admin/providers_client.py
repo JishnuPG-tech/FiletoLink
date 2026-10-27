@@ -184,9 +184,11 @@ class ProvidersClient:
         year: Optional[int] = None,
         language: Optional[str] = None,
         limit: int = 10,
+        user_id: Optional[int] = None,
+        chat_id: Optional[int] = None,
         session: Optional[aiohttp.ClientSession] = None,
     ) -> List[Dict[str, Any]]:
-        """Search TMDb for movie or TV titles with bounded output."""
+        """Search TMDb for movie or TV titles with bounded output and candidate artwork handles."""
         clean_query = (query or "").strip()
         if not clean_query:
             return []
@@ -221,6 +223,25 @@ class ProvidersClient:
             release_date = hit.get("release_date") or hit.get("first_air_date") or ""
             parsed_year = int(release_date[:4]) if len(release_date) >= 4 and release_date[:4].isdigit() else None
             overview = (hit.get("overview") or "").strip()
+            poster_path = hit.get("poster_path")
+            backdrop_path = hit.get("backdrop_path")
+
+            poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None
+            backdrop_url = f"https://image.tmdb.org/t/p/w1280{backdrop_path}" if backdrop_path else None
+
+            poster_cand = None
+            if poster_url:
+                poster_cand = self.candidate_cache.register_candidate(
+                    {
+                        "provider": "themoviedb.org",
+                        "raw_url": poster_url,
+                        "image_type": "poster",
+                        "target_id": str(hit.get("id")),
+                    },
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    operation="image_artwork",
+                )
 
             results.append({
                 "tmdb_id": hit.get("id"),
@@ -231,8 +252,11 @@ class ProvidersClient:
                 "overview": overview[:200] + ("..." if len(overview) > 200 else ""),
                 "original_language": hit.get("original_language"),
                 "vote_average": hit.get("vote_average"),
-                "has_poster": bool(hit.get("poster_path")),
-                "has_backdrop": bool(hit.get("backdrop_path")),
+                "has_poster": bool(poster_path),
+                "poster_url": poster_url,
+                "poster_candidate_id": poster_cand,
+                "has_backdrop": bool(backdrop_path),
+                "backdrop_url": backdrop_url,
             })
         return results
 
@@ -280,8 +304,414 @@ class ProvidersClient:
             "has_backdrop": bool(data.get("backdrop_path")),
         }
 
+    async def tmdb_get_images(
+        self,
+        tmdb_id: int,
+        media_type: str = "movie",
+        limit: int = 20,
+        user_id: Optional[int] = None,
+        chat_id: Optional[int] = None,
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> List[Dict[str, Any]]:
+        """Fetch all official posters, backdrops, and logos from TMDb."""
+        if not isinstance(tmdb_id, int) or tmdb_id <= 0:
+            raise ValueError(f"Invalid tmdb_id: {tmdb_id}")
+
+        if not self.tmdb_key:
+            raise ProviderAuthError("TMDb API key not configured (TMDB_API_KEY).")
+
+        clean_type = "tv" if str(media_type).lower() in ("tv", "series") else "movie"
+        url = f"https://api.themoviedb.org/3/{clean_type}/{tmdb_id}/images"
+        params = {"api_key": self.tmdb_key}
+
+        data = await self._safe_get(url, params=params, session=session)
+        bounded_limit = max(1, min(limit, 40))
+        candidates = []
+
+        categories = [
+            ("posters", "poster"),
+            ("backdrops", "backdrop"),
+            ("logos", "clearlogo"),
+        ]
+
+        for cat_key, canonical_type in categories:
+            items = data.get(cat_key) or []
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                file_path = item.get("file_path")
+                if not file_path:
+                    continue
+                raw_url = f"https://image.tmdb.org/t/p/original{file_path}"
+                preview_url = f"https://image.tmdb.org/t/p/w500{file_path}"
+                cand_id = self.candidate_cache.register_candidate(
+                    {
+                        "provider": "themoviedb.org",
+                        "raw_url": raw_url,
+                        "image_type": canonical_type,
+                        "target_id": str(tmdb_id),
+                    },
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    operation="image_artwork",
+                )
+                candidates.append({
+                    "candidate_id": cand_id,
+                    "image_type": canonical_type,
+                    "preview_url": preview_url,
+                    "full_url": raw_url,
+                    "width": item.get("width"),
+                    "height": item.get("height"),
+                    "vote_average": item.get("vote_average"),
+                    "provider": "themoviedb.org",
+                })
+                if len(candidates) >= bounded_limit:
+                    break
+            if len(candidates) >= bounded_limit:
+                break
+
+        return candidates
+
     # ==========================================================================
-    # 2. Fanart.tv
+    # 2. Free Stremio Cinemeta (No API Key Required)
+    # ==========================================================================
+
+    async def cinemeta_search(
+        self,
+        query: str,
+        media_type: str = "movie",
+        limit: int = 10,
+        user_id: Optional[int] = None,
+        chat_id: Optional[int] = None,
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> List[Dict[str, Any]]:
+        """Search Stremio Cinemeta catalog (free, no API key required). Returns IMDb items with posters."""
+        clean_query = (query or "").strip()
+        if not clean_query:
+            return []
+
+        clean_type = "series" if str(media_type).lower() in ("tv", "series") else "movie"
+        encoded_query = urllib.parse.quote(clean_query)
+        url = f"https://v3-cinemeta.strem.io/catalog/{clean_type}/top/search={encoded_query}.json"
+
+        data = await self._safe_get(url, session=session)
+        metas = data.get("metas") or []
+        bounded_limit = max(1, min(limit, 20))
+        results = []
+
+        for m in metas[:bounded_limit]:
+            imdb_id = m.get("imdb_id") or m.get("id") or ""
+            name = m.get("name") or "Unknown"
+            year = m.get("year")
+            poster_url = m.get("poster")
+            cand_id = None
+            if poster_url:
+                cand_id = self.candidate_cache.register_candidate(
+                    {
+                        "provider": "cinemeta",
+                        "raw_url": poster_url,
+                        "image_type": "poster",
+                        "target_id": imdb_id or name,
+                    },
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    operation="image_artwork",
+                )
+
+            results.append({
+                "imdb_id": imdb_id,
+                "title": name,
+                "year": year,
+                "media_type": clean_type,
+                "poster_url": poster_url,
+                "candidate_id": cand_id,
+                "description": (m.get("description") or "")[:200],
+                "provider": "cinemeta (IMDb)",
+            })
+        return results
+
+    async def cinemeta_get_meta(
+        self,
+        imdb_id: str,
+        media_type: str = "movie",
+        user_id: Optional[int] = None,
+        chat_id: Optional[int] = None,
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> Dict[str, Any]:
+        """Fetch detailed metadata and high-res artwork from Cinemeta (free, no API key)."""
+        clean_id = (imdb_id or "").strip()
+        if not clean_id or not clean_id.startswith("tt"):
+            raise ValueError(f"Invalid IMDb ID: {imdb_id}. Must start with 'tt'.")
+
+        clean_type = "series" if str(media_type).lower() in ("tv", "series") else "movie"
+        url = f"https://v3-cinemeta.strem.io/meta/{clean_type}/{clean_id}.json"
+
+        data = await self._safe_get(url, session=session)
+        meta = data.get("meta") or {}
+
+        poster_url = meta.get("poster")
+        background_url = meta.get("background")
+        logo_url = meta.get("logo")
+
+        poster_cand = None
+        if poster_url:
+            poster_cand = self.candidate_cache.register_candidate(
+                {"provider": "cinemeta", "raw_url": poster_url, "image_type": "poster", "target_id": clean_id},
+                user_id=user_id,
+                chat_id=chat_id,
+                operation="image_artwork",
+            )
+
+        backdrop_cand = None
+        if background_url:
+            backdrop_cand = self.candidate_cache.register_candidate(
+                {"provider": "cinemeta", "raw_url": background_url, "image_type": "backdrop", "target_id": clean_id},
+                user_id=user_id,
+                chat_id=chat_id,
+                operation="image_artwork",
+            )
+
+        return {
+            "imdb_id": clean_id,
+            "title": meta.get("name") or "Unknown",
+            "year": meta.get("year"),
+            "media_type": clean_type,
+            "description": meta.get("description"),
+            "genres": meta.get("genres") or [],
+            "imdb_rating": meta.get("imdbRating"),
+            "poster_url": poster_url,
+            "poster_candidate_id": poster_cand,
+            "background_url": background_url,
+            "background_candidate_id": backdrop_cand,
+            "logo_url": logo_url,
+            "provider": "cinemeta (IMDb)",
+        }
+
+    # ==========================================================================
+    # 3. Free TVmaze (No API Key Required)
+    # ==========================================================================
+
+    async def tvmaze_search(
+        self,
+        query: str,
+        limit: int = 10,
+        user_id: Optional[int] = None,
+        chat_id: Optional[int] = None,
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> List[Dict[str, Any]]:
+        """Search TVmaze for TV shows and official artwork (free, no API key)."""
+        clean_query = (query or "").strip()
+        if not clean_query:
+            return []
+
+        encoded_query = urllib.parse.quote(clean_query)
+        url = f"https://api.tvmaze.com/search/shows?q={encoded_query}"
+
+        data = await self._safe_get(url, session=session)
+        bounded_limit = max(1, min(limit, 20))
+        results = []
+
+        if isinstance(data, list):
+            for item in data[:bounded_limit]:
+                show = item.get("show") or {}
+                image = show.get("image") or {}
+                poster_url = image.get("original") or image.get("medium")
+                cand_id = None
+                if poster_url:
+                    cand_id = self.candidate_cache.register_candidate(
+                        {
+                            "provider": "tvmaze",
+                            "raw_url": poster_url,
+                            "image_type": "poster",
+                            "target_id": str(show.get("id")),
+                        },
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        operation="image_artwork",
+                    )
+
+                results.append({
+                    "show_id": show.get("id"),
+                    "title": show.get("name") or "Unknown",
+                    "premiered": show.get("premiered"),
+                    "genres": show.get("genres") or [],
+                    "rating": (show.get("rating") or {}).get("average"),
+                    "poster_url": poster_url,
+                    "candidate_id": cand_id,
+                    "summary": (show.get("summary") or "")[:200],
+                    "provider": "tvmaze",
+                })
+        return results
+
+    # ==========================================================================
+    # 4. Unified Artwork Search (Multi-Provider Fallback)
+    # ==========================================================================
+
+    async def artwork_search(
+        self,
+        query: Optional[str] = None,
+        imdb_id: Optional[str] = None,
+        tmdb_id: Optional[int] = None,
+        media_type: str = "movie",
+        limit: int = 15,
+        user_id: Optional[int] = None,
+        chat_id: Optional[int] = None,
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> List[Dict[str, Any]]:
+        """Multi-provider artwork search across TMDb, Cinemeta, TVmaze, and Fanart.tv.
+        Guarantees posters & backdrops are found even if an API key is missing.
+        """
+        candidates: List[Dict[str, Any]] = []
+        bounded_limit = max(1, min(limit, 30))
+
+        # 1. Try TMDb images if tmdb_id or query is available and tmdb_key is configured
+        if self.tmdb_key:
+            target_tmdb_id = tmdb_id
+            if not target_tmdb_id and query:
+                try:
+                    hits = await self.tmdb_search(
+                        query=query,
+                        media_type=media_type,
+                        limit=3,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        session=session,
+                    )
+                    if hits:
+                        target_tmdb_id = hits[0].get("tmdb_id")
+                        if hits[0].get("poster_url"):
+                            candidates.append({
+                                "candidate_id": hits[0].get("poster_candidate_id"),
+                                "image_type": "poster",
+                                "preview_url": hits[0].get("poster_url"),
+                                "title": hits[0].get("title"),
+                                "provider": "themoviedb.org",
+                            })
+                except Exception as e:
+                    logger.debug(f"[ARTWORK-SEARCH] TMDb search skipped: {e}")
+
+            if target_tmdb_id:
+                try:
+                    tmdb_imgs = await self.tmdb_get_images(
+                        tmdb_id=target_tmdb_id,
+                        media_type=media_type,
+                        limit=bounded_limit,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        session=session,
+                    )
+                    candidates.extend(tmdb_imgs)
+                except Exception as e:
+                    logger.debug(f"[ARTWORK-SEARCH] TMDb get_images skipped: {e}")
+
+        # 2. Try Cinemeta (Free, no key needed) if IMDb ID or query is available
+        if len(candidates) < bounded_limit:
+            if imdb_id and imdb_id.startswith("tt"):
+                try:
+                    meta = await self.cinemeta_get_meta(
+                        imdb_id=imdb_id,
+                        media_type=media_type,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        session=session,
+                    )
+                    if meta.get("poster_url"):
+                        candidates.append({
+                            "candidate_id": meta.get("poster_candidate_id"),
+                            "image_type": "poster",
+                            "preview_url": meta.get("poster_url"),
+                            "title": meta.get("title"),
+                            "provider": "cinemeta (IMDb)",
+                        })
+                    if meta.get("background_url"):
+                        candidates.append({
+                            "candidate_id": meta.get("background_candidate_id"),
+                            "image_type": "backdrop",
+                            "preview_url": meta.get("background_url"),
+                            "title": meta.get("title"),
+                            "provider": "cinemeta (IMDb)",
+                        })
+                except Exception as e:
+                    logger.debug(f"[ARTWORK-SEARCH] Cinemeta get_meta skipped: {e}")
+
+            if len(candidates) < bounded_limit and query:
+                try:
+                    c_hits = await self.cinemeta_search(
+                        query=query,
+                        media_type=media_type,
+                        limit=5,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        session=session,
+                    )
+                    for ch in c_hits:
+                        if ch.get("poster_url"):
+                            candidates.append({
+                                "candidate_id": ch.get("candidate_id"),
+                                "image_type": "poster",
+                                "preview_url": ch.get("poster_url"),
+                                "title": ch.get("title"),
+                                "provider": "cinemeta (IMDb)",
+                            })
+                except Exception as e:
+                    logger.debug(f"[ARTWORK-SEARCH] Cinemeta search skipped: {e}")
+
+        # 3. Try TVmaze if TV series and query is provided (Free, no key needed)
+        if len(candidates) < bounded_limit and media_type in ("tv", "series") and query:
+            try:
+                tv_hits = await self.tvmaze_search(
+                    query=query,
+                    limit=5,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    session=session,
+                )
+                for th in tv_hits:
+                    if th.get("poster_url"):
+                        candidates.append({
+                            "candidate_id": th.get("candidate_id"),
+                            "image_type": "poster",
+                            "preview_url": th.get("poster_url"),
+                            "title": th.get("title"),
+                            "provider": "tvmaze",
+                        })
+            except Exception as e:
+                logger.debug(f"[ARTWORK-SEARCH] TVmaze search skipped: {e}")
+
+        # 4. Try Fanart.tv if fanart_key is configured
+        if len(candidates) < bounded_limit and self.fanart_key:
+            lookup_id = imdb_id or (str(tmdb_id) if tmdb_id else None)
+            if lookup_id:
+                try:
+                    f_imgs = await self.fanart_get_images(
+                        id_str=lookup_id,
+                        media_type=media_type,
+                        limit=bounded_limit,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        session=session,
+                    )
+                    candidates.extend(f_imgs)
+                except Exception as e:
+                    logger.debug(f"[ARTWORK-SEARCH] Fanart lookup skipped: {e}")
+
+        # Deduplicate candidates by preview_url
+        seen_urls = set()
+        deduped = []
+        for cand in candidates:
+            url = cand.get("preview_url") or cand.get("full_url")
+            if url and url in seen_urls:
+                continue
+            if url:
+                seen_urls.add(url)
+            deduped.append(cand)
+            if len(deduped) >= bounded_limit:
+                break
+
+        return deduped
+
+    # ==========================================================================
+    # 5. Fanart.tv
     # ==========================================================================
 
     async def fanart_get_images(

@@ -17,6 +17,12 @@ APPROVED_PROVIDER_HOSTS: Set[str] = {
     "opensubtitles-v3.strem.io",
     "webservice.fanart.tv",
     "assets.fanart.tv",
+    "v3-cinemeta.strem.io",
+    "images.metahub.space",
+    "m.media-amazon.com",
+    "ia.media-imdb.com",
+    "api.tvmaze.com",
+    "static.tvmaze.com",
 }
 
 

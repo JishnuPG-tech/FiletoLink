@@ -463,3 +463,86 @@ def test_candidate_cache_expired_handle_fails_closed():
     # Entry must be pruned from cache
     assert cand_id not in short_cache._cache
 
+
+@pytest.mark.asyncio
+async def test_tmdb_get_images_mocked(mock_providers_client):
+    """Test TMDb images lookup returns candidates and covers posters and backdrops."""
+    mock_payload = {
+        "posters": [
+            {"file_path": "/poster1.jpg", "width": 1000, "height": 1500, "vote_average": 8.5},
+        ],
+        "backdrops": [
+            {"file_path": "/backdrop1.jpg", "width": 1920, "height": 1080, "vote_average": 9.0},
+        ],
+    }
+    with patch.object(mock_providers_client, "_safe_get", new=AsyncMock(return_value=mock_payload)):
+        images = await mock_providers_client.tmdb_get_images(tmdb_id=550, media_type="movie", user_id=1, chat_id=1)
+        assert len(images) == 2
+        assert images[0]["image_type"] == "poster"
+        assert "poster1.jpg" in images[0]["preview_url"]
+        assert images[0]["candidate_id"].startswith("cand_")
+
+
+@pytest.mark.asyncio
+async def test_cinemeta_search_and_get_meta(mock_providers_client):
+    """Test free Cinemeta provider search and metadata lookup."""
+    search_payload = {
+        "metas": [
+            {"id": "tt22797990", "name": "Khalifa", "year": "2023", "poster": "https://m.media-amazon.com/poster.jpg", "description": "Thriller"},
+        ]
+    }
+    with patch.object(mock_providers_client, "_safe_get", new=AsyncMock(return_value=search_payload)):
+        results = await mock_providers_client.cinemeta_search(query="khalifa", user_id=1, chat_id=1)
+        assert len(results) == 1
+        assert results[0]["title"] == "Khalifa"
+        assert results[0]["imdb_id"] == "tt22797990"
+        assert results[0]["candidate_id"] is not None
+
+    meta_payload = {
+        "meta": {
+            "name": "Khalifa",
+            "year": "2023",
+            "poster": "https://m.media-amazon.com/poster.jpg",
+            "background": "https://images.metahub.space/bg.jpg",
+            "genres": ["Action", "Thriller"],
+        }
+    }
+    with patch.object(mock_providers_client, "_safe_get", new=AsyncMock(return_value=meta_payload)):
+        details = await mock_providers_client.cinemeta_get_meta(imdb_id="tt22797990", user_id=1, chat_id=1)
+        assert details["title"] == "Khalifa"
+        assert details["poster_candidate_id"] is not None
+        assert details["background_candidate_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_tvmaze_search(mock_providers_client):
+    """Test free TVmaze provider search."""
+    tvmaze_payload = [
+        {
+            "show": {
+                "id": 169,
+                "name": "Breaking Bad",
+                "premiered": "2008-01-20",
+                "image": {"original": "https://static.tvmaze.com/bb.jpg"},
+            }
+        }
+    ]
+    with patch.object(mock_providers_client, "_safe_get", new=AsyncMock(return_value=tvmaze_payload)):
+        shows = await mock_providers_client.tvmaze_search(query="breaking bad", user_id=1, chat_id=1)
+        assert len(shows) == 1
+        assert shows[0]["title"] == "Breaking Bad"
+        assert shows[0]["candidate_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_artwork_search_fallback(mock_providers_client):
+    """Test unified artwork search combines TMDb and Cinemeta."""
+    with patch.object(mock_providers_client, "tmdb_search", new=AsyncMock(return_value=[])):
+        with patch.object(mock_providers_client, "cinemeta_search", new=AsyncMock(return_value=[
+            {"title": "Khalifa", "poster_url": "https://m.media-amazon.com/poster.jpg", "candidate_id": "cand_123"}
+        ])):
+            candidates = await mock_providers_client.artwork_search(query="khalifa", user_id=1, chat_id=1)
+            assert len(candidates) >= 1
+            assert candidates[0]["title"] == "Khalifa"
+            assert candidates[0]["provider"] == "cinemeta (IMDb)"
+

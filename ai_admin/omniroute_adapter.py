@@ -93,7 +93,7 @@ class OmniRouteAdapter:
         context_history: Optional[List[Dict[str, str]]] = None,
         tool_schemas: Optional[List[Dict[str, Any]]] = None,
         messages: Optional[List[Dict[str, Any]]] = None,
-        timeout_seconds: int = 30,
+        timeout_seconds: Optional[int] = None,
     ) -> Tuple[bool, List[Dict[str, Any]], str]:
         """Send instruction or pre-built messages to OmniRoute.
         Returns:
@@ -105,10 +105,12 @@ class OmniRouteAdapter:
         if not (self.config.omniroute_api_url and self.config.omniroute_api_key):
             return False, [], "OmniRoute configuration is missing (OMNIROUTE_API_KEY / OMNIROUTE_API_URL)."
 
+        effective_timeout = timeout_seconds or getattr(self.config, "omniroute_timeout_seconds", 18)
+
         if messages is None:
             system_prompt = (
                 "You are an intelligent, helpful, and friendly Jellyfin Media Server AI Assistant.\n"
-                "You have access to tools to inspect and manage the Jellyfin library and query metadata/artwork providers (TMDB, Fanart.tv, OpenSubtitles).\n"
+                "You have access to tools to inspect and manage the Jellyfin library and query metadata/artwork providers (TMDb, Cinemeta, TVmaze, Fanart.tv, OpenSubtitles).\n"
                 "If the user asks to find, check, compare, or fix posters, thumbnails, subtitles, or metadata, use the appropriate tools.\n"
                 "If the user greets you or asks general questions that do not require tool operations, answer conversationally and helpfully.\n"
                 "Format your answers with clean Telegram markdown (*bold*, `code`, [link](url))."
@@ -134,8 +136,8 @@ class OmniRouteAdapter:
             if tool_schemas:
                 payload["tools"] = tool_schemas
 
-            logger.info(f"[OMNIROUTE-CHAT] Attempting model '{model}'...")
-            status, data, err_msg = await self._send_request(payload, timeout_seconds=timeout_seconds)
+            logger.info(f"[OMNIROUTE-CHAT] Attempting model '{model}' with {effective_timeout}s timeout...")
+            status, data, err_msg = await self._send_request(payload, timeout_seconds=effective_timeout)
 
             if status in (401, 403):
                 return False, [], err_msg
@@ -169,18 +171,23 @@ class OmniRouteAdapter:
             content = (msg.get("content") or "").strip()
             return True, parsed_calls, content
 
-        return False, [], last_err or "All configured AI models failed to respond."
+        return False, [], (
+            f"All configured AI models timed out or failed to respond ({last_err})."
+            if last_err else "All configured AI models failed to respond."
+        )
 
     async def synthesize_response(
         self,
         instruction: str,
         context_history: List[Dict[str, str]],
         tool_results: List[Dict[str, Any]],
-        timeout_seconds: int = 25,
+        timeout_seconds: Optional[int] = None,
     ) -> Tuple[bool, str]:
         """Synthesize tool execution results into a natural, conversational response."""
         if not (self.config.omniroute_api_url and self.config.omniroute_api_key):
             return False, ""
+
+        effective_timeout = timeout_seconds or getattr(self.config, "omniroute_timeout_seconds", 18)
 
         system_prompt = (
             "You are an intelligent, friendly Jellyfin Media Server AI Assistant.\n"
@@ -214,7 +221,7 @@ class OmniRouteAdapter:
                 "messages": messages,
             }
             try:
-                status, data, err_msg = await self._send_request(payload, timeout_seconds=timeout_seconds)
+                status, data, err_msg = await self._send_request(payload, timeout_seconds=effective_timeout)
                 if status == 200 and isinstance(data, dict):
                     choices = data.get("choices") or []
                     if choices:
@@ -291,7 +298,8 @@ class OmniRouteAdapter:
                     return 500, None, f"Malformed JSON from OmniRoute: {json_err}"
 
         except asyncio.TimeoutError:
-            return 504, None, f"OmniRoute request timed out after {timeout_seconds} seconds."
+            model_name = payload.get("model", "unknown")
+            return 504, None, f"OmniRoute request for '{model_name}' timed out after {timeout_seconds} seconds."
         except Exception as e:
             return 500, None, f"Network error contacting OmniRoute: {type(e).__name__}"
         finally:
