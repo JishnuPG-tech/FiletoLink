@@ -98,11 +98,15 @@ class JellyfinClient:
         path: str,
         params: Optional[Dict[str, Any]] = None,
         json_body: Optional[Dict[str, Any]] = None,
+        raw_body: Optional[bytes] = None,
+        content_type: Optional[str] = None,
         session: Optional[aiohttp.ClientSession] = None,
     ) -> Any:
         """Execute HTTP request against Jellyfin API with timeout and payload capping."""
         url = f"{self.base_url}{path}"
         headers = self._get_auth_headers()
+        if content_type:
+            headers["Content-Type"] = content_type
 
         close_session = False
         if session is None:
@@ -110,19 +114,24 @@ class JellyfinClient:
             close_session = True
 
         try:
-            async with session.request(
-                method=method,
-                url=url,
-                params=params,
-                json=json_body,
-                headers=headers,
-                allow_redirects=False,
-                timeout=aiohttp.ClientTimeout(
+            req_kwargs: Dict[str, Any] = {
+                "method": method,
+                "url": url,
+                "params": params,
+                "headers": headers,
+                "allow_redirects": False,
+                "timeout": aiohttp.ClientTimeout(
                     total=self.timeout_seconds,
                     connect=min(3.0, self.timeout_seconds),
                     sock_read=self.timeout_seconds,
                 ),
-            ) as resp:
+            }
+            if json_body is not None:
+                req_kwargs["json"] = json_body
+            elif raw_body is not None:
+                req_kwargs["data"] = raw_body
+
+            async with session.request(**req_kwargs) as resp:
                 if resp.status in (301, 302, 303, 307, 308):
                     raise JellyfinError(f"Unexpected redirect from Jellyfin server (HTTP {resp.status}).")
                 if resp.status in (401, 403):
@@ -246,6 +255,7 @@ class JellyfinClient:
             "has_backdrop": len(backdrop_tags) > 0,
             "backdrop_count": len(backdrop_tags),
             "media_sources_count": len(data.get("MediaSources") or []),
+            "path": data.get("Path"),
             "path_basename": os.path.basename(str(data.get("Path") or "")),
         }
 
@@ -369,3 +379,121 @@ class JellyfinClient:
             "total_audio_tracks": len(audio_streams),
             "total_subtitle_tracks": len(subtitle_streams),
         }
+
+    async def get_all_library_items(
+        self,
+        include_item_types: str = "Movie,Series",
+        limit: int = 1000,
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> List[Dict[str, Any]]:
+        """Fetch all media items in Jellyfin library with paths and provider IDs."""
+        bounded_limit = max(1, min(limit, 5000))
+        params = {
+            "Recursive": "true",
+            "IncludeItemTypes": include_item_types,
+            "Fields": "Path,ProviderIds,Overview,ProductionYear,ImageTags,BackdropImageTags,SeriesName,SeasonName",
+            "Limit": str(bounded_limit),
+        }
+        data = await self._request("GET", "/Items", params=params, session=session)
+        raw_items = data.get("Items") or []
+        results = []
+        for it in raw_items:
+            results.append({
+                "id": it.get("Id"),
+                "name": it.get("Name"),
+                "type": it.get("Type"),
+                "path": it.get("Path") or "",
+                "year": it.get("ProductionYear"),
+                "overview": it.get("Overview") or "",
+                "provider_ids": it.get("ProviderIds") or {},
+                "has_poster": bool((it.get("ImageTags") or {}).get("Primary")),
+                "has_backdrop": bool(it.get("BackdropImageTags")),
+                "series_name": it.get("SeriesName"),
+            })
+        return results
+
+    async def update_item_metadata(
+        self,
+        item_id: str,
+        fields: Dict[str, Any],
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> Dict[str, Any]:
+        """Update metadata fields (Name, ProductionYear, ProviderIds, Overview) for a Jellyfin item."""
+        if not validate_item_id(item_id):
+            raise ValueError(f"Invalid item_id format: '{item_id}'")
+
+        # Fetch current item representation first to preserve intact fields
+        current = await self._request("GET", f"/Items/{item_id}", session=session)
+        if not current:
+            raise JellyfinNotFoundError(f"Item '{item_id}' not found.")
+
+        # Merge allowed fields
+        for k, v in fields.items():
+            if k == "ProviderIds" and isinstance(v, dict):
+                current.setdefault("ProviderIds", {}).update(v)
+            else:
+                current[k] = v
+
+        await self._request("POST", f"/Items/{item_id}", json_body=current, session=session)
+        return {"id": item_id, "updated": True, "fields": list(fields.keys())}
+
+    async def set_item_image_bytes(
+        self,
+        item_id: str,
+        image_type: str,
+        image_bytes: bytes,
+        mime_type: str = "image/jpeg",
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> Dict[str, Any]:
+        """Set artwork for a Jellyfin item using raw image bytes."""
+        if not validate_item_id(item_id):
+            raise ValueError(f"Invalid item_id format: '{item_id}'")
+
+        clean_type = "Primary" if image_type.lower() in ("poster", "primary") else ("Backdrop" if image_type.lower() in ("backdrop", "background", "thumb") else "Logo")
+        await self._request(
+            "POST",
+            f"/Items/{item_id}/Images/{clean_type}",
+            raw_body=image_bytes,
+            content_type=mime_type,
+            session=session,
+        )
+        return {"id": item_id, "image_type": clean_type, "success": True}
+
+    async def delete_item(
+        self,
+        item_id: str,
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> Dict[str, Any]:
+        """Delete an item from Jellyfin."""
+        if not validate_item_id(item_id):
+            raise ValueError(f"Invalid item_id format: '{item_id}'")
+
+        await self._request("DELETE", f"/Items/{item_id}", session=session)
+        return {"id": item_id, "deleted": True}
+
+    async def refresh_item(
+        self,
+        item_id: str,
+        replace_all: bool = True,
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> Dict[str, Any]:
+        """Trigger metadata and image refresh for an item."""
+        if not validate_item_id(item_id):
+            raise ValueError(f"Invalid item_id format: '{item_id}'")
+
+        params = {
+            "MetadataRefreshMode": "FullRefresh",
+            "ImageRefreshMode": "FullRefresh",
+            "ReplaceAllMetadata": "true" if replace_all else "false",
+            "ReplaceAllImages": "true" if replace_all else "false",
+        }
+        await self._request("POST", f"/Items/{item_id}/Refresh", params=params, session=session)
+        return {"id": item_id, "refreshed": True}
+
+    async def refresh_library(
+        self,
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> Dict[str, Any]:
+        """Trigger full library scan in Jellyfin."""
+        await self._request("POST", "/Library/Refresh", session=session)
+        return {"refreshed": True}

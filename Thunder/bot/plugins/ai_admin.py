@@ -30,7 +30,7 @@ from ai_admin.snapshot_store import SnapshotStore
 from ai_admin.telegram_router import TelegramAIAdminRouter
 from ai_admin.tool_registry import ToolRegistry
 from ai_admin.tool_runner import ToolRunner
-from ai_admin.tools_jellyfin import get_jellyfin_read_tool_definitions
+from ai_admin.tools_jellyfin import get_jellyfin_active_mutation_definitions, get_jellyfin_read_tool_definitions
 from ai_admin.tools_providers import get_provider_read_tool_definitions
 
 logger = logging.getLogger("Thunder.Plugin.AIAdmin")
@@ -109,6 +109,10 @@ def setup_ai_admin(client: Optional[Client] = None) -> Optional[TelegramAIAdminR
         )
         for tool_def in get_jellyfin_read_tool_definitions(jf_client):
             registry.register(tool_def)
+
+        if config.mutations_enabled:
+            for tool_def in get_jellyfin_active_mutation_definitions(jf_client):
+                registry.register(tool_def)
 
         prov_client = ProvidersClient(
             tmdb_api_key=os.environ.get("TMDB_API_KEY", ""),

@@ -230,7 +230,33 @@ def load_cache():
             cache_updated = True
             logger.info(f"[CACHE-HEAL] Corrected Generation Iron to real Iron Man 3 for '{raw_name}'")
 
-        # 2. Clean release-size noise from title, clean_title, strm_base
+        # 2. Heal Khalifa misidentification and assign authentic metadata & artwork
+        is_khalifa = (
+            "khalifa" in raw_lower
+            or "khalifa" in (data.get("tmdb_title") or "").lower()
+            or "khalifa" in (data.get("title") or "").lower()
+            or "khalifa" in (data.get("strm_base") or "").lower()
+        )
+        if is_khalifa:
+            data["title"] = "Khalifa"
+            data["clean_title"] = "Khalifa"
+            data["search_title"] = "khalifa"
+            data["tmdb_title"] = "Khalifa"
+            data["tmdb_id"] = 1036081
+            data["imdb_id"] = "tt22797990"
+            data["year"] = 2026
+            data["tmdb_year"] = 2026
+            data["strm_base"] = "Khalifa (2026)"
+            lang = data.get("language") or "Malayalam"
+            data["target_dir"] = os.path.join(MOVIES_DIR, lang, "Khalifa (2026)")
+            data["strm_path"] = os.path.join(data["target_dir"], "Khalifa (2026).strm")
+            data["poster_url"] = "https://images.metahub.space/poster/medium/tt22797990/img"
+            data["backdrop_url"] = "https://images.metahub.space/background/medium/tt22797990/img"
+            data["_force_art_refresh"] = True
+            cache_updated = True
+            logger.info(f"[CACHE-HEAL] Corrected Khalifa metadata and artwork for '{raw_name}'")
+
+        # 3. Clean release-size noise from title, clean_title, strm_base
         cur_title = data.get("title") or ""
         cur_clean = data.get("clean_title") or ""
         cur_base = data.get("strm_base") or ""
@@ -2938,19 +2964,46 @@ async def deduplicate_jellyfin_items():
                 payload = await response.json()
             items = payload.get("Items") or []
             groups = {}
+            series_groups = {}
+            orphan_items = []
+
+            # Valid cached strm paths
+            valid_cached_paths = {
+                os.path.normpath(str(d.get("strm_path") or "")).lower()
+                for d in FILE_ID_CACHE.values()
+                if isinstance(d, dict) and d.get("strm_path")
+            }
+
             for item in items:
+                itype = item.get("Type")
                 path = os.path.normpath(str(item.get("Path") or ""))
+                provider_ids = item.get("ProviderIds") or {}
+
+                # 1. Series deduplication
+                if itype == "Series":
+                    s_name = str(item.get("Name") or "").strip().lower()
+                    tmdb_s = provider_ids.get("Tmdb")
+                    s_ident = f"series:tmdb:{tmdb_s}" if tmdb_s else f"series:name:{s_name}"
+                    series_groups.setdefault(s_ident, []).append((item, path))
+                    continue
+
                 if not path.lower().endswith(".strm"):
                     continue
                 if not (path.startswith(os.path.normpath(MOVIES_DIR)) or
                         path.startswith(os.path.normpath(SHOWS_DIR))):
                     continue
+
+                # If .strm does not exist on disk, mark immediately as orphan for cleanup
+                if not os.path.exists(path):
+                    orphan_items.append((item, path))
+                    continue
+
                 item_name = str(item.get("Name") or "").strip().lower().replace(" ", "_")
                 path_name = os.path.basename(path).lower().replace(" ", "_")
                 if item_name in {"unknown_media", "unknown"} or "unknown_media" in path_name:
                     groups.setdefault("unknown-media", []).append((item, path))
                     continue
-                provider_ids = item.get("ProviderIds") or {}
+
                 year_match = re.search(r"\((\d{4})\)", path)
                 year_suffix = year_match.group(1) if year_match else ""
                 if provider_ids.get("Tmdb"):
@@ -2979,7 +3032,17 @@ async def deduplicate_jellyfin_items():
                             + f":{year_suffix}"
                         )
                 groups.setdefault(identity, []).append((item, path))
-            duplicates = []
+
+            duplicates = list(orphan_items)
+
+            # Process Series duplicates
+            for s_ident, s_entries in series_groups.items():
+                if len(s_entries) > 1:
+                    existing_s = [pair for pair in s_entries if os.path.exists(pair[1])]
+                    # Keep series with the deepest or existing folder path
+                    keep_s = sorted(existing_s or s_entries, key=lambda pair: len(pair[1]), reverse=True)[0]
+                    duplicates.extend(pair for pair in s_entries if pair is not keep_s)
+
             for identity, entries in groups.items():
                 if identity == "unknown-media":
                     duplicates.extend(entries)
@@ -2987,6 +3050,7 @@ async def deduplicate_jellyfin_items():
                 existing = [pair for pair in entries if os.path.exists(pair[1])]
                 keep = sorted(existing or entries, key=lambda pair: len(pair[1]))[0]
                 duplicates.extend(pair for pair in entries if pair is not keep)
+
             for item, path in duplicates:
                 item_id = item.get("Id")
                 if not item_id:

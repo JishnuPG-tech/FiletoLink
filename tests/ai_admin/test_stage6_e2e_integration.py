@@ -120,14 +120,17 @@ def test_stage6_exact_tool_count_and_absence_of_mutations(monkeypatch, tmp_path)
     registry = router.handler.registry
     registered_tools = registry.list_tools()
 
-    # Must contain exactly 13 read-only tools
-    assert len(registered_tools) == 13, f"Expected 13 tools, got {len(registered_tools)}: {[t.name for t in registered_tools]}"
+    # Must contain exactly 16 read-only tools
+    assert len(registered_tools) == 16, f"Expected 16 tools, got {len(registered_tools)}: {[t.name for t in registered_tools]}"
 
     expected_tool_names = {
         "jellyfin_search",
         "jellyfin_get_item",
         "jellyfin_list_missing_metadata",
         "jellyfin_get_media_info",
+        "telegram_list_injected",
+        "jellyfin_list_library",
+        "library_audit_and_compare",
         "tmdb_search",
         "tmdb_get_details",
         "tmdb_get_images",
