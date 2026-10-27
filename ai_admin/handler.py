@@ -137,47 +137,106 @@ class AIAdminHandler:
                 return True, f"✅ *{tool_name}*\n```json\n{json.dumps(result, indent=2)}\n```"
             return True, f"⚠️ {msg}"
 
-        # 4. Conversational LLM Planner resolution (if available)
+        # 4. Multi-Step Conversational Agent Loop
         schemas = self.registry.get_schemas_for_planner()
         history = self.context_store.get_history(user_id, chat_id)
-        planned_ok, tool_calls, reply_or_err = await self.omniroute.chat_or_plan(
-            instruction=cleaned_text,
-            context_history=history,
-            tool_schemas=schemas,
+
+        system_prompt = (
+            "You are an intelligent, friendly, and expert Jellyfin Media Server AI Assistant.\n"
+            "You have direct control to inspect and manage the Jellyfin library and query metadata/artwork providers:\n"
+            "• Search Jellyfin library for movies, series, episodes (`jellyfin_search`, `jellyfin_get_item`, `jellyfin_get_media_info`).\n"
+            "• Query TMDb (themoviedb) for official posters, backdrops, and metadata (`tmdb_search`, `tmdb_get_details`).\n"
+            "• Query Fanart.tv for high-resolution posters, clearart, and backgrounds (`fanart_get_images`).\n"
+            "• Search subtitles on OpenSubtitles (`opensubtitles_search`).\n\n"
+            "Workflow Guidelines:\n"
+            "1. When the user asks to find a movie/series and check or fix its poster/thumbnail:\n"
+            "   a) FIRST search Jellyfin to locate the item and check its metadata.\n"
+            "   b) THEN search TMDb or Fanart using the movie name or TMDb ID to discover the best authentic posters and artwork.\n"
+            "   c) PRESENT the results conversationally with titles, years, current status, and direct preview links for the best posters found.\n"
+            "   d) Offer to apply the selected poster.\n"
+            "2. If the user is just chatting or asking a question that doesn't need tools, reply warmly, concisely, and conversationally.\n"
+            "3. Format all responses using Telegram markdown (*bold*, `code`, [link](url)). Never output raw JSON unless specifically requested."
         )
 
-        if not planned_ok:
-            return True, f"⚠️ Could not resolve instruction ({reply_or_err})."
+        messages = [{"role": "system", "content": system_prompt}]
+        for turn in history[-6:]:
+            messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
+        messages.append({"role": "user", "content": cleaned_text})
 
-        # Direct conversational response (no tools needed)
-        if not tool_calls:
-            fallback_msg = reply_or_err or "I didn't detect any specific action needed."
-            self.context_store.add_turn(user_id, chat_id, "user", cleaned_text)
-            self.context_store.add_turn(user_id, chat_id, "assistant", fallback_msg)
-            return True, fallback_msg
+        max_iterations = 3
+        executed_tool_results = []
+        final_reply = ""
 
-        results = []
-        for call in tool_calls:
-            ok, res, msg = await self.runner.execute_tool(
-                tool_name=call["name"],
-                params=call.get("params", {}),
-                user_id=user_id,
-                chat_id=chat_id,
+        for iteration in range(max_iterations):
+            planned_ok, tool_calls, reply_or_err = await self.omniroute.chat_or_plan(
+                messages=messages,
+                tool_schemas=schemas,
             )
-            results.append({"tool": call["name"], "success": ok, "result": res, "message": msg})
-            if ok and isinstance(res, dict) and "items" in res and res["items"]:
-                items_list = res["items"]
-                self.context_store.set_selected_item(user_id, chat_id, items_list[0].get("id"), items_list[0].get("name"))
-                self.context_store.set_search_results(user_id, chat_id, items_list)
 
-        # Synthesize conversational response from tool outputs
-        synth_ok, synthesized_reply = await self.omniroute.synthesize_response(
-            instruction=cleaned_text,
-            context_history=history,
-            tool_results=results,
-        )
+            if not planned_ok:
+                final_reply = f"⚠️ Could not process instruction ({reply_or_err})."
+                break
 
-        final_reply = synthesized_reply if (synth_ok and synthesized_reply) else f"✅ Executed {len(results)} action(s):\n```json\n{json.dumps(results, indent=2)}\n```"
+            # If model produced conversational response without calling any tools
+            if not tool_calls:
+                final_reply = reply_or_err or "I didn't detect any specific action needed."
+                break
+
+            # Execute tool calls
+            tool_outputs = []
+            for call in tool_calls:
+                ok, res, msg = await self.runner.execute_tool(
+                    tool_name=call["name"],
+                    params=call.get("params", {}),
+                    user_id=user_id,
+                    chat_id=chat_id,
+                )
+                tool_outputs.append({"tool": call["name"], "success": ok, "result": res, "message": msg})
+                executed_tool_results.append({"tool": call["name"], "success": ok, "result": res, "message": msg})
+
+                if ok and isinstance(res, dict) and "items" in res and res["items"]:
+                    items_list = res["items"]
+                    self.context_store.set_selected_item(user_id, chat_id, items_list[0].get("id"), items_list[0].get("name"))
+                    self.context_store.set_search_results(user_id, chat_id, items_list)
+
+            # Append assistant's turn with tool_calls
+            assistant_msg = {
+                "role": "assistant",
+                "content": reply_or_err or None,
+                "tool_calls": [
+                    {
+                        "id": f"call_{iteration}_{i}",
+                        "type": "function",
+                        "function": {
+                            "name": c["name"],
+                            "arguments": json.dumps(c.get("params", {}))
+                        }
+                    }
+                    for i, c in enumerate(tool_calls)
+                ]
+            }
+            messages.append(assistant_msg)
+
+            # Append tool outputs
+            for i, tout in enumerate(tool_outputs):
+                call_id = f"call_{iteration}_{i}"
+                clean_res = json.dumps(tout["result"], default=str)
+                if len(clean_res) > 3000:
+                    clean_res = clean_res[:3000] + "... [truncated]"
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "name": tout["tool"],
+                    "content": clean_res,
+                })
+
+        if not final_reply and executed_tool_results:
+            synth_ok, synthesized = await self.omniroute.synthesize_response(
+                instruction=cleaned_text,
+                context_history=history,
+                tool_results=executed_tool_results,
+            )
+            final_reply = synthesized if (synth_ok and synthesized) else f"✅ Completed {len(executed_tool_results)} action(s)."
 
         # Save turn to history
         self.context_store.add_turn(user_id, chat_id, "user", cleaned_text)

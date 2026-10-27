@@ -3256,10 +3256,11 @@ async def telegram_webhook(request):
 
         data = await request.json()
 
-        # Intercept AI Admin commands (/ai) and callbacks (ai:*)
+        # Intercept AI Admin commands (/ai), private chat messages, and callbacks (ai:*)
         try:
-            from ai_admin.telegram_router import handle_webhook_update
-            if await handle_webhook_update(data, bot_token=BOT_TOKEN, client=tg_app):
+            from ai_admin.telegram_router import handle_webhook_update, is_ai_update
+            if is_ai_update(data):
+                asyncio.create_task(handle_webhook_update(data, bot_token=BOT_TOKEN, client=tg_app))
                 return web.json_response({"ok": True})
         except Exception as _ai_err:
             logger.debug(f"[AI-ADMIN] Webhook check failed: {_ai_err}")

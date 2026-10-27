@@ -89,12 +89,13 @@ class OmniRouteAdapter:
 
     async def chat_or_plan(
         self,
-        instruction: str,
-        context_history: List[Dict[str, str]],
-        tool_schemas: List[Dict[str, Any]],
+        instruction: Optional[str] = None,
+        context_history: Optional[List[Dict[str, str]]] = None,
+        tool_schemas: Optional[List[Dict[str, Any]]] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
         timeout_seconds: int = 30,
     ) -> Tuple[bool, List[Dict[str, Any]], str]:
-        """Send instruction to OmniRoute.
+        """Send instruction or pre-built messages to OmniRoute.
         Returns:
             (success, tool_calls_list, conversational_content_or_error)
             - If tool_calls_list is non-empty: tools need to be executed.
@@ -104,19 +105,21 @@ class OmniRouteAdapter:
         if not (self.config.omniroute_api_url and self.config.omniroute_api_key):
             return False, [], "OmniRoute configuration is missing (OMNIROUTE_API_KEY / OMNIROUTE_API_URL)."
 
-        system_prompt = (
-            "You are an intelligent, helpful, and friendly Jellyfin Media Server AI Assistant.\n"
-            "You have access to tools to inspect and manage the Jellyfin library and query metadata/artwork providers (TMDB, Fanart.tv, OpenSubtitles).\n"
-            "If the user asks to find, check, compare, or fix posters, thumbnails, subtitles, or metadata, use the appropriate tools.\n"
-            "If the user greets you or asks general questions that do not require tool operations, answer conversationally and helpfully.\n"
-            "Format your answers with clean Telegram markdown (*bold*, `code`)."
-        )
-
-        messages = [{"role": "system", "content": system_prompt}]
-        for turn in context_history[-8:]:
-            messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
-
-        messages.append({"role": "user", "content": instruction})
+        if messages is None:
+            system_prompt = (
+                "You are an intelligent, helpful, and friendly Jellyfin Media Server AI Assistant.\n"
+                "You have access to tools to inspect and manage the Jellyfin library and query metadata/artwork providers (TMDB, Fanart.tv, OpenSubtitles).\n"
+                "If the user asks to find, check, compare, or fix posters, thumbnails, subtitles, or metadata, use the appropriate tools.\n"
+                "If the user greets you or asks general questions that do not require tool operations, answer conversationally and helpfully.\n"
+                "Format your answers with clean Telegram markdown (*bold*, `code`, [link](url))."
+            )
+            built_messages = [{"role": "system", "content": system_prompt}]
+            if context_history:
+                for turn in context_history[-8:]:
+                    built_messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
+            if instruction:
+                built_messages.append({"role": "user", "content": instruction})
+            messages = built_messages
 
         models_to_try = self.config.ai_models or ([self.config.ai_model] if self.config.ai_model else [])
         last_err = ""
@@ -127,8 +130,9 @@ class OmniRouteAdapter:
                 "temperature": 0.3,
                 "max_tokens": self.config.ai_max_tokens,
                 "messages": messages,
-                "tools": tool_schemas,
             }
+            if tool_schemas:
+                payload["tools"] = tool_schemas
 
             logger.info(f"[OMNIROUTE-CHAT] Attempting model '{model}'...")
             status, data, err_msg = await self._send_request(payload, timeout_seconds=timeout_seconds)

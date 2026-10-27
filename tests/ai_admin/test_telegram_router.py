@@ -915,3 +915,31 @@ async def test_webhook_conversational_private_message(monkeypatch):
     assert handled is True
 
 
+@pytest.mark.asyncio
+async def test_message_deduplication_prevents_duplicate_replies(mock_router_setup):
+    """Verify that duplicate delivery of the same message_id is dropped."""
+    from ai_admin.telegram_router import clear_dedup_cache
+
+    clear_dedup_cache()
+    router, _, _, _, _ = mock_router_setup
+    client = MagicMock()
+
+    # First delivery with message_id=888
+    msg1 = make_mock_message(user_id=12345, chat_id=12345, text="/ai status")
+    msg1.id = 888
+
+    with pytest.raises(StopPropagation):
+        await router.handle_ai_command(client, msg1)
+    assert msg1.reply_text.called
+
+    # Second delivery with the SAME message_id=888 (simulating duplicate webhook / MTProto race)
+    msg2 = make_mock_message(user_id=12345, chat_id=12345, text="/ai status")
+    msg2.id = 888
+
+    with pytest.raises(StopPropagation):
+        await router.handle_ai_command(client, msg2)
+    # The duplicate message must NOT have replied again!
+    assert not msg2.reply_text.called
+
+
+

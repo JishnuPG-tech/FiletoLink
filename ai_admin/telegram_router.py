@@ -7,6 +7,7 @@ strict authorization, HTML escaping, and length capping <= 4000 chars.
 """
 
 import aiohttp
+import asyncio
 import html
 import json
 import logging
@@ -31,6 +32,67 @@ from ai_admin.permissions import PermissionChecker
 logger = logging.getLogger("AIAdmin.TelegramRouter")
 
 MAX_TELEGRAM_MESSAGE_LENGTH = 4000
+
+import time
+
+_DEDUP_CACHE: Dict[Tuple[int, int], float] = {}
+_DEDUP_LOCK = asyncio.Lock()
+
+
+async def should_process_message(chat_id: Any, message_id: Any) -> bool:
+    """Check if (chat_id, message_id) is new and claim processing rights.
+
+    Prevents duplicate bot replies caused by concurrent MTProto & Webhook delivery
+    or Telegram Bot API webhook delivery retries.
+    """
+    if chat_id is None or message_id is None:
+        return True
+
+    try:
+        c_id = int(chat_id)
+        m_id = int(message_id)
+    except (ValueError, TypeError):
+        return True
+
+    key = (c_id, m_id)
+    now = time.time()
+
+    async with _DEDUP_LOCK:
+        expired = [k for k, ts in _DEDUP_CACHE.items() if now - ts > 120]
+        for k in expired:
+            _DEDUP_CACHE.pop(k, None)
+
+        if key in _DEDUP_CACHE:
+            logger.info(f"[AI-DEDUP] Dropping duplicate delivery for chat={chat_id} msg={message_id}")
+            return False
+
+        _DEDUP_CACHE[key] = now
+        return True
+
+
+def clear_dedup_cache() -> None:
+    """Clear in-memory deduplication cache (useful for testing)."""
+    _DEDUP_CACHE.clear()
+
+
+def is_ai_update(data: Dict[str, Any]) -> bool:
+    """Fast check whether an update should be intercepted by AI Admin."""
+    if not isinstance(data, dict):
+        return False
+    cb = data.get("callback_query")
+    if cb and str(cb.get("data") or "").startswith("ai:"):
+        return True
+    msg = data.get("message")
+    if msg and isinstance(msg, dict):
+        text = (msg.get("text") or "").strip()
+        if not text:
+            return False
+        if text.startswith("/ai"):
+            return True
+        chat_type = str((msg.get("chat") or {}).get("type", "")).lower()
+        if chat_type == "private" and not text.startswith("/"):
+            return True
+    return False
 
 
 def is_private_chat(chat_obj: Any) -> bool:
@@ -249,6 +311,14 @@ class TelegramAIAdminRouter:
                     parse_mode=ParseMode.HTML,
                 )
                 raise StopPropagation
+
+            # Deduplication: prevent duplicate replies from concurrent MTProto and Webhook delivery
+            msg_id = getattr(message, "id", None)
+            if not isinstance(msg_id, int):
+                msg_id = getattr(message, "message_id", None)
+            if isinstance(msg_id, int):
+                if not await should_process_message(chat_id, msg_id):
+                    raise StopPropagation
 
             # 6. Parse command instruction
             raw_text = getattr(message, "text", "") or ""
@@ -523,6 +593,12 @@ async def handle_webhook_update(
             instruction = parts[1].strip() if len(parts) > 1 else ""
         else:
             instruction = raw_text.strip()
+
+        # Deduplication check: drop duplicate webhook delivery or messages already processed by MTProto
+        msg_id = message_dict.get("message_id")
+        if isinstance(msg_id, int):
+            if not await should_process_message(chat_id, msg_id):
+                return True
 
         from Thunder.bot.plugins.ai_admin import setup_ai_admin
         router = setup_ai_admin(client)
