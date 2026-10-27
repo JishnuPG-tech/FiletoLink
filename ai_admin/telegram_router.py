@@ -6,9 +6,11 @@ Ensures zero collisions with existing bot plugins (group 0 catch-all),
 strict authorization, HTML escaping, and length capping <= 4000 chars.
 """
 
+import aiohttp
 import html
 import json
 import logging
+import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -380,3 +382,230 @@ class TelegramAIAdminRouter:
         except Exception as e:
             logger.error(f"Error handling callback query: {e}", exc_info=True)
             raise StopPropagation
+
+
+async def handle_webhook_update(
+    data: Dict[str, Any],
+    bot_token: Optional[str] = None,
+    client: Optional[Client] = None,
+) -> bool:
+    """Process incoming Telegram Bot API webhook update dict for AI Admin commands and callbacks.
+
+    Returns True if update was an AI Admin command/callback and handled.
+    Returns False if update was unrelated (allowing standard streaming/media ingestion).
+    """
+    if not isinstance(data, dict):
+        return False
+
+    message_dict = data.get("message")
+    callback_dict = data.get("callback_query")
+
+    if not message_dict and not callback_dict:
+        return False
+
+    config = AIAdminConfig.from_env()
+
+    async def _send_reply(chat_id: int, text: str, reply_markup: Optional[Dict[str, Any]] = None):
+        if client and getattr(client, "is_connected", False):
+            try:
+                await client.send_message(chat_id, text, parse_mode=ParseMode.HTML)
+                return
+            except Exception:
+                pass
+
+        token = (
+            bot_token
+            or os.environ.get("TELEGRAM_BOT_TOKEN")
+            or os.environ.get("TG_BOT_TOKEN")
+            or os.environ.get("BOT_TOKEN")
+        )
+        if token:
+            payload = {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+            }
+            if reply_markup:
+                payload["reply_markup"] = reply_markup
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"https://api.telegram.org/bot{token}/sendMessage",
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=5.0),
+                    ) as resp:
+                        pass
+            except Exception as e:
+                logger.warning(f"[AI-ADMIN] Failed to send webhook reply: {e}")
+
+    # 1. Message (/ai command)
+    if message_dict:
+        raw_text = (message_dict.get("text") or "").strip()
+        if not raw_text.startswith("/ai"):
+            return False
+
+        chat = message_dict.get("chat") or {}
+        chat_id = chat.get("id")
+        chat_type = chat.get("type", "")
+        from_user = message_dict.get("from") or {}
+        user_id = from_user.get("id")
+
+        # Config enabled check
+        if not config.enabled:
+            if chat_type == "private" and chat_id:
+                await _send_reply(
+                    chat_id,
+                    "⚠️ <b>AI Administrator is currently disabled (AI_ENABLED=false).</b>\n\n"
+                    "To enable, set <code>AI_ENABLED=true</code> in your Hugging Face Space variables.",
+                )
+            return True
+
+        # Config validity check
+        if not config.is_valid or not config.admin_telegram_ids:
+            if chat_type == "private" and chat_id:
+                await _send_reply(
+                    chat_id,
+                    f"⚠️ <b>AI Administrator configuration is invalid:</b> {config.validation_error or 'Missing admin IDs'}\n\n"
+                    "Set <code>AI_ADMIN_TELEGRAM_IDS</code> to your Telegram User ID in your Space variables.",
+                )
+            return True
+
+        # Private chat only
+        if chat_type != "private":
+            logger.warning(f"[AI-ADMIN] Rejected /ai from non-private chat id={chat_id} type={chat_type}")
+            return True
+
+        # Check forwarded
+        if bool(
+            message_dict.get("forward_date")
+            or message_dict.get("forward_from")
+            or message_dict.get("forward_from_chat")
+        ):
+            if chat_id:
+                await _send_reply(chat_id, "⚠️ <b>Forwarded commands are rejected for security.</b>")
+            return True
+
+        # Check authorization
+        permissions = PermissionChecker(config)
+        auth_ok, reason = permissions.check_authorization(
+            user_id=user_id,
+            chat_id=chat_id,
+            is_channel=False,
+            is_anonymous_admin=False,
+        )
+        if not auth_ok:
+            logger.warning(f"[AI-ADMIN] Unauthorized /ai attempt by user={user_id} in chat={chat_id}: {reason}")
+            if chat_id:
+                await _send_reply(
+                    chat_id,
+                    "⛔ <b>Access Denied:</b> You are not authorized to use the AI Administrator.\n\n"
+                    f"Your Telegram User ID is <code>{user_id}</code>. Add this ID to <code>AI_ADMIN_TELEGRAM_IDS</code> in your Space variables.",
+                )
+            return True
+
+        parts = raw_text.split(maxsplit=1)
+        instruction = parts[1].strip() if len(parts) > 1 else ""
+
+        from Thunder.bot.plugins.ai_admin import setup_ai_admin
+        router = setup_ai_admin(client)
+        if not router:
+            if chat_id:
+                await _send_reply(chat_id, "⚠️ <b>AI Administrator router could not be initialized.</b>")
+            return True
+
+        handled, response = await router.handler.handle_message(
+            user_id=user_id,
+            chat_id=chat_id,
+            text=instruction,
+            is_channel=False,
+            is_anonymous_admin=False,
+        )
+
+        formatted_html = safe_format_html(response)
+        reply_markup = None
+        if not instruction or instruction.lower() in ("help", "status"):
+            reply_markup = {
+                "inline_keyboard": [
+                    [
+                        {"text": "⚙️ Status", "callback_data": "ai:status"},
+                        {"text": "❓ Help", "callback_data": "ai:help"},
+                    ]
+                ]
+            }
+
+        await _send_reply(chat_id, formatted_html, reply_markup=reply_markup)
+        return True
+
+    # 2. Callback query (ai:* callback)
+    if callback_dict:
+        data_str = (callback_dict.get("data") or "").strip()
+        if not data_str.startswith("ai:"):
+            return False
+
+        cb_id = callback_dict.get("id")
+        from_user = callback_dict.get("from") or {}
+        user_id = from_user.get("id")
+        msg = callback_dict.get("message") or {}
+        chat = msg.get("chat") or {}
+        chat_id = chat.get("id") or user_id
+
+        token = (
+            bot_token
+            or os.environ.get("TELEGRAM_BOT_TOKEN")
+            or os.environ.get("TG_BOT_TOKEN")
+            or os.environ.get("BOT_TOKEN")
+        )
+
+        async def _answer_cb(text: str = "", show_alert: bool = False):
+            if token and cb_id:
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        await session.post(
+                            f"https://api.telegram.org/bot{token}/answerCallbackQuery",
+                            json={"callback_query_id": cb_id, "text": text, "show_alert": show_alert},
+                            timeout=aiohttp.ClientTimeout(total=3.0),
+                        )
+                except Exception:
+                    pass
+
+        if not config.enabled or not config.is_valid:
+            await _answer_cb("AI Administrator is disabled or unconfigured.", show_alert=True)
+            return True
+
+        permissions = PermissionChecker(config)
+        auth_ok, reason = permissions.check_authorization(user_id=user_id, chat_id=chat_id)
+        if not auth_ok:
+            await _answer_cb("⛔ Access denied: unauthorized administrator.", show_alert=True)
+            return True
+
+        action = data_str[3:]
+        from Thunder.bot.plugins.ai_admin import setup_ai_admin
+        router = setup_ai_admin(client)
+        if not router:
+            await _answer_cb("Router unavailable.", show_alert=True)
+            return True
+
+        if action == "status":
+            _, response = await router.handler.handle_message(user_id=user_id, chat_id=chat_id, text="status")
+            await _answer_cb()
+            if chat_id:
+                await _send_reply(chat_id, safe_format_html(response))
+        elif action == "help":
+            _, response = await router.handler.handle_message(user_id=user_id, chat_id=chat_id, text="")
+            await _answer_cb()
+            if chat_id:
+                await _send_reply(chat_id, safe_format_html(response))
+        elif action.startswith("item:"):
+            item_id = action.split(":", 1)[1]
+            _, response = await router.handler.handle_message(
+                user_id=user_id, chat_id=chat_id, text=f"details {item_id}"
+            )
+            await _answer_cb()
+            if chat_id:
+                await _send_reply(chat_id, safe_format_html(response))
+        elif action == "cancel":
+            await _answer_cb("Operation cancelled.")
+        else:
+            await _answer_cb(f"Unknown action: {action[:20]}", show_alert=True)
+
+        return True

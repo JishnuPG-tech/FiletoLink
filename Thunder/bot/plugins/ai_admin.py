@@ -36,6 +36,7 @@ from ai_admin.tools_providers import get_provider_read_tool_definitions
 logger = logging.getLogger("Thunder.Plugin.AIAdmin")
 
 _REGISTERED = False
+_REGISTERED_CLIENT_IDS = set()
 _ROUTER_INSTANCE: Optional[TelegramAIAdminRouter] = None
 
 
@@ -53,12 +54,21 @@ def setup_ai_admin(client: Optional[Client] = None) -> Optional[TelegramAIAdminR
     """Initialize and register AI Admin router if enabled and valid.
 
     Idempotent: protects against duplicate handler registration.
+    Supports multiple Pyrogram clients (e.g. StreamBot and tg_app).
     Fails closed if disabled, unconfigured, or invalid.
     """
-    global _REGISTERED, _ROUTER_INSTANCE
+    global _REGISTERED, _REGISTERED_CLIENT_IDS, _ROUTER_INSTANCE
 
-    if _REGISTERED:
-        logger.debug("AI Admin plugin already initialized; skipping duplicate registration.")
+    target_client = client or get_stream_bot()
+
+    if _ROUTER_INSTANCE is not None:
+        if target_client is not None and id(target_client) not in _REGISTERED_CLIENT_IDS:
+            try:
+                _ROUTER_INSTANCE.register_handlers(target_client, group=-1)
+                _REGISTERED_CLIENT_IDS.add(id(target_client))
+                logger.info("Registered AI Admin handlers on additional Pyrogram client.")
+            except Exception as e:
+                logger.debug(f"Could not register handlers on client: {e}")
         return _ROUTER_INSTANCE
 
     config = AIAdminConfig.from_env()
@@ -135,6 +145,7 @@ def setup_ai_admin(client: Optional[Client] = None) -> Optional[TelegramAIAdminR
 
         # 5. Register handlers in Pyrogram group -1
         router.register_handlers(target_client, group=-1)
+        _REGISTERED_CLIENT_IDS.add(id(target_client))
 
         _REGISTERED = True
         _ROUTER_INSTANCE = router
@@ -153,8 +164,9 @@ def setup_ai_admin(client: Optional[Client] = None) -> Optional[TelegramAIAdminR
 
 def reset_plugin_state() -> None:
     """Testing helper to reset registration state between test runs."""
-    global _REGISTERED, _ROUTER_INSTANCE
+    global _REGISTERED, _REGISTERED_CLIENT_IDS, _ROUTER_INSTANCE
     _REGISTERED = False
+    _REGISTERED_CLIENT_IDS.clear()
     _ROUTER_INSTANCE = None
 
 

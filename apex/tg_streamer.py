@@ -1030,6 +1030,11 @@ if API_ID and API_HASH and BOT_TOKEN:
             max_concurrent_transmissions=APEX_CFG.telegram_max_concurrent,
         )
         logger.info("[PYROGRAM] Pyrogram persistent client initialized.")
+        try:
+            from Thunder.bot.plugins.ai_admin import setup_ai_admin
+            setup_ai_admin(tg_app)
+        except Exception as _ai_e:
+            logger.debug(f"[AI-ADMIN] Could not wire AI Admin to tg_app: {_ai_e}")
     except Exception as e:
         logger.error(f"[PYROGRAM] Error initializing Pyrogram: {e}")
 
@@ -3250,6 +3255,15 @@ async def telegram_webhook(request):
                 return web.json_response({"ok": False, "error": "Unauthorized"}, status=401)
 
         data = await request.json()
+
+        # Intercept AI Admin commands (/ai) and callbacks (ai:*)
+        try:
+            from ai_admin.telegram_router import handle_webhook_update
+            if await handle_webhook_update(data, bot_token=BOT_TOKEN, client=tg_app):
+                return web.json_response({"ok": True})
+        except Exception as _ai_err:
+            logger.debug(f"[AI-ADMIN] Webhook check failed: {_ai_err}")
+
         post = data.get("channel_post") or data.get("message")
         if not post:
             return web.json_response({"ok": True})
