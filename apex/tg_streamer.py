@@ -1698,7 +1698,7 @@ async def _enrich_media_metadata(entry):
     Idempotent: skips when the .nfo + poster already exist and have valid tmdb_id
     so restarts don't hammer the API. Updates the cache entry's tmdb_id/tmdb fields.
     """
-    if not TMDB_API_KEY or not isinstance(entry, dict) or not entry.get("title"):
+    if not isinstance(entry, dict) or not entry.get("title"):
         return False
     key = entry.get("_cache_key") or ""
     try:
@@ -1706,16 +1706,19 @@ async def _enrich_media_metadata(entry):
         target_dir = entry.get("target_dir")
         show_root = entry.get("show_root")
         if not target_dir:
-            logger.info(f"[TMDB] No target_dir for '{entry.get('title')}' - skipping enrich")
+            logger.info(f"[METADATA] No target_dir for '{entry.get('title')}' - skipping enrich")
             return False
 
-        # Idempotency gate: if metadata is on disk AND has valid tmdb_id,
-        # avoid re-hitting the TMDB API on restart.
-        has_tmdb = bool(entry.get("tmdb_id") or (isinstance(FILE_ID_CACHE.get(key), dict) and FILE_ID_CACHE[key].get("tmdb_id")))
+        # Idempotency gate: if metadata is on disk AND has valid identity,
+        # avoid re-hitting the API on restart.
+        has_identity = bool(
+            entry.get("imdb_id") or entry.get("tmdb_id")
+            or (isinstance(FILE_ID_CACHE.get(key), dict) and (FILE_ID_CACHE[key].get("imdb_id") or FILE_ID_CACHE[key].get("tmdb_id")))
+        )
         known_tmdb = int(entry.get("tmdb_id") or (FILE_ID_CACHE[key].get("tmdb_id") if isinstance(FILE_ID_CACHE.get(key), dict) else 0) or 0)
         force_art = bool(entry.get("_force_art_refresh"))
 
-        if has_tmdb and not force_art:
+        if has_identity and not force_art:
             if is_tv and show_root:
                 tv_nfo = os.path.join(show_root, "tvshow.nfo")
                 tv_backdrop = os.path.join(show_root, "backdrop.jpg")
@@ -1784,8 +1787,58 @@ async def _enrich_media_metadata(entry):
                 )
         # Tier-1: text search against candidates in English / default so Latin query
         # matches TMDB's Latin titles, with language affinity applied in best_tmdb_match.
-        target_expected = entry.get("clean_title") or entry.get("title") or entry.get("search_title") or query
+        # Tier-1 (PRIMARY): Official IMDb Suggestion API (omkarcloud/imdb-scraper)
+        # IMDb is the gold standard for global & Indian movies and TV series
+        # Zero rate limit, unauthenticated, 100% authentic ground-truth.
         if not hit:
+            for cand in candidates[:4]:
+                try:
+                    imdb_cand = await _fetch_imdb_suggestion(cand, entry.get("year"), media_type)
+                    if imdb_cand and imdb_cand.get("id"):
+                        imdb_id = imdb_cand["id"]
+                        c_meta = await _fetch_cinemeta_meta(imdb_id, media_type)
+                        poster_u = (imdb_cand.get("i") or {}).get("imageUrl") or (c_meta.get("poster") if c_meta else None)
+                        backdrop_u = (c_meta.get("background") if c_meta else None) or poster_u
+                        official_title = (c_meta.get("name") if c_meta else None) or imdb_cand.get("l") or cand
+                        official_year = imdb_cand.get("y") or entry.get("year")
+
+                        # If TMDB is available, resolve TMDB ID deterministically via /find/{imdb_id}
+                        resolved_tmdb_id = None
+                        if TMDB_API_KEY:
+                            try:
+                                fresults = await _tmdb_find(imdb_id)
+                                for fr in (fresults or []):
+                                    if fr.get("media_type") == media_type:
+                                        resolved_tmdb_id = fr.get("id")
+                                        break
+                                if not resolved_tmdb_id and fresults:
+                                    resolved_tmdb_id = fresults[0].get("id")
+                            except Exception:
+                                pass
+
+                        hit = {
+                            "id": resolved_tmdb_id or int(re.sub(r"\D", "", imdb_id)[:8]),
+                            "imdb_id": imdb_id,
+                            "title": official_title,
+                            "name": official_title,
+                            "original_title": official_title,
+                            "original_name": official_title,
+                            "release_date": f"{official_year or 2024}-01-01",
+                            "first_air_date": f"{official_year or 2024}-01-01",
+                            "overview": (c_meta.get("description") if c_meta else None) or "",
+                            "poster_path": poster_u,
+                            "backdrop_path": backdrop_u,
+                            "genres": [{"name": g} if isinstance(g, str) else g for g in (c_meta.get("genres") or [])] if c_meta else [],
+                        }
+                        used_query = cand
+                        logger.info(f"[IMDB-PRIMARY] 🎯 '{cand}' resolved via IMDb {imdb_id} ('{official_title}' {official_year})")
+                        break
+                except Exception as _imdb_err:
+                    logger.debug(f"[IMDB-PRIMARY] Notice for '{cand}': {_imdb_err}")
+
+        # Tier-2 (Fallback): TMDB text search against candidates in English / native language
+        target_expected = entry.get("clean_title") or entry.get("title") or entry.get("search_title") or query
+        if not hit and TMDB_API_KEY:
             for cand in candidates:
                 try:
                     results = await _tmdb_search(media_type, cand, entry.get("year"), language="en-US")
@@ -1801,10 +1854,7 @@ async def _enrich_media_metadata(entry):
                 used_query = cand
                 if hit:
                     break
-        # Tier-1b: TMDB returned nothing/below threshold in English; retry the
-        # probe candidates in the release's own language so native-script and
-        # transliterated titles ("Aadu 3 Part 1" Malayalam) still resolve.
-        if not hit and lang_code and lang_code != "en":
+        if not hit and lang_code and lang_code != "en" and TMDB_API_KEY:
             for cand in candidates[:3]:
                 try:
                     results = await _tmdb_search(media_type, cand, entry.get("year"), language=lang_code)
@@ -2181,20 +2231,31 @@ async def _enrich_media_metadata(entry):
 
         tmdb_id = hit.get("id")
         img_lang_param = "en,null,hi,ta,te,ml,bn,mr,kn,pa"
-        if is_tv:
-            detail = await _tmdb_get(f"/tv/{tmdb_id}", {"append_to_response": f"images,season/{int(entry.get('season') or 1)}", "include_image_language": img_lang_param})
-        else:
-            if tmdb_id in (9898301, 1036081, 99931969) or ("overview" in hit and "title" in hit and not TMDB_API_KEY) or (hit and hit.get("imdb_id") and not TMDB_API_KEY):
-                detail = hit
-            else:
-                detail = await _tmdb_get(f"/movie/{tmdb_id}", {"append_to_response": "images", "include_image_language": img_lang_param})
+        detail = None
+        if TMDB_API_KEY and tmdb_id and tmdb_id not in (9898301, 1036081, 99931969):
+            try:
+                if is_tv:
+                    detail = await _tmdb_get(f"/tv/{tmdb_id}", {"append_to_response": f"images,season/{int(entry.get('season') or 1)}", "include_image_language": img_lang_param})
+                else:
+                    detail = await _tmdb_get(f"/movie/{tmdb_id}", {"append_to_response": "images", "include_image_language": img_lang_param})
+            except Exception:
+                detail = None
 
         if not detail:
-            if hit and "title" in hit:
+            if hit and ("title" in hit or "name" in hit):
                 detail = hit
             else:
-                logger.info(f"[TMDB] No detail for tmdb_id={tmdb_id} ({query})")
+                logger.info(f"[METADATA] No detail for id={tmdb_id} ({query})")
                 return False
+        else:
+            # Preserve genuine IMDb identity and Amazon CDN artwork
+            if hit.get("imdb_id"):
+                detail["imdb_id"] = hit["imdb_id"]
+            if hit.get("poster_path") and (str(hit["poster_path"]).startswith("http://") or str(hit["poster_path"]).startswith("https://")):
+                detail["poster_path"] = hit["poster_path"]
+            if hit.get("backdrop_path") and (str(hit["backdrop_path"]).startswith("http://") or str(hit["backdrop_path"]).startswith("https://")):
+                if not detail.get("backdrop_path"):
+                    detail["backdrop_path"] = hit["backdrop_path"]
 
         imdb_id = detail.get("imdb_id")
         if is_tv and not imdb_id:
