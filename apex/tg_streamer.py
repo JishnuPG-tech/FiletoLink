@@ -21,6 +21,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 _BLACKLIST_PATTERNS = [
     re.compile(r"mot\s*test\s*servicing", re.IGNORECASE),
     re.compile(r"(?:ms\.?\s*rose|mr\.?\s*cane|rose\s*&?\s*cane)", re.IGNORECASE),
+    re.compile(r"wwe\s*money\s*in\s*the\s*bank", re.IGNORECASE),
+    re.compile(r"\bwwe\b", re.IGNORECASE),
 ]
 
 
@@ -208,6 +210,15 @@ def load_cache():
             continue
         raw_name = data.get("file_name") or data.get("raw_name") or data.get("title") or ""
         raw_lower = raw_name.lower()
+        tmdb_t = (data.get("tmdb_title") or "").lower()
+        title_l = (data.get("title") or "").lower()
+
+        # 0. Purge rogue/blacklisted items (e.g. WWE Money in the Bank)
+        if is_blacklisted(raw_name) or is_blacklisted(tmdb_t) or is_blacklisted(title_l) or any(r in raw_lower or r in tmdb_t or r in title_l for r in ("wwe", "money in the bank")):
+            logger.info(f"[CACHE-PURGE] Purging rogue/blacklisted item from cache: key={key}, raw='{raw_name}'")
+            FILE_ID_CACHE.pop(key, None)
+            cache_updated = True
+            continue
 
         # 1. Heal Generation Iron misidentification on Iron Man movies
         is_gen_iron = (
@@ -295,6 +306,34 @@ def load_cache():
             data["_force_art_refresh"] = True
             cache_updated = True
             logger.info(f"[CACHE-HEAL] Corrected Ne Zha 2 metadata and artwork for '{raw_name}'")
+
+        # 2d. Heal It: Welcome to Derry metadata and artwork
+        is_derry = "derry" in raw_lower or "welcome to derry" in (data.get("title") or "").lower() or "it: welcome to derry" in (data.get("title") or "").lower()
+        if is_derry:
+            data["is_tv"] = True
+            data["show_name"] = "It: Welcome to Derry"
+            data["title"] = "It: Welcome to Derry"
+            data["clean_title"] = "It: Welcome to Derry"
+            data["search_title"] = "it welcome to derry"
+            data["imdb_id"] = "tt19244304"
+            data["tmdb_id"] = 194766
+            data["year"] = 2025
+            lang = data.get("language") or "English"
+            data["language"] = lang
+            s_num = int(data.get("season") or 1)
+            e_num = int(data.get("episode") or 1)
+            data["season"] = s_num
+            data["episode"] = e_num
+            show_root = tv_show_root(SHOWS_DIR, lang, "It: Welcome to Derry", 2025)
+            data["show_root"] = show_root
+            data["target_dir"] = os.path.join(show_root, f"Season {s_num:02d}")
+            data["strm_base"] = f"It: Welcome to Derry S{s_num:02d}E{e_num:02d}"
+            data["strm_path"] = os.path.join(data["target_dir"], f"{data['strm_base']}.strm")
+            data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BZWE0ZWM1MjUtNmYzYS00NzU3LTkxYmQtNmI3NTc0ZTY1NmVlXkEyXkFqcGc@._V1_.jpg"
+            data["backdrop_url"] = "https://images.metahub.space/background/medium/tt19244304/img"
+            data["_force_art_refresh"] = True
+            cache_updated = True
+            logger.info(f"[CACHE-HEAL] Corrected It: Welcome to Derry metadata and artwork for '{raw_name}'")
 
         # 3. Clean release-size noise from title, clean_title, strm_base
         cur_title = data.get("title") or ""
@@ -2073,6 +2112,42 @@ async def _enrich_media_metadata(entry):
                 used_query = "The Paradise"
                 logger.info("[METADATA] Resolved The Paradise directly to official 2026 movie (IMDb tt31969655)")
 
+        # "It: Welcome to Derry" (2025 TV Series, IMDb tt19244304):
+        if "derry" in raw_name_lower:
+            entry["is_tv"] = True
+            is_tv = True
+            media_type = "tv"
+            entry["show_name"] = "It: Welcome to Derry"
+            entry["title"] = "It: Welcome to Derry"
+            entry["clean_title"] = "It: Welcome to Derry"
+            entry["search_title"] = "it welcome to derry"
+            entry["year"] = 2025
+            entry["imdb_id"] = "tt19244304"
+            entry["tmdb_id"] = 194766
+            entry["_force_art_refresh"] = True
+            s_num = int(entry.get("season") or 1)
+            e_num = int(entry.get("episode") or 1)
+            entry["season"] = s_num
+            entry["episode"] = e_num
+            entry["strm_base"] = f"It: Welcome to Derry S{s_num:02d}E{e_num:02d}"
+            show_root = tv_show_root(SHOWS_DIR, entry.get("language") or "English", "It: Welcome to Derry", 2025)
+            entry["show_root"] = show_root
+            entry["target_dir"] = os.path.join(show_root, f"Season {s_num:02d}")
+            entry["strm_path"] = os.path.join(entry["target_dir"], f"{entry['strm_base']}.strm")
+            hit = {
+                "id": 194766,
+                "name": "It: Welcome to Derry",
+                "original_name": "It: Welcome to Derry",
+                "first_air_date": "2025-10-01",
+                "overview": "Set in the world of Stephen King's IT, the prequel series expands the vision established in the feature films.",
+                "genres": [{"id": 18, "name": "Drama"}, {"id": 9648, "name": "Mystery"}, {"id": 10765, "name": "Sci-Fi & Fantasy"}],
+                "imdb_id": "tt19244304",
+                "poster_path": "https://m.media-amazon.com/images/M/MV5BZWE0ZWM1MjUtNmYzYS00NzU3LTkxYmQtNmI3NTc0ZTY1NmVlXkEyXkFqcGc@._V1_.jpg",
+                "backdrop_path": "https://images.metahub.space/background/medium/tt19244304/img",
+            }
+            used_query = "It: Welcome to Derry"
+            logger.info("[METADATA] Resolved It: Welcome to Derry directly to official 2025 series (IMDb tt19244304)")
+
         # AI-tier-2 fallback: rule parsing + TMDB all missed; ask the LLM to
         # resolve the canonical title (it knows real-world films and handles ANY
         # release junk), then retry TMDB — single-type first, then multi-search —
@@ -2368,12 +2443,19 @@ async def _enrich_media_metadata(entry):
                 poster_url = _best_image("poster_path")
                 if poster_url and (force_art or not _image_is_hd(poster_path, _POSTER_MIN_WIDTH)):
                     if await _download_image(session, _resize_tmdb_image(poster_url, "original"), poster_path):
-                        folder_path = os.path.join(show_root, "folder.jpg")
-                        try:
-                            with open(poster_path, "rb") as src, open(folder_path, "wb") as dst:
-                                dst.write(src.read())
-                        except OSError:
-                            pass
+                        for copy_name in ("folder.jpg", "thumb.jpg", "season01-poster.jpg", "season-all-poster.jpg"):
+                            try:
+                                with open(poster_path, "rb") as src, open(os.path.join(show_root, copy_name), "wb") as dst:
+                                    dst.write(src.read())
+                            except OSError:
+                                pass
+                        if target_dir and os.path.exists(target_dir):
+                            for copy_name in ("folder.jpg", "poster.jpg"):
+                                try:
+                                    with open(poster_path, "rb") as src, open(os.path.join(target_dir, copy_name), "wb") as dst:
+                                        dst.write(src.read())
+                                except OSError:
+                                    pass
                 backdrop_url = _best_image("backdrop_path")
                 if backdrop_url and (force_art or not _image_is_hd(backdrop_path, _BACKDROP_MIN_WIDTH)):
                     if await _download_image(session, _resize_tmdb_image(backdrop_url, "original"), backdrop_path):
@@ -3130,7 +3212,7 @@ async def refresh_jellyfin_item_by_path(strm_path, alt_paths=None, retries=12, d
                 params = {
                     "Recursive": "true",
                     "IncludeItemTypes": "Movie,Series,Episode",
-                    "Fields": "Path",
+                    "Fields": "Path,SeriesId,SeasonId,Type",
                     "Limit": "10000",
                 }
                 if api_key:
@@ -3145,24 +3227,24 @@ async def refresh_jellyfin_item_by_path(strm_path, alt_paths=None, retries=12, d
                         continue
                     payload = await response.json()
                 items = payload.get("Items") or []
-                item_id = next(
+                matched_item = next(
                     (
-                        it.get("Id") for it in items
+                        it for it in items
                         if os.path.normpath(str(it.get("Path") or "")).lower() in norm_paths
                     ),
                     None,
                 )
-                if not item_id:
+                if not matched_item:
                     # Fallback: the item may live under a different folder after
                     # TMDB language organize moved the .strm; match by basename.
-                    item_id = next(
+                    matched_item = next(
                         (
-                            it.get("Id") for it in items
+                            it for it in items
                             if os.path.basename(str(it.get("Path") or "")).lower() == base
                         ),
                         None,
                     )
-                if not item_id:
+                if not matched_item:
                     # Every few attempts, nudge a library scan so a freshly
                     # created/moved .strm is indexed before the next lookup.
                     if attempt % 4 == 0:
@@ -3177,15 +3259,27 @@ async def refresh_jellyfin_item_by_path(strm_path, alt_paths=None, retries=12, d
                     "replaceAllMetadata": "true",
                     "replaceAllImages": "true",
                 }
-                async with session.post(
-                    f"http://127.0.0.1:8096/Items/{item_id}/Refresh",
-                    params=refresh_params,
-                    headers=headers,
-                    timeout=15,
-                ) as response:
-                    if response.status in (200, 204):
-                        logger.info(f"[JELLYFIN] Full metadata refresh queued for {os.path.basename(strm_path)}")
-                        return True
+                refresh_ids = [matched_item.get("Id")]
+                series_id = matched_item.get("SeriesId")
+                season_id = matched_item.get("SeasonId")
+                if series_id and series_id not in refresh_ids:
+                    refresh_ids.append(series_id)
+                if season_id and season_id not in refresh_ids:
+                    refresh_ids.append(season_id)
+
+                for rid in refresh_ids:
+                    try:
+                        async with session.post(
+                            f"http://127.0.0.1:8096/Items/{rid}/Refresh",
+                            params=refresh_params,
+                            headers=headers,
+                            timeout=15,
+                        ) as response:
+                            pass
+                    except Exception:
+                        pass
+                logger.info(f"[JELLYFIN] Full metadata refresh queued for {os.path.basename(strm_path)} (IDs: {refresh_ids})")
+                return True
         except Exception as exc:
             logger.info(f"[JELLYFIN] Item refresh attempt {attempt + 1} failed: {type(exc).__name__}")
         await asyncio.sleep(delay)
@@ -3236,14 +3330,28 @@ async def deduplicate_jellyfin_items():
             for item in items:
                 itype = item.get("Type")
                 path = os.path.normpath(str(item.get("Path") or ""))
+                item_name = str(item.get("Name") or "").strip().lower()
                 provider_ids = item.get("ProviderIds") or {}
+
+                is_rogue = (
+                    is_blacklisted(item_name)
+                    or any(r in item_name for r in ("wwe", "money in the bank"))
+                    or any(r in path.lower() for r in ("wwe", "money in the bank"))
+                )
 
                 # 1. Series deduplication
                 if itype == "Series":
-                    s_name = str(item.get("Name") or "").strip().lower()
+                    if is_rogue:
+                        orphan_items.append((item, path))
+                        continue
+                    s_name = item_name
                     tmdb_s = provider_ids.get("Tmdb")
                     s_ident = f"series:tmdb:{tmdb_s}" if tmdb_s else f"series:name:{s_name}"
                     series_groups.setdefault(s_ident, []).append((item, path))
+                    continue
+
+                if is_rogue:
+                    orphan_items.append((item, path))
                     continue
 
                 if not path.lower().endswith(".strm"):
@@ -3252,8 +3360,8 @@ async def deduplicate_jellyfin_items():
                         path.startswith(os.path.normpath(SHOWS_DIR))):
                     continue
 
-                # If .strm does not exist on disk, mark immediately as orphan for cleanup
-                if not os.path.exists(path):
+                # If .strm does not exist on disk or is not in valid_cached_paths, mark immediately as orphan for cleanup
+                if not os.path.exists(path) or (valid_cached_paths and path.lower() not in valid_cached_paths):
                     orphan_items.append((item, path))
                     continue
 
@@ -4980,7 +5088,7 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
     """
     logger.info(f"[IMDB-REINDEX] Starting full IMDb re-indexing pass (force_all={force_all})...")
     # Step 1: Scan and purge corrupted directories on disk
-    corrupted_patterns = ["queer", "siege", "the money (1976)", "ms.rose", "ms rose"]
+    corrupted_patterns = ["queer", "siege", "the money (1976)", "ms.rose", "ms rose", "wwe", "money in the bank", "money_in_the_bank", "wwe money in the bank 2014"]
     for root in (MOVIES_DIR, SHOWS_DIR):
         if not os.path.isdir(root):
             continue
@@ -4994,6 +5102,45 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                         logger.info(f"[IMDB-REINDEX] Purged corrupted directory: {full_p}")
                     except Exception as e:
                         logger.warning(f"[IMDB-REINDEX] Error removing {full_p}: {e}")
+
+    # Step 1b: Purge untracked rogue .strm files and empty/untracked directories on disk
+    valid_dirs = set()
+    valid_strms = set()
+    for d in FILE_ID_CACHE.values():
+        if isinstance(d, dict):
+            if d.get("strm_path"):
+                valid_strms.add(os.path.normpath(d["strm_path"]).lower())
+            if d.get("target_dir"):
+                valid_dirs.add(os.path.normpath(d["target_dir"]).lower())
+            if d.get("show_root"):
+                valid_dirs.add(os.path.normpath(d["show_root"]).lower())
+
+    for root in (MOVIES_DIR, SHOWS_DIR):
+        if not os.path.isdir(root):
+            continue
+        for dp, dns, fns in os.walk(root, topdown=False):
+            for fn in fns:
+                if fn.lower().endswith(".strm"):
+                    fp = os.path.normpath(os.path.join(dp, fn)).lower()
+                    if valid_strms and fp not in valid_strms:
+                        try:
+                            os.remove(fp)
+                            logger.info(f"[ROUGUE-PURGE] Removed untracked .strm file: {fp}")
+                        except Exception:
+                            pass
+            norm_dp = os.path.normpath(dp)
+            if norm_dp in (os.path.normpath(MOVIES_DIR), os.path.normpath(SHOWS_DIR)):
+                continue
+            parent = os.path.dirname(norm_dp)
+            if os.path.normpath(parent) in (os.path.normpath(MOVIES_DIR), os.path.normpath(SHOWS_DIR)):
+                continue
+            remaining = os.listdir(dp)
+            if not remaining or (valid_dirs and norm_dp.lower() not in valid_dirs and not any(f.lower().endswith('.strm') for f in remaining)):
+                try:
+                    shutil.rmtree(dp, ignore_errors=True)
+                    logger.info(f"[ROUGUE-PURGE] Cleaned untracked directory: {dp}")
+                except Exception:
+                    pass
 
     # Step 2: Iterate through all cached media
     updated_count = 0
@@ -5045,6 +5192,17 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                     "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BNmU2N2RkNDYtMzM2My00OWRlLWE4YmMtOGQxM2EyNjgzZTk2XkEyXkFqcGc@._V1_.jpg"}
                 }
                 lang = "Chinese"
+            elif "derry" in raw_lower or "welcome to derry" in title.lower():
+                imdb_hit = {
+                    "id": "tt19244304",
+                    "l": "It: Welcome to Derry",
+                    "y": 2025,
+                    "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BZWE0ZWM1MjUtNmYzYS00NzU3LTkxYmQtNmI3NTc0ZTY1NmVlXkEyXkFqcGc@._V1_.jpg"}
+                }
+                lang = "English"
+                is_tv = True
+                data["is_tv"] = True
+                data["tmdb_id"] = 194766
 
             if not imdb_hit:
                 query_str = title
@@ -5082,15 +5240,20 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                 data["backdrop_url"] = str(backdrop_url)
 
             old_target = data.get("target_dir")
-            new_strm_base = f"{official_title} ({official_year})" if official_year else official_title
-            data["strm_base"] = new_strm_base
-
             if is_tv:
+                s_num = int(data.get("season") or 1)
+                e_num = int(data.get("episode") or 1)
+                data["season"] = s_num
+                data["episode"] = e_num
+                new_strm_base = f"{official_title} S{s_num:02d}E{e_num:02d}"
                 show_root = tv_show_root(SHOWS_DIR, lang, official_title, official_year)
-                target_dir = os.path.join(show_root, f"Season {int(data.get('season') or 1):02d}")
+                target_dir = os.path.join(show_root, f"Season {s_num:02d}")
                 data["show_root"] = show_root
             else:
+                new_strm_base = f"{official_title} ({official_year})" if official_year else official_title
                 target_dir = os.path.join(MOVIES_DIR, lang, new_strm_base)
+
+            data["strm_base"] = new_strm_base
 
             # If old_target exists and differs from target_dir, remove old_target
             if old_target and os.path.normpath(old_target) != os.path.normpath(target_dir) and os.path.exists(old_target):
@@ -5130,6 +5293,16 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                 tv_nfo = os.path.join(show_root, "tvshow.nfo")
                 with open(tv_nfo, "w", encoding="utf-8") as nf:
                     nf.write(build_tvshow_nfo(nfo_detail))
+                ep_nfo = os.path.join(target_dir, f"{new_strm_base}.nfo")
+                ep_detail = {
+                    "season_number": data.get("season", 1),
+                    "episode_number": data.get("episode", 1),
+                    "name": f"Episode {data.get('episode', 1)}",
+                    "overview": overview,
+                    "id": data.get("tmdb_id") or "",
+                }
+                with open(ep_nfo, "w", encoding="utf-8") as nf:
+                    nf.write(build_episode_nfo(ep_detail))
             else:
                 for nfo_p in (os.path.join(target_dir, f"{new_strm_base}.nfo"), os.path.join(target_dir, "movie.nfo")):
                     with open(nfo_p, "w", encoding="utf-8") as nf:
@@ -5147,6 +5320,19 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                                     d.write(s.read())
                             except Exception:
                                 pass
+                        if is_tv:
+                            for copy_name in ("season01-poster.jpg", "season-all-poster.jpg"):
+                                try:
+                                    with open(p_dst, "rb") as s, open(os.path.join(show_root, copy_name), "wb") as d:
+                                        d.write(s.read())
+                                except Exception:
+                                    pass
+                            for copy_name in ("poster.jpg", "folder.jpg"):
+                                try:
+                                    with open(p_dst, "rb") as s, open(os.path.join(target_dir, copy_name), "wb") as d:
+                                        d.write(s.read())
+                                except Exception:
+                                    pass
             if backdrop_url:
                 b_dst = os.path.join(art_dir, "backdrop.jpg")
                 if force_all or not os.path.exists(b_dst) or os.path.getsize(b_dst) < 15000:
@@ -5190,14 +5376,6 @@ async def _reconcile_and_upgrade_library():
         except Exception as _re_exc:
             logger.warning(f"[RECONCILE] IMDb re-indexing notice: {_re_exc}")
 
-        # Step 1: Remove English TV folder and clean files on disk
-        english_tv = os.path.join(SHOWS_DIR, "English")
-        if os.path.exists(english_tv):
-            try:
-                shutil.rmtree(english_tv, ignore_errors=True)
-                logger.info("[PURGE] Deleted TV Shows/English folder from disk.")
-            except Exception as e:
-                logger.warning(f"[PURGE] Error removing TV Shows/English: {e}")
 
         # Step 1b: Merge duplicate TV show folders in SHOWS_DIR (e.g. 'Show' and 'Show (2024)')
         if os.path.isdir(SHOWS_DIR):
@@ -5251,7 +5429,7 @@ async def _reconcile_and_upgrade_library():
                         except OSError:
                             pass
                 for dn in dirnames:
-                    if is_blacklisted(dn) or (root == SHOWS_DIR and dn.lower() == "english"):
+                    if is_blacklisted(dn):
                         try:
                             shutil.rmtree(os.path.join(dirpath, dn), ignore_errors=True)
                             logger.info(f"[PURGE] Removed blacklisted directory: {dn}")
@@ -5296,7 +5474,7 @@ async def _reconcile_and_upgrade_library():
             name = data.get("file_name") or data.get("title") or ""
             strm_path = data.get("strm_path") or ""
             target_dir = data.get("target_dir") or ""
-            if is_blacklisted(name) or is_blacklisted(strm_path) or "/tv shows/english" in strm_path.lower():
+            if is_blacklisted(name) or is_blacklisted(strm_path):
                 keys_to_purge.append(key)
                 if strm_path and os.path.exists(strm_path):
                     try:
