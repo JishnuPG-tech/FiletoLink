@@ -29,7 +29,7 @@ class OmniRouteAdapter:
         return self._capability_mode
 
     async def probe_capability(self) -> str:
-        """Probe the configured model to classify tool support mode.
+        """Probe the configured models in fallback order to classify tool support mode.
 
         Returns one of: 'native_tools', 'json_mode', 'grammar_only'.
         """
@@ -38,47 +38,50 @@ class OmniRouteAdapter:
             self._probed = True
             return self._capability_mode
 
-        probe_payload = {
-            "model": self.config.ai_model,
-            "max_tokens": 100,
-            "temperature": 0,
-            "messages": [{"role": "user", "content": "Run echo_health with message 'ping'"}],
-            "tools": [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "echo_health",
-                        "description": "Probe health",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {"message": {"type": "string"}},
-                            "required": ["message"],
-                            "additionalProperties": False,
+        models_to_try = self.config.ai_models or ([self.config.ai_model] if self.config.ai_model else [])
+
+        for model in models_to_try:
+            probe_payload = {
+                "model": model,
+                "max_tokens": 100,
+                "temperature": 0,
+                "messages": [{"role": "user", "content": "Run echo_health with message 'ping'"}],
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "echo_health",
+                            "description": "Probe health",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {"message": {"type": "string"}},
+                                "required": ["message"],
+                                "additionalProperties": False,
+                            },
                         },
-                    },
-                }
-            ],
-        }
+                    }
+                ],
+            }
 
-        try:
-            status, data, err = await self._send_request(probe_payload, timeout_seconds=10)
-            if status == 200 and isinstance(data, dict):
-                msg = ((data.get("choices") or [{}])[0].get("message") or {})
-                tool_calls = msg.get("tool_calls")
-                if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:
-                    self._capability_mode = "native_tools"
-                    self._probed = True
-                    return self._capability_mode
+            try:
+                status, data, err = await self._send_request(probe_payload, timeout_seconds=10)
+                if status == 200 and isinstance(data, dict):
+                    msg = ((data.get("choices") or [{}])[0].get("message") or {})
+                    tool_calls = msg.get("tool_calls")
+                    if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:
+                        self._capability_mode = "native_tools"
+                        self._probed = True
+                        return self._capability_mode
 
-                # If no native tool call, check if it returned structured JSON
-                content = (msg.get("content") or "").strip()
-                if "echo_health" in content and ("{" in content):
-                    self._capability_mode = "json_mode"
-                    self._probed = True
-                    return self._capability_mode
-
-        except Exception as e:
-            logger.warning(f"[OMNIROUTE-PROBE] Probe failed: {e}")
+                    content = (msg.get("content") or "").strip()
+                    if "echo_health" in content and ("{" in content):
+                        self._capability_mode = "json_mode"
+                        self._probed = True
+                        return self._capability_mode
+                elif status in (401, 403):
+                    break
+            except Exception as e:
+                logger.warning(f"[OMNIROUTE-PROBE] Probe failed for {model}: {e}")
 
         self._capability_mode = "grammar_only"
         self._probed = True
@@ -92,6 +95,7 @@ class OmniRouteAdapter:
         timeout_seconds: int = 30,
     ) -> Tuple[bool, List[Dict[str, Any]], str]:
         """Send instruction to OmniRoute and return structured tool calls.
+        Attempts models in fallback order if rate-limited (HTTP 429), errored, or timed out.
 
         Returns (success, tool_calls_list, error_or_reason).
         """
@@ -115,39 +119,55 @@ class OmniRouteAdapter:
         # Delimited instruction
         messages.append({"role": "user", "content": f"### INSTRUCTION\n{instruction}\n### END INSTRUCTION"})
 
-        payload = {
-            "model": self.config.ai_model,
-            "temperature": 0,
-            "max_tokens": self.config.ai_max_tokens,
-            "messages": messages,
-            "tools": tool_schemas,
-        }
+        models_to_try = self.config.ai_models or ([self.config.ai_model] if self.config.ai_model else [])
+        last_err = ""
 
-        status, data, err_msg = await self._send_request(payload, timeout_seconds=timeout_seconds)
-        if status != 200 or not isinstance(data, dict):
-            return False, [], err_msg
+        for model in models_to_try:
+            payload = {
+                "model": model,
+                "temperature": 0,
+                "max_tokens": self.config.ai_max_tokens,
+                "messages": messages,
+                "tools": tool_schemas,
+            }
 
-        # Extract tool calls
-        choices = data.get("choices") or []
-        if not choices:
-            return False, [], "OmniRoute returned an empty choice list."
+            logger.info(f"[OMNIROUTE] Attempting model '{model}'...")
+            status, data, err_msg = await self._send_request(payload, timeout_seconds=timeout_seconds)
 
-        msg = choices[0].get("message") or {}
-        raw_tool_calls = msg.get("tool_calls") or []
+            # Terminal auth failure (invalid API key) - no need to try other models
+            if status in (401, 403):
+                return False, [], err_msg
 
-        parsed_calls = []
-        for call in raw_tool_calls:
-            func = call.get("function") or {}
-            name = func.get("name")
-            args_str = func.get("arguments") or "{}"
-            try:
-                args = json.loads(args_str) if isinstance(args_str, str) else args_str
-            except Exception:
-                args = {}
-            if name:
-                parsed_calls.append({"name": name, "params": args})
+            if status != 200 or not isinstance(data, dict):
+                last_err = err_msg
+                logger.warning(f"[OMNIROUTE-FAILOVER] Model '{model}' failed ({status}: {err_msg}). Trying fallback...")
+                continue
 
-        return True, parsed_calls, "success"
+            # Extract tool calls
+            choices = data.get("choices") or []
+            if not choices:
+                last_err = f"Model '{model}' returned an empty choice list."
+                logger.warning(f"[OMNIROUTE-FAILOVER] {last_err}. Trying fallback...")
+                continue
+
+            msg = choices[0].get("message") or {}
+            raw_tool_calls = msg.get("tool_calls") or []
+
+            parsed_calls = []
+            for call in raw_tool_calls:
+                func = call.get("function") or {}
+                name = func.get("name")
+                args_str = func.get("arguments") or "{}"
+                try:
+                    args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                except Exception:
+                    args = {}
+                if name:
+                    parsed_calls.append({"name": name, "params": args})
+
+            return True, parsed_calls, "success"
+
+        return False, [], last_err or "All configured AI models failed to respond."
 
     async def _send_request(
         self,

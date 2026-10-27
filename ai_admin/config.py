@@ -3,10 +3,20 @@
 import os
 import logging
 from dataclasses import dataclass, field
-from typing import Set, Optional
+from typing import Set, Optional, List
 from ai_admin.redaction import register_secret_string
 
 logger = logging.getLogger("AIAdmin.Config")
+
+DEFAULT_WORKING_MODELS: List[str] = [
+    "oc/gemini-3.5-flash-lite",
+    "oc/gemini-3.5-flash",
+    "oc/gemini-3.6-flash",
+    "oc/claude-sonnet-4-6",
+    "oc/grok-4.5",
+    "oc/glm-5.3-flash",
+    "oc/kimi-k3",
+]
 
 
 def _str_to_bool(val: Optional[str], default: bool = False) -> bool:
@@ -49,7 +59,8 @@ class AIAdminConfig:
     # OmniRoute LLM settings
     omniroute_api_url: str = ""
     omniroute_api_key: str = ""
-    ai_model: str = "auto/best-fast"
+    ai_model: str = "oc/gemini-3.5-flash-lite"
+    ai_models: List[str] = field(default_factory=list)
     ai_max_tokens: int = 1024
 
     # Storage and Lifetimes
@@ -67,6 +78,15 @@ class AIAdminConfig:
     is_valid: bool = False
     validation_error: str = ""
 
+    def __post_init__(self):
+        if not self.ai_models:
+            if self.ai_model and self.ai_model != "auto/best-fast":
+                self.ai_models = [self.ai_model] + [m for m in DEFAULT_WORKING_MODELS if m != self.ai_model]
+            else:
+                self.ai_models = list(DEFAULT_WORKING_MODELS)
+                if self.ai_models:
+                    self.ai_model = self.ai_models[0]
+
     @classmethod
     def from_env(cls) -> "AIAdminConfig":
         """Load configuration from environment with fail-closed validation."""
@@ -83,7 +103,23 @@ class AIAdminConfig:
 
         omniroute_url = (os.environ.get("OMNIROUTE_API_URL") or "").rstrip("/")
         omniroute_key = (os.environ.get("OMNIROUTE_API_KEY") or "").strip()
-        model = os.environ.get("AI_MODEL") or os.environ.get("AI_TITLE_MODEL") or "auto/best-fast"
+
+        model_env = os.environ.get("AI_MODELS") or os.environ.get("AI_MODEL") or os.environ.get("AI_TITLE_MODEL") or ""
+        configured_models: List[str] = []
+        if model_env:
+            for m in re_split(r"[,\s;]+", model_env.strip()):
+                if m and m != "auto/best-fast":
+                    configured_models.append(m)
+
+        ai_models: List[str] = []
+        for m in configured_models:
+            if m not in ai_models:
+                ai_models.append(m)
+        for m in DEFAULT_WORKING_MODELS:
+            if m not in ai_models:
+                ai_models.append(m)
+
+        primary_model = ai_models[0] if ai_models else DEFAULT_WORKING_MODELS[0]
 
         try:
             max_tokens = int(os.environ.get("AI_TITLE_MAX_TOKENS", "1024"))
@@ -125,7 +161,8 @@ class AIAdminConfig:
             allowed_chat_ids=allowed_chats,
             omniroute_api_url=omniroute_url,
             omniroute_api_key=omniroute_key,
-            ai_model=model,
+            ai_model=primary_model,
+            ai_models=ai_models,
             ai_max_tokens=max_tokens,
             data_dir=data_dir,
             confirm_ttl_seconds=confirm_ttl,

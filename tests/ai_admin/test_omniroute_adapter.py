@@ -93,3 +93,68 @@ async def test_response_size_cap_enforcement():
     ok, tools, err = await adapter.plan_action("test", [], [])
     assert ok is False
     assert "exceeded size cap" in err
+
+
+@pytest.mark.asyncio
+async def test_multi_model_failover_on_rate_limit():
+    import json
+
+    config = AIAdminConfig(
+        omniroute_api_url="https://api.fake.com",
+        omniroute_api_key="sk-test",
+        ai_models=["primary-model", "fallback-model"],
+    )
+
+    calls = []
+
+    def fake_dispatcher(url, **kw):
+        payload = kw.get("json", {})
+        model = payload.get("model")
+        calls.append(model)
+        if model == "primary-model":
+            # Simulate 429 rate limit on primary model
+            return FakeResponse(429, b"Rate limited", headers={"Retry-After": "30"})
+        # Fallback model succeeds with tool call
+        resp_data = {
+            "choices": [
+                {
+                    "message": {
+                        "tool_calls": [
+                            {
+                                "id": "call_fallback",
+                                "function": {"name": "jellyfin_search", "arguments": '{"query": "Dune"}'},
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        return FakeResponse(200, json.dumps(resp_data).encode("utf-8"))
+
+    session = FakeClientSession(fake_dispatcher)
+    adapter = OmniRouteAdapter(config, session=session)
+
+    ok, tools, err = await adapter.plan_action("search for Dune", [], [])
+    assert ok is True
+    assert len(tools) == 1
+    assert tools[0]["name"] == "jellyfin_search"
+    assert tools[0]["params"] == {"query": "Dune"}
+    # Verify primary model was attempted first, then fallback
+    assert calls == ["primary-model", "fallback-model"]
+
+
+@pytest.mark.asyncio
+async def test_all_models_failover_exhaustion():
+    config = AIAdminConfig(
+        omniroute_api_url="https://api.fake.com",
+        omniroute_api_key="sk-test",
+        ai_models=["m1", "m2"],
+    )
+
+    session = FakeClientSession(lambda url, **kw: FakeResponse(429, b"Rate limited", headers={"Retry-After": "60"}))
+    adapter = OmniRouteAdapter(config, session=session)
+
+    ok, tools, err = await adapter.plan_action("search", [], [])
+    assert ok is False
+    assert "rate limit exceeded" in err
+
