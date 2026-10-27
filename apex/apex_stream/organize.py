@@ -161,10 +161,33 @@ def tv_show_root(
 
     Jellyfin requires TV show libraries to have series folders directly in the
     library root, not nested under language subfolders (which Jellyfin misinterprets
-    as the show name itself).
+    as the show name itself). Reuses existing directory on disk to prevent duplicates.
     """
-    show = folder_name(show_name, year) if show_name else "Unknown_Show"
-    return os.path.join(shows_dir, show)
+    if not show_name:
+        return os.path.join(shows_dir, "Unknown_Show")
+
+    desired = folder_name(show_name, year)
+    base_show = safe_folder(show_name).strip().lower()
+
+    if os.path.isdir(shows_dir):
+        try:
+            candidates = [
+                d for d in os.listdir(shows_dir)
+                if os.path.isdir(os.path.join(shows_dir, d))
+            ]
+            # 1. Exact match (case-insensitive)
+            for cand in candidates:
+                if cand.lower() == desired.lower():
+                    return os.path.join(shows_dir, cand)
+            # 2. Existing folder without year or with year
+            for cand in candidates:
+                cand_base = re.sub(r"\s*\(\d{4}\)$", "", cand).strip().lower()
+                if cand_base == base_show:
+                    return os.path.join(shows_dir, cand)
+        except OSError:
+            pass
+
+    return os.path.join(shows_dir, desired)
 
 
 def tv_target_dir(

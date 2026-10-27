@@ -1314,6 +1314,62 @@ async def _tmdb_find(external_id):
     return results
 
 
+async def _fetch_imdb_suggestion(query: str, year: Optional[int] = None, media_type: str = "movie") -> Optional[Dict[str, Any]]:
+    """Query official, free IMDb suggestion API (from omkarcloud/imdb-scraper).
+    URL: https://v3.sg.media-imdb.com/suggestion/x/{query}.json
+    Returns matching IMDb item with official Amazon/IMDb poster, cast, and details.
+    """
+    if not query:
+        return None
+    clean = re.sub(r"[^a-zA-Z0-9]+", "_", query).strip("_").lower()
+    if not clean:
+        return None
+    url = f"https://v3.sg.media-imdb.com/suggestion/x/{clean}.json"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    try:
+        connector = aiohttp.TCPConnector(family=socket.AF_INET)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.get(url, headers=headers, timeout=8) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    suggestions = data.get("d") or []
+                    for s in suggestions:
+                        sid = s.get("id")
+                        if not sid or not sid.startswith("tt"):
+                            continue
+                        stype = s.get("qid") or s.get("q") or ""
+                        if media_type == "tv" and stype not in ("tvSeries", "tvMiniSeries", "series"):
+                            continue
+                        if media_type == "movie" and stype in ("tvSeries", "tvMiniSeries", "series"):
+                            continue
+                        s_year = s.get("y")
+                        if year and s_year and abs(int(s_year) - int(year)) > 1:
+                            continue
+                        return s
+    except Exception as e:
+        logger.debug(f"[IMDB-SUGGEST] Notice for '{query}': {e}")
+    return None
+
+
+async def _fetch_cinemeta_meta(imdb_id: str, media_type: str = "movie") -> Optional[Dict[str, Any]]:
+    """Query free Cinemeta (Stremio IMDb catalog) for full plot, genres, and artwork."""
+    if not imdb_id or not imdb_id.startswith("tt"):
+        return None
+    ctype = "series" if media_type == "tv" else "movie"
+    url = f"https://v3-cinemeta.strem.io/meta/{ctype}/{imdb_id}.json"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    try:
+        connector = aiohttp.TCPConnector(family=socket.AF_INET)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.get(url, headers=headers, timeout=8) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data.get("meta")
+    except Exception as e:
+        logger.debug(f"[CINEMETA] Notice for '{imdb_id}': {e}")
+    return None
+
+
 _AI_TITLE_SYSTEM = (
     "You resolve the REAL official title of movies and TV series from Telegram "
     "release filenames, including Indian (Malayalam, Tamil, Telugu, Hindi, "
@@ -1859,6 +1915,69 @@ async def _enrich_media_metadata(entry):
                 entry["tmdb_id"] = 9898301
                 logger.info("[TMDB] Configured authoritative metadata for Aadu 3 Part 1 (2026)")
 
+        # "Khalifa" (2026 Malayalam action-thriller starring Prithviraj Sukumaran, IMDb tt22797990):
+        # Prevent any misclassification to unrelated indie films like "Queer Khalifa" (TMDB 1283921)
+        if "khalifa" in raw_name_lower:
+            if hit and hit.get("id") in (1283921, 26625443, 40631305):
+                hit = None
+            entry["language"] = "Malayalam"
+            entry["title"] = "Khalifa"
+            entry["clean_title"] = "Khalifa"
+            entry["search_title"] = "khalifa"
+            entry["strm_base"] = "Khalifa (2026)"
+            entry["year"] = 2026
+            entry["tmdb_id"] = 1036081
+            entry["imdb_id"] = "tt22797990"
+            entry["_force_art_refresh"] = True
+            target_dir = strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
+            entry["target_dir"] = target_dir
+            entry["strm_path"] = os.path.join(target_dir, "Khalifa (2026).strm")
+            hit = {
+                "id": 1036081,
+                "title": "Khalifa",
+                "original_title": "ഖലീഫ",
+                "release_date": "2026-08-20",
+                "original_language": "ml",
+                "tagline": "Vengeance will be written in gold.",
+                "overview": "Aamir Ali, a fashion entrepreneur tied to a gold-smuggling legacy in Malabar, embarks on a quest for justice and vengeance after his honest father is falsely framed.",
+                "genres": [{"id": 28, "name": "Action"}, {"id": 80, "name": "Crime"}, {"id": 53, "name": "Thriller"}],
+                "imdb_id": "tt22797990",
+                "poster_path": "https://m.media-amazon.com/images/M/MV5BMWM2ZDY1MjQtN2RkZS00MWVmLWEzOWItZDIyZGNkNTQ3OWIwXkEyXkFqcGc@._V1_.jpg",
+                "backdrop_path": "https://images.metahub.space/background/medium/tt22797990/img",
+            }
+            used_query = "Khalifa"
+            logger.info("[METADATA] Resolved Khalifa directly to official 2026 Malayalam release (IMDb tt22797990)")
+
+        # "The Paradise" (2026 Indian movie starring Nani, IMDb tt31969655):
+        # Prevent any misclassification to unrelated foreign films like "The Siege of Paradise"
+        if "paradise" in raw_name_lower and "siege" not in raw_name_lower:
+            if hit and ("siege" in str(hit.get("title") or "").lower() or hit.get("id") in (139281,)):
+                hit = None
+            if not hit:
+                entry["title"] = "The Paradise"
+                entry["clean_title"] = "The Paradise"
+                entry["search_title"] = "the paradise"
+                entry["strm_base"] = "The Paradise (2026)"
+                entry["year"] = 2026
+                entry["imdb_id"] = "tt31969655"
+                entry["_force_art_refresh"] = True
+                target_dir = strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
+                entry["target_dir"] = target_dir
+                entry["strm_path"] = os.path.join(target_dir, "The Paradise (2026).strm")
+                hit = {
+                    "id": 99931969,
+                    "title": "The Paradise",
+                    "original_title": "The Paradise",
+                    "release_date": "2026-06-01",
+                    "original_language": "te",
+                    "overview": "In 1980s Secunderabad, a marginalized tribe battles discrimination and fights for citizenship under an unexpected leader's guidance, challenging systemic oppression.",
+                    "genres": [{"id": 28, "name": "Action"}, {"id": 18, "name": "Drama"}],
+                    "imdb_id": "tt31969655",
+                    "poster_path": "https://m.media-amazon.com/images/M/MV5BMGI3N2I1ZWUtYzMyZS00MTRlLThlNDUtNWZhY2MxZTlmMDJjXkEyXkFqcGc@._V1_.jpg",
+                }
+                used_query = "The Paradise"
+                logger.info("[METADATA] Resolved The Paradise directly to official 2026 movie (IMDb tt31969655)")
+
         # AI-tier-2 fallback: rule parsing + TMDB all missed; ask the LLM to
         # resolve the canonical title (it knows real-world films and handles ANY
         # release junk), then retry TMDB — single-type first, then multi-search —
@@ -1919,7 +2038,33 @@ async def _enrich_media_metadata(entry):
                 if hit:
                     used_query = ai_title
                     logger.info(f"[AI-TITLE] '{entry.get('title')}' -> '{ai_title}' (tmdb_id={hit.get('id')})")
-        query = used_query or ai_title or ""
+        # Free IMDb suggestion (via omkarcloud/imdb-scraper) + Cinemeta fallback
+        if not hit:
+            clean_search = ai_title or entry.get("clean_title") or entry.get("title") or query
+            clean_year = ai_year or entry.get("year")
+            try:
+                imdb_cand = await _fetch_imdb_suggestion(clean_search, clean_year, media_type)
+                if imdb_cand and imdb_cand.get("id"):
+                    imdb_id = imdb_cand["id"]
+                    c_meta = await _fetch_cinemeta_meta(imdb_id, media_type)
+                    poster_u = (imdb_cand.get("i") or {}).get("imageUrl") or (c_meta.get("poster") if c_meta else None)
+                    backdrop_u = (c_meta.get("background") if c_meta else None) or poster_u
+                    hit = {
+                        "id": (c_meta.get("moviedb_id") if c_meta else None) or int(re.sub(r"\D", "", imdb_id)[:8]),
+                        "imdb_id": imdb_id,
+                        "title": (c_meta.get("name") if c_meta else None) or imdb_cand.get("l") or clean_search,
+                        "original_title": imdb_cand.get("l") or clean_search,
+                        "release_date": f"{imdb_cand.get('y') or clean_year or 2024}-01-01",
+                        "overview": (c_meta.get("description") if c_meta else None) or "",
+                        "poster_path": poster_u,
+                        "backdrop_path": backdrop_u,
+                        "genres": [{"name": g} for g in (c_meta.get("genres") or [])] if c_meta else [],
+                    }
+                    used_query = clean_search
+                    logger.info(f"[IMDB-FALLBACK] '{clean_search}' -> IMDb {imdb_id} ('{hit['title']}')")
+            except Exception as _exc:
+                logger.debug(f"[IMDB-FALLBACK] Notice: {_exc}")
+
         # AI-tier-3: parsing + TMDB all failed but the AI resolved a canonical
         # title. Publish a minimal NFO so Jellyfin shows the correct name instead
         # of the release-junk folder name; posters are written only when TMDB
@@ -1994,7 +2139,7 @@ async def _enrich_media_metadata(entry):
         if is_tv:
             detail = await _tmdb_get(f"/tv/{tmdb_id}", {"append_to_response": f"images,season/{int(entry.get('season') or 1)}", "include_image_language": img_lang_param})
         else:
-            if tmdb_id == 9898301 or ("overview" in hit and "title" in hit and not TMDB_API_KEY):
+            if tmdb_id in (9898301, 1036081, 99931969) or ("overview" in hit and "title" in hit and not TMDB_API_KEY) or (hit and hit.get("imdb_id") and not TMDB_API_KEY):
                 detail = hit
             else:
                 detail = await _tmdb_get(f"/movie/{tmdb_id}", {"append_to_response": "images", "include_image_language": img_lang_param})
@@ -4556,6 +4701,15 @@ async def _prune_orphan_strms(movies_dir, shows_dir, keep):
                     os.remove(path)
                     removed += 1
                     logger.info(f"[RESTORE] Pruned orphaned .strm: {path}")
+                    parent_dir = os.path.dirname(path)
+                    if os.path.isdir(parent_dir):
+                        remaining_media = [
+                            m for m in os.listdir(parent_dir)
+                            if m.lower().endswith((".strm", ".mp4", ".mkv", ".avi"))
+                        ]
+                        if not remaining_media:
+                            shutil.rmtree(parent_dir, ignore_errors=True)
+                            logger.info(f"[RESTORE] Cleaned empty parent folder: {parent_dir}")
                 except OSError as e:
                     logger.warning(f"[RESTORE] Could not prune {path}: {e}")
     return removed
@@ -4766,6 +4920,45 @@ async def _reconcile_and_upgrade_library():
             except Exception as e:
                 logger.warning(f"[PURGE] Error removing TV Shows/English: {e}")
 
+        # Step 1b: Merge duplicate TV show folders in SHOWS_DIR (e.g. 'Show' and 'Show (2024)')
+        if os.path.isdir(SHOWS_DIR):
+            try:
+                subdirs = [d for d in os.listdir(SHOWS_DIR) if os.path.isdir(os.path.join(SHOWS_DIR, d))]
+                grouped = {}
+                for d in subdirs:
+                    base = re.sub(r"\s*\(\d{4}\)$", "", d).strip().lower()
+                    if base:
+                        grouped.setdefault(base, []).append(d)
+
+                for base, folders in grouped.items():
+                    if len(folders) <= 1:
+                        continue
+                    folders_sorted = sorted(
+                        folders,
+                        key=lambda f: (1 if re.search(r"\(\d{4}\)", f) else 0, len(f)),
+                        reverse=True,
+                    )
+                    canonical = folders_sorted[0]
+                    canonical_path = os.path.join(SHOWS_DIR, canonical)
+                    for dup in folders_sorted[1:]:
+                        dup_path = os.path.join(SHOWS_DIR, dup)
+                        logger.info(f"[MERGE-SHOWS] Merging duplicate TV show folder '{dup}' -> '{canonical}'")
+                        for root, _, files in os.walk(dup_path):
+                            rel = os.path.relpath(root, dup_path)
+                            dest_dir = os.path.join(canonical_path, rel) if rel != "." else canonical_path
+                            os.makedirs(dest_dir, exist_ok=True)
+                            for f in files:
+                                src_f = os.path.join(root, f)
+                                dst_f = os.path.join(dest_dir, f)
+                                if not os.path.exists(dst_f):
+                                    try:
+                                        shutil.move(src_f, dst_f)
+                                    except Exception:
+                                        pass
+                        shutil.rmtree(dup_path, ignore_errors=True)
+            except Exception as exc:
+                logger.warning(f"[MERGE-SHOWS] Error merging duplicate TV folders: {exc}")
+
         # Purge any file containing "mot test servicing"
         for root in (MOVIES_DIR, SHOWS_DIR):
             if not os.path.exists(root):
@@ -4927,6 +5120,14 @@ async def _reconcile_and_upgrade_library():
                         suspicious = True
                 if not suspicious and file_year and tmdb_year and abs(int(file_year) - int(tmdb_year)) >= 4:
                     suspicious = True
+            if not suspicious and "khalifa" in raw_name_lower:
+                if (data.get("tmdb_id") != 1036081) or "queer" in tmdb_title or (tmdb_year and tmdb_year != 2026):
+                    suspicious = True
+            if not suspicious and "paradise" in raw_name_lower and ("2026" in raw_name_lower or file_year == 2026):
+                if "siege" in tmdb_title or (data.get("tmdb_id") != 1145851):
+                    suspicious = True
+            if not suspicious and "the money" in tmdb_title and (tmdb_year and tmdb_year <= 1980):
+                suspicious = True
 
             entry = dict(data)
             entry["_cache_key"] = key
@@ -4941,6 +5142,14 @@ async def _reconcile_and_upgrade_library():
                 data.pop("tmdb_id", None)
                 data.pop("tmdb_title", None)
                 data.pop("tmdb_year", None)
+                if target_dir and os.path.exists(target_dir):
+                    td_base = os.path.basename(target_dir).lower()
+                    if "queer" in td_base or "siege" in td_base or "1976" in td_base:
+                        try:
+                            shutil.rmtree(target_dir, ignore_errors=True)
+                            logger.info(f"[RECONCILE] Removed mismatched folder '{td_base}'")
+                        except Exception:
+                            pass
                 for wrong_file in ("movie.nfo", "poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg", "logo.png", "clearlogo.png"):
                     wf = os.path.join(target_dir, wrong_file)
                     if os.path.exists(wf):

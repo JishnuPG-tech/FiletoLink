@@ -6,6 +6,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import urllib.parse
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -488,6 +489,75 @@ class ProvidersClient:
         }
 
     # ==========================================================================
+    # 2b. Free IMDb Official Suggestions (No API Key, Zero Rate Limits)
+    # ==========================================================================
+
+    async def imdb_search(
+        self,
+        query: str,
+        media_type: str = "movie",
+        limit: int = 10,
+        user_id: Optional[int] = None,
+        chat_id: Optional[int] = None,
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> List[Dict[str, Any]]:
+        """Search IMDb official suggestion API (unauthenticated, 0 rate limit). Returns IMDb items with Amazon high-res posters."""
+        clean_query = (query or "").strip().lower()
+        if not clean_query:
+            return []
+        norm = re.sub(r"[^a-z0-9]+", "_", clean_query).strip("_")
+        if not norm:
+            return []
+
+        url = f"https://v3.sg.media-imdb.com/suggestion/x/{norm}.json"
+        try:
+            data = await self._safe_get(url, session=session)
+        except Exception as e:
+            logger.debug(f"[IMDB-SUGGEST] Search error: {e}")
+            return []
+
+        items = data.get("d") or []
+        bounded_limit = max(1, min(limit, 20))
+        results = []
+
+        for item in items[:bounded_limit]:
+            title_id = item.get("id") or ""
+            if not title_id.startswith("tt"):
+                continue
+            name = item.get("l") or "Unknown"
+            year = item.get("y")
+            q_type = item.get("q")
+            img = item.get("i") or {}
+            poster_url = img.get("imageUrl")
+            actors = item.get("s")
+
+            cand_id = None
+            if poster_url:
+                cand_id = self.candidate_cache.register_candidate(
+                    {
+                        "provider": "imdb",
+                        "raw_url": poster_url,
+                        "image_type": "poster",
+                        "target_id": title_id or name,
+                    },
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    operation="image_artwork",
+                )
+
+            results.append({
+                "imdb_id": title_id,
+                "title": name,
+                "year": year,
+                "actors": actors,
+                "q_type": q_type,
+                "poster_url": poster_url,
+                "candidate_id": cand_id,
+                "provider": "IMDb Official Suggestion",
+            })
+        return results
+
+    # ==========================================================================
     # 3. Free TVmaze (No API Key Required)
     # ==========================================================================
 
@@ -655,6 +725,29 @@ class ProvidersClient:
                             })
                 except Exception as e:
                     logger.debug(f"[ARTWORK-SEARCH] Cinemeta search skipped: {e}")
+
+            # Try IMDb official suggestions (Free, no key needed)
+            if len(candidates) < bounded_limit and query:
+                try:
+                    imdb_hits = await self.imdb_search(
+                        query=query,
+                        media_type=media_type,
+                        limit=5,
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        session=session,
+                    )
+                    for ih in imdb_hits:
+                        if ih.get("poster_url"):
+                            candidates.append({
+                                "candidate_id": ih.get("candidate_id"),
+                                "image_type": "poster",
+                                "preview_url": ih.get("poster_url"),
+                                "title": ih.get("title"),
+                                "provider": "IMDb",
+                            })
+                except Exception as e:
+                    logger.debug(f"[ARTWORK-SEARCH] IMDb search skipped: {e}")
 
         # 3. Try TVmaze if TV series and query is provided (Free, no key needed)
         if len(candidates) < bounded_limit and media_type in ("tv", "series") and query:

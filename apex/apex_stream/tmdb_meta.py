@@ -24,6 +24,7 @@ from .organize import (
     DEFAULT_LANGUAGE,
     detect_language,
     safe_folder,
+    tmdb_language_code,
 )
 
 TPL_BASE = "https://image.tmdb.org/t/p"
@@ -594,7 +595,8 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
     q_toks = _sig_tokens(query)
     if not q_toks:
         return None
-    lang = (language or "").strip().lower()
+    lang_raw = (language or "").strip()
+    lang = tmdb_language_code(lang_raw) or lang_raw.lower()
     is_indian = lang in _INDIAN_LANG_CODES
     best, best_score = None, -1.0
     for r in results or []:
@@ -612,10 +614,22 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
         if not overlap:
             continue
 
+        extra_in_hit = combined_r - q_toks
+        franchise_subwords = {"part", "chapter", "vol", "volume", "1", "2", "3", "4", "5", "the"}
+        extra_unrelated = extra_in_hit - franchise_subwords
+
+        # Single-token query strictness:
+        # A 1-word query (e.g. "Khalifa", "Money", "Paradise") must NEVER match a multi-word candidate
+        # with foreign/unrelated words (e.g. "Queer Khalifa", "The Siege of Paradise", "Derry Girls")!
+        if len(q_toks) == 1 and extra_unrelated:
+            # Only allow if the hit's main or original title is strictly a 1-token match
+            if r_toks != q_toks and orig_toks != q_toks:
+                continue
+
         # Check containment: either all hit tokens are in query (e.g. "Aadu 3" in "Aadu 3 Part 1"),
-        # or all query tokens are in hit title
+        # or all query tokens are in hit title without introducing unrelated words
         hit_contained_in_query = bool(combined_r <= q_toks)
-        query_contained_in_hit = bool(q_toks <= combined_r)
+        query_contained_in_hit = bool(q_toks <= combined_r and not extra_unrelated)
 
         # Sequel digit alignment:
         q_digits = {t for t in q_toks if t.isdigit()}
@@ -631,7 +645,7 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
             continue
 
         # Multi-token overlap requirements:
-        if not hit_contained_in_query and not query_contained_in_hit:
+        if not hit_contained_in_query and not (q_toks == combined_r):
             # A 2-word title (e.g. "Iron Man") must match both words; matching only 1 (e.g. "Generation Iron") is a false positive
             if len(q_toks) == 2 and overlap < 2:
                 continue
@@ -653,6 +667,9 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
             else:
                 score += 0.15
 
+        if extra_unrelated:
+            score -= 0.35 * len(extra_unrelated)
+
         diff = None
         date = (r.get("release_date") or r.get("first_air_date") or "")[:4]
         if year and date and date.isdigit():
@@ -663,33 +680,43 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
             elif diff == 1:
                 score += 0.15
             elif diff == 2:
-                score -= 0.1
+                # If titles don't match 100%, 2-year difference is rejected
+                if extra_unrelated or overlap < len(q_toks):
+                    continue
+                score -= 0.35
             elif diff <= 5:
+                # Allow exact title match or franchise (e.g. numeric titles like 2018 or delayed festival releases)
+                if extra_unrelated or overlap < len(q_toks):
+                    continue
                 score -= 0.45
             elif diff <= 8:
+                if extra_unrelated or overlap < len(q_toks):
+                    continue
                 score -= 0.85
             else:
                 # 9+ year gap is an entirely different era / film!
-                # For example, The Patriot (2000) vs Patriot (2026) is 26 years apart.
-                continue
+                # Only exempt if the query itself is a 4-digit number (e.g. film "2018" released in 2023)
+                if not (query.strip().isdigit() and len(query.strip()) == 4):
+                    continue
+                score -= 0.60
 
         hit_lang = (r.get("original_language") or "").lower()
         if lang:
             if hit_lang == lang:
-                score += 0.25
+                score += 0.35
             elif is_indian and hit_lang in _INDIAN_LANG_CODES:
                 score += 0.15
             elif is_indian and hit_lang == "en":
                 # An Indian regional release (Malayalam, Tamil, etc.) matching an English movie
-                # must not happen for short/generic queries or when year differs.
-                if diff is not None and diff > 1:
-                    score -= 1.5
-                elif len(q_toks) <= 2:
-                    score -= 0.8
-                else:
-                    score -= 0.3
+                # must not happen for short/generic queries, when extra words exist, or when year differs.
+                if diff is not None and diff > 0:
+                    continue
+                if extra_unrelated or len(q_toks) <= 2:
+                    continue
+                score -= 0.5
             elif is_indian and hit_lang not in _INDIAN_LANG_CODES:
-                score -= 1.5
+                # An Indian regional release must NEVER match an unrelated foreign language
+                continue
             elif not is_indian and lang == "en" and hit_lang not in {"en", ""}:
                 score -= 0.35
 

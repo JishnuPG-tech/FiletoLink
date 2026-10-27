@@ -21,6 +21,9 @@ APPROVED_PROVIDER_HOSTS: Set[str] = {
     "images.metahub.space",
     "m.media-amazon.com",
     "ia.media-imdb.com",
+    "v3.sg.media-imdb.com",
+    "sg.media-imdb.com",
+    "imdb.com",
     "api.tvmaze.com",
     "static.tvmaze.com",
 }

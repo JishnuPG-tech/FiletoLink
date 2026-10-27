@@ -185,6 +185,25 @@ def make_artwork_search_handler(client: ProvidersClient):
     return handler
 
 
+def make_imdb_search_handler(client: ProvidersClient):
+    async def handler(params: Dict[str, Any]) -> Dict[str, Any]:
+        query = params.get("query", "")
+        media_type = params.get("media_type", "movie")
+        limit = params.get("limit", 10)
+        results = await client.imdb_search(
+            query=query,
+            media_type=media_type,
+            limit=limit,
+        )
+        return {
+            "query": query,
+            "count": len(results),
+            "results": results,
+            "provider": "IMDb (Zero Rate Limit)",
+        }
+    return handler
+
+
 # ==============================================================================
 # Tool Definitions
 # ==============================================================================
@@ -301,6 +320,28 @@ def get_provider_read_tool_definitions(client: ProvidersClient) -> List[ToolDefi
             timeout_seconds=15,
             max_output_chars=4000,
             handler=make_cinemeta_get_meta_handler(client),
+        ),
+        ToolDefinition(
+            name="imdb_search",
+            purpose="Search IMDb suggestions catalog (free, unauthenticated, zero rate limit) for authentic movie/series IMDb IDs, actors, and Amazon posters.",
+            json_schema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "maxLength": 100},
+                    "media_type": {"type": "string", "maxLength": 10},
+                    "limit": {"type": "integer"},
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+            read_only=True,
+            mutates=False,
+            risk="low",
+            requires_confirmation="never",
+            permission="read",
+            timeout_seconds=10,
+            max_output_chars=4000,
+            handler=make_imdb_search_handler(client),
         ),
         ToolDefinition(
             name="tvmaze_search",
