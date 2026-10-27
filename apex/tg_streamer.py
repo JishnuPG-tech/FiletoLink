@@ -135,7 +135,7 @@ PUBLIC_BASE_URL = get_env(
 )
 WEBHOOK_PATH = "/tg-stream/telegram-webhook"
 
-DATA_DIR = "/data/jellyfin"
+DATA_DIR = os.environ.get("APEX_DATA_DIR", "/data/jellyfin")
 if not USER_SESSION_STRING:
     _session_file = os.path.join(DATA_DIR, "user_session.string")
     if os.path.exists(_session_file):
@@ -152,8 +152,11 @@ CACHE_FILE = os.path.join(DATA_DIR, "file_ids.json")
 CONFIG_FILE = os.path.join(DATA_DIR, "channel_config.json")
 CATALOG_FILE = os.path.join(DATA_DIR, "media_catalog.sqlite")
 
-os.makedirs(MOVIES_DIR, exist_ok=True)
-os.makedirs(SHOWS_DIR, exist_ok=True)
+try:
+    os.makedirs(MOVIES_DIR, exist_ok=True)
+    os.makedirs(SHOWS_DIR, exist_ok=True)
+except Exception as _e:
+    logger.warning(f"[INIT] Could not create media directories: {_e}")
 MEDIA_CATALOG = MediaCatalog(CATALOG_FILE)
 
 # Persistent mapping: message_id -> {file_id, chat_id, file_size, title, is_tv, show_name, season, episode}
@@ -457,6 +460,14 @@ async def _warm_channel_peer(client, chat_id):
         return False
     if not (isinstance(chat_id, int) and chat_id < 0):
         return False
+    # 1. Try Pyrogram's native get_chat peer warming
+    try:
+        chat = await client.get_chat(chat_id)
+        if chat:
+            return True
+    except Exception:
+        pass
+    # 2. Raw channels.GetChannels warming
     channel_id = -chat_id - 1000000000000  # peer_id = MAX_CHANNEL_ID - channel_id
     if channel_id <= 0:
         return False
@@ -493,15 +504,16 @@ async def _refresh_file_reference(client, chat_id, message_id):
             logger.warning(
                 f"[REFRESH] get_messages({chat_id}, {message_id}) failed on {getattr(c, 'name', '?')}: {type(e).__name__}: {e}"
             )
-            if not (isinstance(e, ValueError) and await _warm_channel_peer(c, chat_id)):
-                return None
-            try:
-                msg = await c.get_messages(chat_id, message_id)
-            except Exception as e2:
-                logger.warning(
-                    f"[REFRESH] get_messages({chat_id}, {message_id}) retry failed on {getattr(c, 'name', '?')}: "
-                    f"{type(e2).__name__}: {e2}"
-                )
+            if await _warm_channel_peer(c, chat_id):
+                try:
+                    msg = await c.get_messages(chat_id, message_id)
+                except Exception as e2:
+                    logger.warning(
+                        f"[REFRESH] get_messages({chat_id}, {message_id}) retry failed on {getattr(c, 'name', '?')}: "
+                        f"{type(e2).__name__}: {e2}"
+                    )
+                    return None
+            else:
                 return None
         m = (
             (msg.video or msg.document or msg.audio or msg.animation)
@@ -556,16 +568,20 @@ def _is_expired_reference(exc):
     the concrete class when importable, then the RPC error ID, class name, raw
     value, or rendered text via an underscore-insensitive comparison.
     """
-    if not isinstance(exc, RPCError):
+    if exc is None:
         return False
     if FileReferenceExpired is not None and isinstance(exc, FileReferenceExpired):
         return True
-    probes = (
+    probes = [
         getattr(exc, "ID", None),
         type(exc).__name__,
         getattr(exc, "value", None),
         str(exc),
-    )
+    ]
+    if getattr(exc, "__cause__", None):
+        probes.append(str(exc.__cause__))
+    if getattr(exc, "__context__", None):
+        probes.append(str(exc.__context__))
     for probe in probes:
         if not probe:
             continue
@@ -2676,15 +2692,7 @@ def _create_strm_file_sync(entry):
         try:
             with open(strm_path, "r", encoding="utf-8") as f:
                 existing_content = f.read().strip()
-            is_valid_target = False
-            if chat_id and f"/{chat_id}/{msg_id}" in existing_content:
-                is_valid_target = True
-            elif not chat_id and file_id and str(file_id) in existing_content:
-                is_valid_target = True
-            elif existing_content.split("?")[0] == stream_url.split("?")[0]:
-                is_valid_target = True
-
-            if is_valid_target:
+            if existing_content == stream_url:
                 entry["target_dir"] = target_dir
                 entry["show_root"] = show_root
                 entry["strm_base"] = strm_base_name
@@ -3156,11 +3164,7 @@ def _stream_signature(chat_id, message_id, expires):
 
 
 def _stream_url(chat_id, message_id):
-    base = f"http://127.0.0.1:{PORT}/stream/{chat_id}/{message_id}/video.mp4"
-    if not STREAM_SIGNING_KEY:
-        return base
-    expires = int(time.time()) + 86400
-    return f"{base}?expires={expires}&sig={_stream_signature(chat_id, message_id, expires)}"
+    return f"http://127.0.0.1:{PORT}/stream/{chat_id}/{message_id}/video.mp4"
 
 
 @routes.post("/review/{chat_id}/{message_id}/approve")
@@ -4157,7 +4161,13 @@ async def stream_file(request):
         return web.Response(status=400, text="message_id is required.")
 
     chat_id, message_id = source
-    if STREAM_SIGNING_KEY:
+    is_loopback = (
+        request.remote in ("127.0.0.1", "::1", "localhost")
+        or request.host.startswith("127.0.0.1:")
+        or request.host.startswith("localhost:")
+        or request.host.split(":")[0] in ("127.0.0.1", "localhost", "::1")
+    )
+    if STREAM_SIGNING_KEY and not is_loopback:
         try:
             expires = int(request.query.get("expires", "0"))
             signature = request.query.get("sig", "")
@@ -4567,6 +4577,12 @@ async def restore_cached_strm_files():
                         os.remove(path)
                         logger.info(f'Removed obsolete Go STRM: {path}')
                         removed += 1
+                    elif '?' in content:
+                        cleaned = content.split('?')[0].strip()
+                        if cleaned and cleaned != content:
+                            with open(path, 'w', encoding='utf-8') as f_out:
+                                f_out.write(cleaned)
+                            logger.info(f'[RESTORE] Sanitized query token in .strm: {path}')
                 except Exception:
                     pass
     if removed:

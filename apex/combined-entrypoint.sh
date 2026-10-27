@@ -37,7 +37,7 @@ JELLYFIN_OPTS="--datadir $LOCAL_ROOT/data --configdir $LOCAL_ROOT/config --cache
 
 restore_jellyfin_local() {
     echo "[JELLYFIN] Preparing local datadir at $LOCAL_ROOT ..."
-    mkdir -p "$LOCAL_ROOT/data/data" "$LOCAL_ROOT/config" "$LOCAL_ROOT/cache" "$LOCAL_ROOT/log"
+    mkdir -p "$LOCAL_ROOT/data/data" "$LOCAL_ROOT/config" "$LOCAL_ROOT/cache/transcodes" "$LOCAL_ROOT/log"
     # Restore durable data/config snapshot from the persistent volume if present.
     # Exclude the metadata tree: it is handled via snapshot below and its old
     # absolute DB path is redirected to the fast local datadir.

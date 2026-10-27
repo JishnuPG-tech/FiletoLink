@@ -279,16 +279,13 @@ class StreamDriver:
                 await self.pool.note_success(active_client.client_id)
             except asyncio.CancelledError:
                 raise
-            except (RangeNotSatisfiable, FileNotFoundError, ValueError, StreamExhausted):
-                # Deterministic source-level failures: missing file, empty file,
-                # or a file shorter than its recorded size. Retrying the same
-                # plan is futile and a healthy client can provoke these — never
-                # trip client cooldown for them.
+            except (RangeNotSatisfiable, FileNotFoundError, ValueError):
+                # Deterministic source-level failures: missing file, empty file.
                 raise
             except NoClientAvailable:
                 await asyncio.sleep(0.05)
-            except SourceError as exc:
-                # e.g. FILE_REFERENCE_EXPIRED whose per-client refresh failed.
+            except (SourceError, StreamExhausted) as exc:
+                # e.g. FILE_REFERENCE_EXPIRED or short run whose per-client refresh failed.
                 # Fail the run over to a DIFFERENT client (its own refresh may
                 # succeed); the client that reported it is healthy, so take it
                 # out of the loop WITHOUT touching its cooldown bookkeeping.
