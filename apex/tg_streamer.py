@@ -16,7 +16,7 @@ import aiohttp
 from aiohttp import web
 import httpx
 import shutil
-from typing import Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 _BLACKLIST_PATTERNS = [
     re.compile(r"mot\s*test\s*servicing", re.IGNORECASE),
