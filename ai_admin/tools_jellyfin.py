@@ -11,6 +11,7 @@ from ai_admin.reconciler import (
     cleanup_rogue_and_duplicates,
     load_telegram_injected_catalog,
     reconcile_item,
+    reindex_all_imdb,
 )
 from ai_admin.tool_registry import ToolDefinition, ToolRegistry
 from ai_admin.validators import validate_item_id
@@ -160,6 +161,12 @@ def make_jellyfin_apply_artwork_handler(client: JellyfinClient):
             image_type=image_type,
         )
         return res
+    return handler
+
+
+def make_library_reindex_all_imdb_handler(client: JellyfinClient):
+    async def handler(params: Dict[str, Any]) -> Dict[str, Any]:
+        return await reindex_all_imdb(jf_client=client)
     return handler
 
 
@@ -397,6 +404,23 @@ def get_jellyfin_active_mutation_definitions(client: JellyfinClient) -> List[Too
             max_output_chars=4000,
             handler=make_jellyfin_apply_artwork_handler(client),
             validators=[lambda p: validate_item_id(p.get("item_id", ""))],
+        ),
+        ToolDefinition(
+            name="library_reindex_all_imdb",
+            purpose="Trigger a comprehensive IMDb re-indexing pass across all media items, purging mismatches, updating NFOs with authentic IMDb IDs, and downloading Amazon CDN posters.",
+            json_schema={
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+            read_only=False,
+            mutates=True,
+            risk="medium",
+            requires_confirmation="never",
+            permission="write",
+            timeout_seconds=60,
+            max_output_chars=4000,
+            handler=make_library_reindex_all_imdb_handler(client),
         ),
     ]
 

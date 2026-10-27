@@ -412,3 +412,47 @@ async def cleanup_rogue_and_duplicates(
         "deleted_duplicate_series": deleted_duplicate_series,
         "status": "cleanup_complete",
     }
+
+
+async def reindex_all_imdb(
+    jf_client: JellyfinClient,
+    cache_path: str = DEFAULT_CACHE_FILE,
+) -> Dict[str, Any]:
+    """Re-index all media using official IMDb suggestion API, update metadata & artwork, and refresh Jellyfin."""
+    cleanup_res = await cleanup_rogue_and_duplicates(jf_client, remove_rogue=True, deduplicate_series=True, cache_path=cache_path)
+    audit = await audit_and_compare(jf_client, cache_path=cache_path)
+    providers = ProvidersClient()
+    fixed = []
+    for m in audit.get("mismatches", []):
+        raw = m.get("raw_name") or m.get("injected_title")
+        year = m.get("injected_year")
+        item_id = m.get("jellyfin_id")
+        if item_id and raw:
+            try:
+                imdb_results = await providers.imdb_search(m.get("injected_title") or raw, media_type="movie", limit=5)
+                if imdb_results:
+                    best = imdb_results[0]
+                    sid = best.get("id")
+                    stitle = best.get("title") or m.get("injected_title")
+                    syear = best.get("year") or year
+                    sposter = best.get("poster")
+                    res = await reconcile_item(
+                        jf_client,
+                        item_id=item_id,
+                        title=stitle,
+                        year=syear,
+                        imdb_id=sid,
+                        poster_url=sposter,
+                        cache_path=cache_path,
+                        raw_name=raw,
+                    )
+                    fixed.append(res)
+            except Exception as exc:
+                logger.warning(f"[REINDEX-IMDB] Error fixing {raw}: {exc}")
+
+    return {
+        "status": "reindex_complete",
+        "fixed_count": len(fixed),
+        "fixed_items": fixed,
+        "cleanup": cleanup_res,
+    }

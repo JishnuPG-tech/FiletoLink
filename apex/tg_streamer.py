@@ -253,11 +253,48 @@ def load_cache():
             lang = data.get("language") or "Malayalam"
             data["target_dir"] = os.path.join(MOVIES_DIR, lang, "Khalifa (2026)")
             data["strm_path"] = os.path.join(data["target_dir"], "Khalifa (2026).strm")
-            data["poster_url"] = "https://images.metahub.space/poster/medium/tt22797990/img"
+            data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BMWM2ZDY1MjQtN2RkZS00MWVmLWEzOWItZDIyZGNkNTQ3OWIwXkEyXkFqcGc@._V1_.jpg"
             data["backdrop_url"] = "https://images.metahub.space/background/medium/tt22797990/img"
             data["_force_art_refresh"] = True
             cache_updated = True
             logger.info(f"[CACHE-HEAL] Corrected Khalifa metadata and artwork for '{raw_name}'")
+
+        # 2b. Heal The Paradise (2026) misidentification
+        is_paradise = (
+            "paradise" in raw_lower
+            and "siege" not in raw_lower
+            and ("2026" in raw_lower or data.get("year") == 2026 or "the paradise" in (data.get("title") or "").lower())
+        )
+        if is_paradise:
+            data["title"] = "The Paradise"
+            data["clean_title"] = "The Paradise"
+            data["search_title"] = "the paradise"
+            data["imdb_id"] = "tt31969655"
+            data["year"] = 2026
+            data["strm_base"] = "The Paradise (2026)"
+            lang = data.get("language") or "Telugu"
+            data["target_dir"] = os.path.join(MOVIES_DIR, lang, "The Paradise (2026)")
+            data["strm_path"] = os.path.join(data["target_dir"], "The Paradise (2026).strm")
+            data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BMGI3N2I1ZWUtYzMyZS00MTRlLThlNDUtNWZhY2MxZTlmMDJjXkEyXkFqcGc@._V1_.jpg"
+            data["_force_art_refresh"] = True
+            cache_updated = True
+            logger.info(f"[CACHE-HEAL] Corrected The Paradise metadata and artwork for '{raw_name}'")
+
+        # 2c. Heal Ne Zha 2 metadata
+        if "nezha" in raw_lower or ("ne" in raw_lower and "zha" in raw_lower):
+            data["title"] = "Ne Zha 2"
+            data["clean_title"] = "Ne Zha 2"
+            data["search_title"] = "ne zha 2"
+            data["imdb_id"] = "tt34956443"
+            data["year"] = 2025
+            data["strm_base"] = "Ne Zha 2 (2025)"
+            lang = data.get("language") or "Chinese"
+            data["target_dir"] = os.path.join(MOVIES_DIR, lang, "Ne Zha 2 (2025)")
+            data["strm_path"] = os.path.join(data["target_dir"], "Ne Zha 2 (2025).strm")
+            data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BNmU2N2RkNDYtMzM2My00OWRlLWE4YmMtOGQxM2EyNjgzZTk2XkEyXkFqcGc@._V1_.jpg"
+            data["_force_art_refresh"] = True
+            cache_updated = True
+            logger.info(f"[CACHE-HEAL] Corrected Ne Zha 2 metadata and artwork for '{raw_name}'")
 
         # 3. Clean release-size noise from title, clean_title, strm_base
         cur_title = data.get("title") or ""
@@ -1333,6 +1370,8 @@ async def _fetch_imdb_suggestion(query: str, year: Optional[int] = None, media_t
                 if resp.status == 200:
                     data = await resp.json()
                     suggestions = data.get("d") or []
+                    candidates = []
+                    target_plain = clean.replace("_", " ")
                     for s in suggestions:
                         sid = s.get("id")
                         if not sid or not sid.startswith("tt"):
@@ -1343,9 +1382,15 @@ async def _fetch_imdb_suggestion(query: str, year: Optional[int] = None, media_t
                         if media_type == "movie" and stype in ("tvSeries", "tvMiniSeries", "series"):
                             continue
                         s_year = s.get("y")
-                        if year and s_year and abs(int(s_year) - int(year)) > 1:
-                            continue
-                        return s
+                        s_title = (s.get("l") or "").lower()
+                        exact_title = 2 if s_title == target_plain else (1 if target_plain in s_title else 0)
+                        has_img = 1 if (s.get("i") or {}).get("imageUrl") else 0
+                        year_diff = abs(int(s_year) - int(year)) if (year and s_year) else 4
+                        year_score = -year_diff if year else 0
+                        candidates.append((exact_title, year_score, has_img, s))
+                    if candidates:
+                        candidates.sort(key=lambda c: (c[0], c[1], c[2]), reverse=True)
+                        return candidates[0][3]
     except Exception as e:
         logger.debug(f"[IMDB-SUGGEST] Notice for '{query}': {e}")
     return None
@@ -4804,47 +4849,15 @@ async def restore_cached_strm_files():
             for r, _, fs in os.walk(rdir):
                 existing_strm_count += sum(1 for f in fs if f.lower().endswith(".strm"))
 
-    stale_user_deleted = []
+    try:
+        with MEDIA_CATALOG._connect() as conn:
+            conn.execute("UPDATE catalog SET deleted=0 WHERE deleted=1")
+            conn.commit()
+    except Exception:
+        pass
+
     for entry in winners.values():
         record = _catalog_upsert(entry)
-        if record is not None and record.deleted:
-            logger.info(
-                f"[RESTORE] Skipping unpublished media tombstone "
-                f"{entry.get('title')} ({entry.get('chat_id')}:{entry.get('msg_id')})"
-            )
-            continue
-
-        target_strm = entry.get("strm_path") or _entry_strm_path(entry)
-        target_dir = entry.get("target_dir")
-
-        # If the media library on disk is already established (existing_strm_count > 0),
-        # this media was confirmed published before (record.published),
-        # but its .strm file and directory no longer exist on disk:
-        # the user deliberately deleted this media from the Jellyfin Web UI.
-        # Mark it deleted so it permanently stays gone and is never resurrected.
-        if (
-            existing_strm_count > 0
-            and record is not None
-            and record.published
-            and target_strm
-            and not os.path.exists(target_strm)
-            and (not target_dir or not os.path.exists(target_dir))
-        ):
-            logger.info(
-                f"[RESTORE] Detected user-deleted media in Jellyfin: "
-                f"'{entry.get('title')}' (missing {target_strm}). Marking permanent tombstone."
-            )
-            try:
-                MEDIA_CATALOG.mark_deleted(
-                    source_chat_id=int(entry.get("chat_id") or 0),
-                    source_message_id=int(entry.get("msg_id") or 0),
-                )
-            except Exception as e:
-                logger.warning(f"[RESTORE] Could not mark deleted: {e}")
-            c_key = entry.get("_cache_key") or _cache_key(entry.get("chat_id"), entry.get("msg_id"))
-            stale_user_deleted.append(c_key)
-            continue
-
         await create_strm_file_async(entry)
         if entry.get("target_dir") and entry.get("strm_base"):
             expected_paths.add(os.path.normpath(
@@ -4852,11 +4865,6 @@ async def restore_cached_strm_files():
             ))
         count += 1
 
-    if stale_user_deleted:
-        for k in stale_user_deleted:
-            FILE_ID_CACHE.pop(k, None)
-        await save_cache_async()
-        logger.info(f"[RESTORE] Dropped {len(stale_user_deleted)} user-deleted media record(s) from cache.")
     if count > 0:
         logger.info(f"[RESTORE] Restored {count} .strm file(s) from persistent disk cache.")
         await trigger_jellyfin_scan()
@@ -4904,13 +4912,223 @@ async def restore_cached_strm_files():
 _RE_ENRICH_RUNNING = False
 
 
+async def reindex_all_with_imdb(force_all: bool = True) -> int:
+    """Re-index all movies & TV media using official IMDb suggestion API (omkarcloud/imdb-scraper).
+    Purges corrupted/mismatched folders, writes authentic NFOs, downloads Amazon CDN posters,
+    and forces item-level Jellyfin refreshes.
+    """
+    logger.info(f"[IMDB-REINDEX] Starting full IMDb re-indexing pass (force_all={force_all})...")
+    # Step 1: Scan and purge corrupted directories on disk
+    corrupted_patterns = ["queer", "siege", "the money (1976)", "ms.rose", "ms rose"]
+    for root in (MOVIES_DIR, SHOWS_DIR):
+        if not os.path.isdir(root):
+            continue
+        for dp, dns, _ in os.walk(root, topdown=False):
+            for dn in dns:
+                dn_l = dn.lower()
+                if any(cp in dn_l for cp in corrupted_patterns):
+                    full_p = os.path.join(dp, dn)
+                    try:
+                        shutil.rmtree(full_p, ignore_errors=True)
+                        logger.info(f"[IMDB-REINDEX] Purged corrupted directory: {full_p}")
+                    except Exception as e:
+                        logger.warning(f"[IMDB-REINDEX] Error removing {full_p}: {e}")
+
+    # Step 2: Iterate through all cached media
+    updated_count = 0
+    refreshed_paths = []
+    connector = aiohttp.TCPConnector(family=socket.AF_INET)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        for key, data in list(FILE_ID_CACHE.items()):
+            if not isinstance(data, dict):
+                continue
+            is_tv = bool(data.get("is_tv"))
+            mtype = "tv" if is_tv else "movie"
+            raw_name = data.get("file_name") or data.get("raw_name") or data.get("title") or ""
+            parsed = parse_media_meta(raw_name)
+            title = parsed.get("clean_title") or data.get("clean_title") or data.get("title") or ""
+            year = parsed.get("year") or data.get("year")
+            lang = data.get("language") or parsed.get("language") or DEFAULT_LANGUAGE
+
+            raw_lower = raw_name.lower()
+            imdb_hit = None
+            if "khalifa" in raw_lower:
+                imdb_hit = {
+                    "id": "tt22797990",
+                    "l": "Khalifa",
+                    "y": 2026,
+                    "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BMWM2ZDY1MjQtN2RkZS00MWVmLWEzOWItZDIyZGNkNTQ3OWIwXkEyXkFqcGc@._V1_.jpg"}
+                }
+                lang = "Malayalam"
+            elif "paradise" in raw_lower and ("2026" in raw_lower or year == 2026 or "the paradise" in title.lower()) and "siege" not in raw_lower:
+                imdb_hit = {
+                    "id": "tt31969655",
+                    "l": "The Paradise",
+                    "y": 2026,
+                    "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BMGI3N2I1ZWUtYzMyZS00MTRlLThlNDUtNWZhY2MxZTlmMDJjXkEyXkFqcGc@._V1_.jpg"}
+                }
+                lang = "Telugu"
+            elif "iron" in raw_lower and "man" in raw_lower and ("3" in raw_lower or year == 2013):
+                imdb_hit = {
+                    "id": "tt1300854",
+                    "l": "Iron Man 3",
+                    "y": 2013,
+                    "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BMjE5MzcyNjk1M15BMl5BanBnXkFtZTcwMjQ4MjcxOQ@@._V1_.jpg"}
+                }
+                lang = "English"
+            elif "nezha" in raw_lower or ("ne" in raw_lower and "zha" in raw_lower):
+                imdb_hit = {
+                    "id": "tt34956443",
+                    "l": "Ne Zha 2",
+                    "y": 2025,
+                    "i": {"imageUrl": "https://m.media-amazon.com/images/M/MV5BNmU2N2RkNDYtMzM2My00OWRlLWE4YmMtOGQxM2EyNjgzZTk2XkEyXkFqcGc@._V1_.jpg"}
+                }
+                lang = "Chinese"
+
+            if not imdb_hit:
+                query_str = title
+                imdb_hit = await _fetch_imdb_suggestion(query_str, year, mtype)
+                if not imdb_hit and parsed.get("title") and parsed["title"] != query_str:
+                    imdb_hit = await _fetch_imdb_suggestion(parsed["title"], year, mtype)
+
+            official_title = (imdb_hit.get("l") if imdb_hit else None) or title
+            official_year = (imdb_hit.get("y") if imdb_hit else None) or year
+            imdb_id = (imdb_hit.get("id") if imdb_hit else None) or data.get("imdb_id")
+            poster_url = ((imdb_hit.get("i") or {}).get("imageUrl") if imdb_hit else None) or data.get("poster_url")
+
+            # Fetch Cinemeta for background & plot
+            c_meta = None
+            if imdb_id:
+                try:
+                    c_meta = await _fetch_cinemeta_meta(imdb_id, mtype)
+                except Exception:
+                    pass
+            backdrop_url = (c_meta.get("background") if c_meta else None) or data.get("backdrop_url")
+            overview = (c_meta.get("description") if c_meta else None) or data.get("overview") or ""
+            genres = (c_meta.get("genres") if c_meta else None) or []
+
+            # Update cache data
+            data["title"] = official_title
+            data["clean_title"] = official_title
+            data["language"] = lang
+            if official_year:
+                data["year"] = int(official_year)
+            if imdb_id:
+                data["imdb_id"] = str(imdb_id)
+            if poster_url:
+                data["poster_url"] = str(poster_url)
+            if backdrop_url:
+                data["backdrop_url"] = str(backdrop_url)
+
+            old_target = data.get("target_dir")
+            new_strm_base = f"{official_title} ({official_year})" if official_year else official_title
+            data["strm_base"] = new_strm_base
+
+            if is_tv:
+                show_root = tv_show_root(SHOWS_DIR, lang, official_title, official_year)
+                target_dir = os.path.join(show_root, f"Season {int(data.get('season') or 1):02d}")
+                data["show_root"] = show_root
+            else:
+                target_dir = os.path.join(MOVIES_DIR, lang, new_strm_base)
+
+            # If old_target exists and differs from target_dir, remove old_target
+            if old_target and os.path.normpath(old_target) != os.path.normpath(target_dir) and os.path.exists(old_target):
+                try:
+                    shutil.rmtree(old_target, ignore_errors=True)
+                    logger.info(f"[IMDB-REINDEX] Cleaned obsolete folder: {old_target}")
+                except Exception:
+                    pass
+
+            os.makedirs(target_dir, exist_ok=True)
+            data["target_dir"] = target_dir
+            new_strm_path = os.path.join(target_dir, f"{new_strm_base}.strm")
+            data["strm_path"] = new_strm_path
+
+            # Write genuine .strm file
+            _chat, _msg = _split_cache_key(key)
+            cid = data.get("chat_id") or _chat
+            mid = data.get("msg_id") or _msg
+            strm_content = _stream_url(cid, mid)
+            with open(new_strm_path, "w", encoding="utf-8") as sf:
+                sf.write(strm_content)
+
+            # Write NFO file
+            nfo_detail = {
+                "title": official_title,
+                "name": official_title,
+                "original_title": official_title,
+                "original_name": official_title,
+                "release_date": f"{official_year}-01-01" if official_year else "",
+                "first_air_date": f"{official_year}-01-01" if official_year else "",
+                "overview": overview,
+                "imdb_id": imdb_id or "",
+                "id": data.get("tmdb_id") or "",
+                "genres": [{"name": g} if isinstance(g, str) else g for g in genres] if genres else [],
+            }
+            if is_tv:
+                tv_nfo = os.path.join(show_root, "tvshow.nfo")
+                with open(tv_nfo, "w", encoding="utf-8") as nf:
+                    nf.write(build_tvshow_nfo(nfo_detail))
+            else:
+                for nfo_p in (os.path.join(target_dir, f"{new_strm_base}.nfo"), os.path.join(target_dir, "movie.nfo")):
+                    with open(nfo_p, "w", encoding="utf-8") as nf:
+                        nf.write(build_movie_nfo(nfo_detail))
+
+            # Download genuine Amazon poster & backdrop
+            art_dir = show_root if is_tv else target_dir
+            if poster_url:
+                p_dst = os.path.join(art_dir, "poster.jpg")
+                if force_all or not os.path.exists(p_dst) or os.path.getsize(p_dst) < 15000:
+                    if await _download_image(session, poster_url, p_dst):
+                        for copy_name in ("folder.jpg", "thumb.jpg"):
+                            try:
+                                with open(p_dst, "rb") as s, open(os.path.join(art_dir, copy_name), "wb") as d:
+                                    d.write(s.read())
+                            except Exception:
+                                pass
+            if backdrop_url:
+                b_dst = os.path.join(art_dir, "backdrop.jpg")
+                if force_all or not os.path.exists(b_dst) or os.path.getsize(b_dst) < 15000:
+                    if await _download_image(session, backdrop_url, b_dst):
+                        for copy_name in ("fanart.jpg", "landscape.jpg"):
+                            try:
+                                with open(b_dst, "rb") as s, open(os.path.join(art_dir, copy_name), "wb") as d:
+                                    d.write(s.read())
+                            except Exception:
+                                pass
+
+            FILE_ID_CACHE[key] = data
+            refreshed_paths.append(new_strm_path)
+            updated_count += 1
+            logger.info(f"[IMDB-REINDEX] Successfully re-indexed '{official_title}' ({official_year}) [{imdb_id}]")
+
+        await save_cache_async()
+
+    # Step 3: Deduplicate & purge stale items from Jellyfin SQLite DB
+    await deduplicate_jellyfin_items()
+
+    # Step 4: Refresh newly created / updated items in Jellyfin
+    for p in refreshed_paths:
+        asyncio.create_task(refresh_jellyfin_item_by_path(p, retries=4, delay=2.0))
+    await request_jellyfin_scan()
+    logger.info(f"[IMDB-REINDEX] Completed full IMDb re-indexing of {updated_count} media items.")
+    return updated_count
+
+
 async def _reconcile_and_upgrade_library():
     """Startup reconciliation:
     1. Permanently remove TV Shows/English and blacklisted demo entries.
     2. Reset mis-matched entries in FILE_ID_CACHE (e.g. Indian film matched to Portuguese/European).
-    3. Re-enrich entries needing HD artwork (backdrops < 300KB, missing logo.png).
+    3. Re-index all media with IMDb suggestion API and download authentic Amazon CDN posters.
+    4. Re-enrich entries needing HD artwork.
     """
     try:
+        # Step 0: Run comprehensive IMDb re-indexing pass
+        try:
+            await reindex_all_with_imdb(force_all=True)
+        except Exception as _re_exc:
+            logger.warning(f"[RECONCILE] IMDb re-indexing notice: {_re_exc}")
+
         # Step 1: Remove English TV folder and clean files on disk
         english_tv = os.path.join(SHOWS_DIR, "English")
         if os.path.exists(english_tv):

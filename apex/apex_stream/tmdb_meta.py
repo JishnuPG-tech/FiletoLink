@@ -756,6 +756,8 @@ def build_movie_nfo(data: Dict) -> str:
             break
     genre_lines = "".join("  <genre>%s</genre>\n" % xml_escape(x) for x in genres)
     country_line = "  <country>%s</country>\n" % xml_escape(country) if country else ""
+    imdb_id = xml_escape(str(data.get("imdb_id") or ""))
+    imdb_unique = f'  <uniqueid type="imdb" default="true">{imdb_id}</uniqueid>\n' if imdb_id else ""
     return """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <movie>
   <title>%(title)s</title>
@@ -771,7 +773,7 @@ def build_movie_nfo(data: Dict) -> str:
   <imdbid>%(imdbid)s</imdbid>
   <tmdbid>%(tmdbid)s</tmdbid>
   <uniqueid type="tmdb">%(tmdbid)s</uniqueid>
-  %(genres)s%(country)s  <art>
+%(imdb_unique)s  %(genres)s%(country)s  <art>
     <poster>poster.jpg</poster>
     <backdrop>backdrop.jpg</backdrop>
   </art>
@@ -787,8 +789,9 @@ def build_movie_nfo(data: Dict) -> str:
         "runtime": xml_escape(g("runtime")),
         "plot": xml_escape(g("overview")),
         "tagline": xml_escape(g("tagline")),
-        "imdbid": xml_escape(str(data.get("imdb_id") or "")),
+        "imdbid": imdb_id,
         "tmdbid": xml_escape(str(data.get("id") or "")),
+        "imdb_unique": imdb_unique,
         "genres": genre_lines,
         "country": country_line,
     }
@@ -798,6 +801,8 @@ def build_tvshow_nfo(data: Dict) -> str:
     g = lambda k: str(data.get(k) or "")
     genres = [_gen(x) for x in (data.get("genres") or []) if _gen(x)]
     genre_lines = "".join("  <genre>%s</genre>\n" % xml_escape(x) for x in genres)
+    imdb_id = xml_escape(str(data.get("imdb_id") or ""))
+    imdb_unique = f'  <uniqueid type="imdb" default="true">{imdb_id}</uniqueid>\n' if imdb_id else ""
     return """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <tvshow>
   <title>%(title)s</title>
@@ -808,9 +813,10 @@ def build_tvshow_nfo(data: Dict) -> str:
   <votes>%(votes)s</votes>
   <runtime>%(runtime)s</runtime>
   <plot>%(plot)s</plot>
+  <imdbid>%(imdbid)s</imdbid>
   <tmdbid>%(tmdbid)s</tmdbid>
   <uniqueid type="tmdb">%(tmdbid)s</uniqueid>
-  %(genres)s  <art>
+%(imdb_unique)s  %(genres)s  <art>
     <poster>poster.jpg</poster>
     <backdrop>backdrop.jpg</backdrop>
   </art>
@@ -824,7 +830,9 @@ def build_tvshow_nfo(data: Dict) -> str:
         "votes": xml_escape(g("vote_count")),
         "runtime": xml_escape(_tv_runtime(data)),
         "plot": xml_escape(g("overview")),
+        "imdbid": imdb_id,
         "tmdbid": xml_escape(str(data.get("id") or "")),
+        "imdb_unique": imdb_unique,
         "genres": genre_lines,
     }
 
