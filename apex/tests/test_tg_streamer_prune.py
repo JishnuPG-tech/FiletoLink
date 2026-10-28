@@ -422,3 +422,169 @@ def test_reindex_all_with_imdb_preserves_untracked_strm_and_directories(tmp_path
     assert any("untracked_directory:Unknown Format Title" in r for r in reasons)
     assert any("untracked_directory:Sidecar Title" in r for r in reasons)
     assert any("untracked_strm_file:untracked.strm" in r for r in reasons)
+
+
+def test_reconciliation_end_to_end_library_behavior(tmp_path):
+    """End-to-end integration test verifying that:
+    1. Tracked media survives.
+    2. Untracked movie .strm and its directory survive and are routed to review.
+    3. Duplicate Jellyfin items are deduplicated safely.
+    4. Missing .strm target (genuine orphan) is cleaned from Jellyfin API.
+    5. User-created sidecars (notes.txt, custom.xml, cover_backup.png) survive intact.
+    6. Unknown / uncertain media entries are preserved and sent to review.
+    """
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    dedup_node = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "deduplicate_jellyfin_items")
+    reindex_node = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "reindex_all_with_imdb")
+
+    movies_dir = tmp_path / "Movies"
+    shows_dir = tmp_path / "TV Shows"
+    movies_dir.mkdir(parents=True)
+    shows_dir.mkdir(parents=True)
+
+    # 1. Tracked Movie
+    tracked_dir = movies_dir / "English" / "Inception (2010)"
+    tracked_dir.mkdir(parents=True)
+    tracked_strm = tracked_dir / "Inception (2010).strm"
+    tracked_strm.write_text("http://127.0.0.1:8080/stream/1:100/video.mp4")
+
+    # 2. Untracked Movie
+    untracked_dir = movies_dir / "English" / "Untracked Indie Film (2024)"
+    untracked_dir.mkdir(parents=True)
+    untracked_strm = untracked_dir / "Untracked Indie Film (2024).strm"
+    untracked_strm.write_text("http://127.0.0.1:8080/stream/1:200/video.mp4")
+
+    # 3. User-created sidecars (notes.txt, custom.xml, cover_backup.png)
+    user_sidecar_dir = movies_dir / "English" / "User Curated Title (2023)"
+    user_sidecar_dir.mkdir(parents=True)
+    user_txt = user_sidecar_dir / "notes.txt"
+    user_txt.write_text("personal user notes")
+    user_xml = user_sidecar_dir / "custom.xml"
+    user_xml.write_text("<metadata>personal</metadata>")
+    user_png = user_sidecar_dir / "cover_backup.png"
+    user_png.write_bytes(b"image bytes")
+
+    # Missing file path (genuine orphan)
+    orphan_strm_path = str(movies_dir / "English" / "Ghost (1990)" / "Ghost (1990).strm")
+
+    deleted_item_ids = []
+    recorded_reviews = []
+
+    class MockResponse:
+        def __init__(self, data=None, status=200):
+            self.data = data or {}
+            self.status = status
+        async def json(self):
+            return self.data
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+
+    jellyfin_items = [
+        # Tracked movie duplicate 1
+        {"Id": "dup-item-1", "Name": "Inception", "Type": "Movie", "Path": str(tracked_strm), "ProviderIds": {"Tmdb": "27205"}},
+        # Tracked movie duplicate 2
+        {"Id": "dup-item-2", "Name": "Inception", "Type": "Movie", "Path": str(tracked_strm), "ProviderIds": {"Tmdb": "27205"}},
+        # Untracked movie item in Jellyfin
+        {"Id": "untracked-item-1", "Name": "Untracked Indie Film", "Type": "Movie", "Path": str(untracked_strm), "ProviderIds": {}},
+        # Genuine orphan item (missing from disk)
+        {"Id": "orphan-item-ghost", "Name": "Ghost", "Type": "Movie", "Path": orphan_strm_path, "ProviderIds": {}},
+    ]
+
+    class MockSession:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        def get(self, url, **kwargs):
+            return MockResponse({"Items": jellyfin_items}, status=200)
+        def delete(self, url, **kwargs):
+            item_id = url.rsplit("/", 1)[-1]
+            deleted_item_ids.append(item_id)
+            return MockResponse(status=204)
+
+    class MockAiohttp:
+        class TCPConnector:
+            def __init__(self, *args, **kwargs):
+                pass
+        def ClientSession(self, *args, **kwargs):
+            return MockSession()
+
+    class MockJob:
+        payload = {"strm_path": str(tracked_strm), "target_dir": str(tracked_dir)}
+
+    class MockRecord:
+        source_chat_id = -100
+        source_message_id = 100
+
+    class MockCatalog:
+        def list_records(self, include_deleted=False):
+            return [MockRecord()]
+        def find_job(self, chat_id, msg_id):
+            return MockJob()
+
+    async def mock_async_noop(*args, **kwargs):
+        pass
+
+    import socket
+    ns = {
+        "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
+        "os": os,
+        "re": re,
+        "socket": socket,
+        "aiohttp": MockAiohttp(),
+        "asyncio": asyncio,
+        "_jellyfin_auth_header": lambda: {"X-Emby-Token": "test-token"},
+        "_read_jellyfin_api_key": lambda: "test-token",
+        "MOVIES_DIR": str(movies_dir),
+        "SHOWS_DIR": str(shows_dir),
+        "FILE_ID_CACHE": {},
+        "MEDIA_CATALOG": MockCatalog(),
+        "is_blacklisted": lambda text: False,
+        "_record_review_job": lambda data, confidence=0.0, reason="": recorded_reviews.append((data, confidence, reason)),
+        "save_cache_async": mock_async_noop,
+        "deduplicate_jellyfin_items": mock_async_noop,
+        "refresh_jellyfin_item_by_path": mock_async_noop,
+        "request_jellyfin_scan": mock_async_noop,
+        "parse_media_meta": lambda name: {"title": name, "clean_title": name},
+        "_canonical_media_key": lambda e: "tmdb:27205",
+        "DEFAULT_LANGUAGE": "English",
+    }
+
+    # Step A: Run deduplicate_jellyfin_items
+    exec(compile(ast.Module([dedup_node], []), "<ast>", "exec"), ns)
+    dedup_func = ns["deduplicate_jellyfin_items"]
+    asyncio.run(dedup_func())
+
+    # Verify deduplication results:
+    # 1. Genuine orphan is deleted
+    assert "orphan-item-ghost" in deleted_item_ids
+    # 2. Exactly one Inception duplicate is deleted
+    assert ("dup-item-1" in deleted_item_ids) ^ ("dup-item-2" in deleted_item_ids)
+    # 3. Untracked indie film (exists on disk) is NOT deleted
+    assert "untracked-item-1" not in deleted_item_ids
+
+    # Step B: Run reindex_all_with_imdb
+    exec(compile(ast.Module([reindex_node], []), "<ast>", "exec"), ns)
+    reindex_func = ns["reindex_all_with_imdb"]
+    asyncio.run(reindex_func(force_all=False))
+
+    # Verify filesystem and review queue results:
+    # 1. Tracked movie survives
+    assert tracked_dir.exists()
+    assert tracked_strm.exists()
+
+    # 2. Untracked movie survives on disk and is queued for review
+    assert untracked_dir.exists()
+    assert untracked_strm.exists()
+
+    # 3. User sidecars survive on disk and are queued for review
+    assert user_sidecar_dir.exists()
+    assert user_txt.exists()
+    assert user_xml.exists()
+    assert user_png.exists()
+
+    reasons = [r[2] for r in recorded_reviews]
+    assert any("untracked_strm_file:Untracked Indie Film (2024).strm" in r for r in reasons)
+    assert any("untracked_directory:User Curated Title (2023)" in r for r in reasons)

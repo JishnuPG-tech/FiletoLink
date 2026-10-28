@@ -4922,14 +4922,8 @@ async def reconcile(request):
             continue
         entry = dict(data)
         if _is_unknown_media(entry):
-            path = entry.get("strm_path") or _entry_strm_path(entry)
-            if not dry_run:
-                try:
-                    if os.path.exists(path):
-                        os.remove(path)
-                except OSError as exc:
-                    logger.info(f"[RECONCILE] Could not remove unknown media path: {type(exc).__name__}")
-                FILE_ID_CACHE.pop(key, None)
+            logger.warning(f"[RECONCILE] Preserving unknown media entry on disk and routing to review queue: {key}")
+            _record_review_job(entry, confidence=0.0, reason="unknown_media_reconcile")
             continue
         path = entry.get("strm_path") or _entry_strm_path(entry)
         record = MEDIA_CATALOG.find_by_source(
@@ -5176,13 +5170,8 @@ async def restore_cached_strm_files():
             "_cache_key": key,
         })
         if _is_unknown_media(entry):
-            stale_path = data.get("strm_path") or _entry_strm_path(entry)
-            try:
-                if os.path.exists(stale_path):
-                    os.remove(stale_path)
-            except OSError as exc:
-                logger.info(f"[RESTORE] Could not remove unknown media path: {type(exc).__name__}")
-            stale_cache_keys.append(key)
+            logger.warning(f"[RESTORE] Preserving unknown media entry on disk and routing to review queue: {key}")
+            _record_review_job(entry, confidence=0.0, reason="unknown_media_restore")
             continue
         restore_candidates.append(entry)
 
