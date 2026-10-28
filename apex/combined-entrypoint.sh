@@ -22,6 +22,18 @@ else
     fi
 fi
 
+# Silence ASP.NET Core static files warning
+mkdir -p /opt/apex/wwwroot 2>/dev/null || true
+
+# Early launch of FastAPI Gateway & Nginx so HTTP port 7860 answers health probes immediately
+echo "[HEALTH] Early dispatch: FastAPI Gateway starting..."
+python3 -m uvicorn proxy:app --host 127.0.0.1 --port 8000 --workers 1 &
+FASTAPI_PID=$!
+
+echo "[HEALTH] Early dispatch: Nginx starting..."
+nginx -g 'daemon off;' -c /app/combined-nginx.conf &
+NGINX_PID=$!
+
 # ---------------------------------------------------------------------------
 # Jellyfin local datadir strategy (HF Spaces persistent /data is network-backed
 # and does not honor SQLite file locking; concurrent reads from the web client
@@ -79,6 +91,9 @@ restore_jellyfin_local() {
     if [ -f "$LOCAL_ROOT/data/data/jellyfin.db" ] || [ -f "/data/jellyfin/data/data/jellyfin.db" ]; then
         python3 /opt/apex/repair_jellyfin_libraries.py || python3 "$(dirname "$0")/repair_jellyfin_libraries.py" || true
     fi
+
+    # Clean up obsolete scheduled tasks to silence RefreshMediaLibraryTask warning
+    rm -f "$LOCAL_ROOT/config/scheduledtasks/"*RefreshMediaLibrary* "$LOCAL_ROOT/data/scheduledtasks/"*RefreshMediaLibrary* "/data/jellyfin/config/scheduledtasks/"*RefreshMediaLibrary* 2>/dev/null || true
 
     # Clean up empty movie directories or orphaned folders left behind after safe moves (only empty directories)
     find /data/jellyfin/media/Movies -mindepth 2 -type d -empty -delete 2>/dev/null || true
@@ -318,13 +333,7 @@ echo "[HEALTH] Telegram streamer starting in background..."
 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python3 /opt/apex/tg_streamer.py &
 TG_STREAMER_PID=$!
 
-echo "[HEALTH] FastAPI Gateway starting..."
-python3 -m uvicorn proxy:app --host 127.0.0.1 --port 8000 --workers 1 &
-FASTAPI_PID=$!
-
-echo "[HEALTH] Nginx starting..."
-nginx -g 'daemon off;' -c /app/combined-nginx.conf &
-NGINX_PID=$!
+echo "[HEALTH] FastAPI Gateway (PID $FASTAPI_PID) and Nginx (PID $NGINX_PID) active."
 
 perform_final_sync() {
     echo "[PERSISTENCE] Graceful shutdown initiated. Syncing durable Jellyfin state..."

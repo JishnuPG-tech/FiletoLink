@@ -681,3 +681,119 @@ def test_deduplicate_jellyfin_items_preserves_conflicting_paths(tmp_path):
 
     # Conflicting existing paths must be sent to review
     assert any("conflicting_identity_path:tmdb:615453" in r[2] for r in recorded_reviews)
+
+
+def test_deduplicate_jellyfin_items_refuses_deletion_when_dir_has_files(tmp_path):
+    movies_dir = tmp_path / "Movies"
+    movie_folder = movies_dir / "Malayalam" / "Khalifa (2026)"
+    movie_folder.mkdir(parents=True)
+    # Strm path does not exist, but directory has other files (e.g. sidecar or poster)
+    sidecar = movie_folder / "movie.nfo"
+    sidecar.write_text("<movie></movie>")
+    ghost_strm = movie_folder / "Khalifa (2026).strm"
+
+    items = [
+        {
+            "Id": "ghost-item-1",
+            "Name": "Khalifa (2026)",
+            "Path": str(ghost_strm),
+            "Type": "Movie",
+            "ProviderIds": {"Tmdb": "1036081"},
+        }
+    ]
+
+    deleted_item_ids = []
+    recorded_reviews = []
+
+    class MockResponse:
+        def __init__(self, status=200, json_data=None):
+            self.status = status
+            self._json = json_data or {}
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def json(self): return self._json
+
+    class MockSession:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        def get(self, url, params=None, headers=None, timeout=None):
+            return MockResponse(200, {"Items": items})
+        def delete(self, url, params=None, headers=None, timeout=None):
+            item_id = url.rstrip("/").split("/")[-1]
+            deleted_item_ids.append(item_id)
+            return MockResponse(204)
+
+    class MockAiohttp:
+        ClientSession = MockSession
+
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    node = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "deduplicate_jellyfin_items")
+
+    ns = {
+        "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
+        "os": os,
+        "re": re,
+        "aiohttp": MockAiohttp(),
+        "_jellyfin_auth_header": lambda: {"X-Emby-Token": "test-token"},
+        "_read_jellyfin_api_key": lambda: "test-token",
+        "MOVIES_DIR": str(movies_dir),
+        "SHOWS_DIR": str(tmp_path / "TV Shows"),
+        "FILE_ID_CACHE": {},
+        "is_blacklisted": lambda text: False,
+        "_record_review_job": lambda data, confidence=0.0, reason="": recorded_reviews.append((data, confidence, reason)),
+        "parse_media_meta": lambda name: {"title": name, "clean_title": name},
+        "_canonical_media_key": lambda e: "tmdb:1036081",
+        "DEFAULT_LANGUAGE": "Malayalam",
+    }
+    exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
+    dedup = ns["deduplicate_jellyfin_items"]
+
+    res = asyncio.run(dedup())
+
+    # Deletion must be skipped because the directory still contains files!
+    assert "ghost-item-1" not in deleted_item_ids
+    assert len(deleted_item_ids) == 0
+    assert any("dedup_dir_contains_files" in r[2] for r in recorded_reviews)
+
+
+def test_migrate_double_year_folders(tmp_path):
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "migrate_double_year_folders")
+
+    movies = tmp_path / "Movies"
+    double_year_dir = movies / "Chinese" / "Ne Zha (2019) (2019)"
+    double_year_dir.mkdir(parents=True)
+    strm = double_year_dir / "Ne Zha (2019) (2019).strm"
+    strm.write_text("http://127.0.0.1:8080/stream/1:2/video.mp4")
+    nfo = double_year_dir / "movie.nfo"
+    nfo.write_text("<movie><title>Ne Zha</title></movie>")
+
+    cache = {
+        "1:2": {
+            "title": "Ne Zha",
+            "year": 2019,
+            "target_dir": str(double_year_dir),
+            "strm_path": str(strm),
+        }
+    }
+
+    ns = {
+        "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
+        "os": os,
+        "re": re,
+        "shutil": shutil,
+        "FILE_ID_CACHE": cache,
+        "_save_cache_sync": lambda: None,
+    }
+    exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
+    migrate = ns["migrate_double_year_folders"]
+
+    migrate(str(movies))
+
+    canonical_dir = movies / "Chinese" / "Ne Zha (2019)"
+    assert canonical_dir.exists()
+    assert (canonical_dir / "Ne Zha (2019).strm").exists()
+    assert (canonical_dir / "movie.nfo").exists()
+    assert not double_year_dir.exists()
+    assert cache["1:2"]["target_dir"] == str(canonical_dir)
+    assert cache["1:2"]["strm_path"] == str(canonical_dir / "Ne Zha (2019).strm")

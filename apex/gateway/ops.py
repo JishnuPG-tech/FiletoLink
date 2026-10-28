@@ -667,7 +667,7 @@ async def ops_jellyfin_cleanup(request: Request):
             if not item_id:
                 continue
             try:
-                async with session.delete(f"{_JELLYFIN_BASE}/Items/{item_id}", timeout=15) as resp:
+                async with session.delete(f"{_JELLYFIN_BASE}/Items/{item_id}", params={"deleteFile": "false"}, timeout=15) as resp:
                     results["items"].append({"id": item_id, "status": resp.status})
             except Exception as exc:
                 results["items"].append({"id": item_id, "status": "error", "detail": str(exc)})

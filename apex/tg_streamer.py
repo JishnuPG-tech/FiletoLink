@@ -3494,8 +3494,7 @@ async def refresh_jellyfin_item_by_path(strm_path, alt_paths=None, retries=12, d
                     None,
                 )
                 if not matched_item:
-                    # Fallback: the item may live under a different folder after
-                    # TMDB language organize moved the .strm; match by basename.
+                    # Fallback 1: match by basename
                     matched_item = next(
                         (
                             it for it in items
@@ -3503,6 +3502,17 @@ async def refresh_jellyfin_item_by_path(strm_path, alt_paths=None, retries=12, d
                         ),
                         None,
                     )
+                if not matched_item:
+                    # Fallback 2: alphanumeric normalized match (handles colon / hyphen differences like "It: Welcome to Derry" vs "IT Welcome to Derry")
+                    clean_target = re.sub(r"[^a-z0-9]+", "", os.path.splitext(base)[0])
+                    if clean_target:
+                        matched_item = next(
+                            (
+                                it for it in items
+                                if re.sub(r"[^a-z0-9]+", "", os.path.splitext(os.path.basename(str(it.get("Path") or "")))[0].lower()) == clean_target
+                            ),
+                            None,
+                        )
                 if not matched_item:
                     # Every few attempts, nudge a library scan so a freshly
                     # created/moved .strm is indexed before the next lookup.
@@ -3723,9 +3733,48 @@ async def deduplicate_jellyfin_items():
 
             for item, path in duplicates:
                 item_id = item.get("Id")
+                name = item.get("Name") or ""
                 if not item_id:
                     continue
-                delete_params = {"api_key": api_key} if api_key else None
+                path_exists = os.path.exists(path) if path else False
+                dir_path = os.path.dirname(path) if path else ""
+                dir_exists = os.path.isdir(dir_path) if dir_path else False
+                dir_files = os.listdir(dir_path) if dir_exists else []
+
+                # CRITICAL AUDIT & SAFETY:
+                # Never ask Jellyfin to delete an item if the file exists on disk
+                # or if its parent directory still contains files, because Jellyfin
+                # will attempt to recursively delete the filesystem path!
+                if path_exists:
+                    logger.warning(
+                        f"[DELETE-AUDIT] Caller=deduplicate_jellyfin_items | item_id={item_id} | name='{name}' | "
+                        f"path='{path}' | file_exists=True | dir_exists={dir_exists} | action='skipped_file_exists_routed_to_review'"
+                    )
+                    _record_review_job(
+                        {"item": item, "path": path},
+                        confidence=0.0,
+                        reason="dedup_file_exists_on_disk",
+                    )
+                    continue
+
+                if dir_exists and dir_files:
+                    logger.warning(
+                        f"[DELETE-AUDIT] Caller=deduplicate_jellyfin_items | item_id={item_id} | name='{name}' | "
+                        f"path='{path}' | file_exists=False | dir_exists=True | dir_files={len(dir_files)} | "
+                        f"action='skipped_dir_contains_files_routed_to_review'"
+                    )
+                    _record_review_job(
+                        {"item": item, "path": path, "dir_files": dir_files[:10]},
+                        confidence=0.0,
+                        reason="dedup_dir_contains_files",
+                    )
+                    continue
+
+                logger.info(
+                    f"[DELETE-AUDIT] Caller=deduplicate_jellyfin_items | item_id={item_id} | name='{name}' | "
+                    f"path='{path}' | file_exists=False | dir_exists={dir_exists} | action='safe_delete_stale_jellyfin_item'"
+                )
+                delete_params = {"api_key": api_key, "deleteFile": "false"} if api_key else {"deleteFile": "false"}
                 async with session.delete(
                     f"http://127.0.0.1:8096/Items/{item_id}",
                     params=delete_params,
@@ -3734,8 +3783,7 @@ async def deduplicate_jellyfin_items():
                 ) as response:
                     if response.status in (200, 204):
                         removed += 1
-                        if not os.path.exists(path):
-                            stale += 1
+                        stale += 1
         if removed:
             logger.info(f"[JELLYFIN] Removed {removed} duplicate/stale STRM item(s)")
         return {"removed": removed, "stale": stale}
@@ -5354,15 +5402,8 @@ async def restore_cached_strm_files():
         if still:
             logger.info(f"[RESTORE] {still} subtitle(s) still awaiting a video match.")
 
-    # Improve-the-past: entries that never resolved under the previous matcher
-    # get one more pass with the new capabilities (imdb /find, roman-numeral
-    # normalization, original-title merging, language-biased search). Entries
-    # whose local poster is missing or below HD are re-enriched in the same
-    # pass so artwork is refreshed at full resolution automatically.
-    try:
-        asyncio.create_task(_reconcile_and_upgrade_library())
-    except Exception as exc:
-        logger.warning(f"[RESTORE] could not queue library upgrade: {exc}")
+    # Note: Library reconciliation and IMDb upgrade are cleanly scheduled via
+    # _startup_reconcile() in start_background_tasks(app) to prevent duplicate runs.
 
 _RE_ENRICH_RUNNING = False
 
@@ -5654,6 +5695,78 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
     return updated_count
 
 
+def migrate_double_year_folders(library_root: str):
+    """Find and safely migrate legacy duplicate-year folders like 'Title (YYYY) (YYYY)'
+    into canonical 'Title (YYYY)'. Moves files, normalizes filenames, updates FILE_ID_CACHE,
+    and removes the old folder with os.rmdir without deleting media.
+    """
+    if not os.path.isdir(library_root):
+        return
+    cache_dirty = False
+    for root, dirs, _ in os.walk(library_root, topdown=True):
+        for d in list(dirs):
+            match = re.search(r"^(.*?)\s*\((\d{4})\)\s*\(\2\)$", d)
+            if not match:
+                continue
+            base_title = match.group(1).strip()
+            year = match.group(2)
+            canonical_name = f"{base_title} ({year})"
+            old_dir = os.path.join(root, d)
+            new_dir = os.path.join(root, canonical_name)
+            logger.info(f"[MIGRATE-YEAR] Found double-year folder '{old_dir}' -> normalizing to '{new_dir}'")
+            os.makedirs(new_dir, exist_ok=True)
+            for sub_root, _, files in os.walk(old_dir):
+                rel = os.path.relpath(sub_root, old_dir)
+                target_sub = os.path.join(new_dir, rel) if rel != "." else new_dir
+                os.makedirs(target_sub, exist_ok=True)
+                for fn in files:
+                    src_file = os.path.join(sub_root, fn)
+                    fn_norm = re.sub(r"\s*\((\d{4})\)\s*\(\1\)", r" (\1)", fn)
+                    dst_file = os.path.join(target_sub, fn_norm)
+                    if not os.path.exists(dst_file):
+                        try:
+                            shutil.move(src_file, dst_file)
+                            logger.info(f"[MIGRATE-YEAR] Moved '{src_file}' -> '{dst_file}'")
+                        except Exception as e:
+                            logger.warning(f"[MIGRATE-YEAR] Failed moving '{src_file}': {e}")
+            for k, v in FILE_ID_CACHE.items():
+                if not isinstance(v, dict):
+                    continue
+                changed = False
+                td = v.get("target_dir")
+                if td and os.path.normpath(td).startswith(os.path.normpath(old_dir)):
+                    v["target_dir"] = os.path.normpath(td).replace(os.path.normpath(old_dir), os.path.normpath(new_dir), 1)
+                    changed = True
+                sp = v.get("strm_path")
+                if sp and os.path.normpath(sp).startswith(os.path.normpath(old_dir)):
+                    new_sp = os.path.normpath(sp).replace(os.path.normpath(old_dir), os.path.normpath(new_dir), 1)
+                    new_sp = re.sub(r"\s*\((\d{4})\)\s*\(\1\)", r" (\1)", new_sp)
+                    v["strm_path"] = new_sp
+                    changed = True
+                sr = v.get("show_root")
+                if sr and os.path.normpath(sr).startswith(os.path.normpath(old_dir)):
+                    v["show_root"] = os.path.normpath(sr).replace(os.path.normpath(old_dir), os.path.normpath(new_dir), 1)
+                    changed = True
+                if changed:
+                    cache_dirty = True
+            for sub_root, sub_dirs, _ in os.walk(old_dir, topdown=False):
+                for sd in sub_dirs:
+                    try:
+                        os.rmdir(os.path.join(sub_root, sd))
+                    except OSError:
+                        pass
+            try:
+                os.rmdir(old_dir)
+                logger.info(f"[MIGRATE-YEAR] Successfully removed empty old directory '{old_dir}'")
+            except OSError:
+                pass
+    if cache_dirty:
+        _save_cache_sync()
+
+
+_RECONCILE_RUNNING = False
+
+
 async def _reconcile_and_upgrade_library():
     """Startup reconciliation:
     1. Permanently remove TV Shows/English and blacklisted demo entries.
@@ -5661,7 +5774,19 @@ async def _reconcile_and_upgrade_library():
     3. Re-index un-indexed or outdated media with IMDb suggestion API and download authentic Amazon CDN posters.
     4. Re-enrich entries needing HD artwork.
     """
+    global _RECONCILE_RUNNING
+    if _RECONCILE_RUNNING:
+        logger.info("[RECONCILE] Reconciliation already in progress; skipping duplicate call.")
+        return
+    _RECONCILE_RUNNING = True
     try:
+        # Step -1: Migrate legacy duplicate-year folders (e.g. 'Ne Zha (2019) (2019)' -> 'Ne Zha (2019)')
+        try:
+            migrate_double_year_folders(MOVIES_DIR)
+            migrate_double_year_folders(SHOWS_DIR)
+        except Exception as _mig_exc:
+            logger.warning(f"[RECONCILE] Double-year migration notice: {_mig_exc}")
+
         # Step 0: Run safe IMDb re-indexing pass (force_all=False prevents hammering during startup)
         try:
             await reindex_all_with_imdb(force_all=False)
@@ -5885,6 +6010,8 @@ async def _reconcile_and_upgrade_library():
 
     except Exception as e:
         logger.warning(f"[UPGRADE] Library reconciliation noticed: {e}")
+    finally:
+        _RECONCILE_RUNNING = False
 
 
 def _unresolved_enrich_entries():
