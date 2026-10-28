@@ -418,9 +418,9 @@ def _sanitize_media_title(text: str) -> str:
         s = s[m.end():].strip()
     s = re.sub(r"(?i)\b(?:wmr|wm|mm\s*linkz|tamilmv|tamilblasters|1tamilmv)\b[._\s-]*", "", s).strip()
     s = re.sub(r"^[^\w]+", "", s).strip()
-    # Normalize duplicate years like "Title (2008) (2008)" -> "Title (2008)"
+    # Normalize multiple years like "Title (2008) (2016)" -> "Title (2008)"
     years = re.findall(r"\((\d{4})\)", s)
-    if len(years) >= 2 and len(set(years)) == 1:
+    if len(years) >= 2:
         y = years[0]
         s = re.sub(r"\s*\(\d{4}\)", "", s).strip()
         s = f"{s} ({y})"
@@ -514,6 +514,35 @@ def heal_mismatched_media(roots=None, databases=None):
                             pass
                     except Exception as ren_err:
                         print(f"[REPAIR] Note renaming folder {dirpath}: {ren_err}")
+                else:
+                    # Destination folder already exists; merge non-conflicting files and clean empty legacy folder
+                    try:
+                        for f in os.listdir(dirpath):
+                            src_f = os.path.join(dirpath, f)
+                            dst_f = os.path.join(new_dirpath, f)
+                            if not os.path.exists(dst_f):
+                                shutil.move(src_f, dst_f)
+                                for db_p in db_list:
+                                    if os.path.exists(db_p):
+                                        try:
+                                            conn = sqlite3.connect(db_p, timeout=5)
+                                            conn.execute("UPDATE BaseItems SET Path = ? WHERE Path = ?", (dst_f, src_f))
+                                            conn.commit()
+                                            conn.close()
+                                        except Exception:
+                                            pass
+                            elif f.endswith(".strm") or f.lower() in ("movie.nfo", "tvshow.nfo"):
+                                try:
+                                    os.remove(src_f)
+                                except Exception:
+                                    pass
+                        try:
+                            os.rmdir(dirpath)
+                            print(f"[REPAIR] Merged legacy duplicate folder: '{dirpath}' -> '{new_dirpath}'")
+                        except OSError:
+                            pass
+                    except Exception as merge_err:
+                        print(f"[REPAIR] Note merging duplicate folder {dirpath}: {merge_err}")
 
             # 2. Rename .strm files inside directory and heal NFOs
             for fn in list(filenames):

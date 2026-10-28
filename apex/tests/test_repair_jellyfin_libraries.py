@@ -672,6 +672,32 @@ def test_heal_channel_names_and_database(tmp_path):
     assert "WMR" not in row[0]
 
 
+def test_heal_mismatched_media_merges_into_existing_destination(tmp_path):
+    movies_root = tmp_path / "Movies"
+    movies_root.mkdir()
+
+    # Existing clean folder
+    clean_folder = movies_root / "Iron Man (2008)"
+    clean_folder.mkdir()
+    clean_strm = clean_folder / "Iron Man (2008).strm"
+    clean_strm.write_text("http://stream/clean")
+
+    # Legacy folder with different year drift: "Iron Man (2008) (2016)"
+    drift_folder = movies_root / "Iron Man (2008) (2016)"
+    drift_folder.mkdir()
+    drift_sub = drift_folder / "Iron Man (2008).eng.srt"
+    drift_sub.write_text("1\n00:00:01,000 --> 00:00:02,000\nSubtitle\n")
+
+    heal_mismatched_media(roots=[str(movies_root)], databases=[])
+
+    # Drift folder must be merged into clean_folder and rmdir'd
+    assert clean_folder.exists()
+    assert clean_strm.exists()
+    assert (clean_folder / "Iron Man (2008).eng.srt").exists()
+    assert not drift_folder.exists()
+
+
+
 
 
 
