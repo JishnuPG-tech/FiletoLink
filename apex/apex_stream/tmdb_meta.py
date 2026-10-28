@@ -620,6 +620,11 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
         franchise_subwords = {"part", "chapter", "vol", "volume", "1", "2", "3", "4", "5", "the"}
         extra_unrelated = extra_in_hit - franchise_subwords
 
+        # If either title or original_title is an exact match for the query,
+        # the other field is simply the native/alternate title and does not introduce unrelated words.
+        if r_toks == q_toks or orig_toks == q_toks:
+            extra_unrelated = set()
+
         # Single-token query strictness:
         # A 1-word query (e.g. "Khalifa", "Money", "Paradise") must NEVER match a multi-word candidate
         # with foreign/unrelated words (e.g. "Queer Khalifa", "The Siege of Paradise", "Derry Girls")!
@@ -630,7 +635,7 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
 
         # Check containment: either all hit tokens are in query (e.g. "Aadu 3" in "Aadu 3 Part 1"),
         # or all query tokens are in hit title without introducing unrelated words
-        hit_contained_in_query = bool(combined_r <= q_toks)
+        hit_contained_in_query = bool(combined_r <= q_toks) or bool(r_toks == q_toks or orig_toks == q_toks)
         query_contained_in_hit = bool(q_toks <= combined_r and not extra_unrelated)
 
         # Sequel digit alignment:
