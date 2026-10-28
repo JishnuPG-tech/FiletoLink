@@ -3545,7 +3545,8 @@ async def refresh_jellyfin_item_by_path(strm_path, alt_paths=None, retries=12, d
                     # Fallback 3: Double-year / Part normalization match
                     # Handles legacy folder drift such as "Aadu 3 (2026) (2026)" vs "Aadu 3 Part 1 (2026)"
                     def _strip_drift(p):
-                        s = re.sub(r"\((\d{4})\)\s*\(\1\)", r"(\1)", str(p or "").lower())
+                        fn = os.path.basename(str(p or "")).lower()
+                        s = re.sub(r"\((\d{4})\)\s*\(\1\)", r"(\1)", fn)
                         s = re.sub(r"\bpart\s*\d+\b", "", s)
                         return re.sub(r"[^a-z0-9]+", "", s)
                     target_drift = _strip_drift(strm_path)
