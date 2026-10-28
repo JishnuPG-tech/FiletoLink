@@ -237,7 +237,7 @@ def test_deduplicate_jellyfin_items_preserves_blacklisted_media(tmp_path):
             "Id": "ghost-orphan-id",
             "Name": "Deleted Media",
             "Type": "Movie",
-            "Path": str(tmp_path / "nonexistent.strm"),
+            "Path": str(movies_dir / "nonexistent.strm"),
             "ProviderIds": {},
         },
     ]
