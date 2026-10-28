@@ -58,19 +58,30 @@ restore_jellyfin_local() {
         cp -a -f /data/jellyfin/cache/. "$LOCAL_ROOT/cache/" 2>/dev/null || true
     fi
 
-    # Remove invalid legacy flat TV directory (Jellyfin TV libraries must have show roots directly under TV Shows)
-    rm -rf "/data/jellyfin/media/TV Shows/English" "/opt/jellyfin-local/media/TV Shows/English" 2>/dev/null || true
+    # Non-destructive legacy TV directory migration:
+    # Preserve any existing shows in TV Shows/English by moving them up to TV Shows/<Show> if no conflict exists.
+    for legacy_tv in "/data/jellyfin/media/TV Shows/English" "/opt/jellyfin-local/media/TV Shows/English"; do
+        if [ -d "$legacy_tv" ]; then
+            tv_parent="$(dirname "$legacy_tv")"
+            find "$legacy_tv" -mindepth 1 -maxdepth 1 -type d | while read -r show_dir; do
+                show_base="$(basename "$show_dir")"
+                target_dest="$tv_parent/$show_base"
+                if [ ! -e "$target_dest" ]; then
+                    mv "$show_dir" "$target_dest" 2>/dev/null && echo "[MIGRATION] Migrated show '$show_base' to '$target_dest'" || true
+                fi
+            done
+            # Only remove the legacy directory if it is completely empty
+            rmdir "$legacy_tv" 2>/dev/null || true
+        fi
+    done
 
     # Run library and auth repair after restoring both database and config
     if [ -f "$LOCAL_ROOT/data/data/jellyfin.db" ] || [ -f "/data/jellyfin/data/data/jellyfin.db" ]; then
         python3 /opt/apex/repair_jellyfin_libraries.py || python3 "$(dirname "$0")/repair_jellyfin_libraries.py" || true
     fi
 
-    # Clean up empty movie directories or orphaned folders left behind after safe moves
+    # Clean up empty movie directories or orphaned folders left behind after safe moves (only empty directories)
     find /data/jellyfin/media/Movies -mindepth 2 -type d -empty -delete 2>/dev/null || true
-    if [ -d "/data/jellyfin/media/Movies/English" ]; then
-        find "/data/jellyfin/media/Movies/English" -mindepth 1 -maxdepth 1 -type d -exec bash -c 'for d; do [ -z "$(find "$d" -name "*.strm" 2>/dev/null)" ] && rm -rf "$d"; done' _ {} + 2>/dev/null || true
-    fi
 
     # Clean up corrupt, 0-byte, or broken suffix subtitle files that cause ffprobe failure
     find /data/jellyfin/media /opt/jellyfin-local/media /data/movies /data/tvshows -type f \( -name "*.srt" -o -name "*.vtt" -o -name "*.ass" \) -size 0 -delete 2>/dev/null || true

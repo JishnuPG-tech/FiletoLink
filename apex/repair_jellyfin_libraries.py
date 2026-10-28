@@ -132,7 +132,7 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
 
         # Purge invalid structural entries (e.g. legacy flat TV folder that breaks series resolution)
         cur.execute(
-            "DELETE FROM BaseItems WHERE Path LIKE '%/TV Shows/English%' "
+            "DELETE FROM BaseItems WHERE Path IN ('/data/jellyfin/media/TV Shows/English', '/opt/jellyfin-local/media/TV Shows/English') "
             "OR (Name = 'English' AND type LIKE '%Series%')"
         )
         purged = cur.rowcount
@@ -153,29 +153,23 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
             cur.executemany("DELETE FROM BaseItems WHERE Id = ?", [(oid,) for oid in orphaned])
             print(f"[REPAIR] Removed {len(orphaned)} orphaned item row(s) whose files no longer exist on disk.")
 
-        # Clean up duplicate Movie titles if any exist in BaseItems (e.g. duplicate Ne Zha 2)
+        # Deduplicate identical database rows pointing to the exact same file path on disk
         cur.execute(
-            "SELECT Id, Path, Name FROM BaseItems WHERE type LIKE '%Movie%' AND Path IS NOT NULL"
+            "SELECT Id, Path FROM BaseItems WHERE Path IS NOT NULL"
         )
-        seen_names = {}
+        seen_paths = set()
         dup_to_delete = []
-        for row_id, item_path, item_name in cur.fetchall():
-            if not item_name:
+        for row_id, item_path in cur.fetchall():
+            if not item_path:
                 continue
-            clean_name = item_name.strip().lower()
-            exists = os.path.exists(item_path) if item_path else False
-            if clean_name in seen_names:
-                prev_id, prev_path, prev_exists = seen_names[clean_name]
-                if not exists:
-                    dup_to_delete.append(row_id)
-                elif not prev_exists:
-                    dup_to_delete.append(prev_id)
-                    seen_names[clean_name] = (row_id, item_path, exists)
+            norm_p = os.path.normpath(item_path).lower()
+            if norm_p in seen_paths:
+                dup_to_delete.append(row_id)
             else:
-                seen_names[clean_name] = (row_id, item_path, exists)
+                seen_paths.add(norm_p)
         if dup_to_delete:
             cur.executemany("DELETE FROM BaseItems WHERE Id = ?", [(did,) for did in dup_to_delete])
-            print(f"[REPAIR] Removed {len(dup_to_delete)} duplicate movie row(s) from {db_path}.")
+            print(f"[REPAIR] Removed {len(dup_to_delete)} duplicate row(s) pointing to identical paths from {db_path}.")
 
         # Check and repair Users table: clear password and login attempt lockouts
         cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Users'")
@@ -401,7 +395,7 @@ def heal_subtitle_files(roots=None):
 
 
 def heal_mismatched_media(roots=None, databases=None):
-    """Clean folder/file release-size noise and purge misidentified metadata (e.g. Generation Iron on Iron Man 3)."""
+    """Clean folder/file release-size noise non-destructively and update DB paths."""
     search_roots = roots or [
         "/data/jellyfin/media/Movies",
         "/data/jellyfin/media/TV Shows",
@@ -465,389 +459,6 @@ def heal_mismatched_media(roots=None, databases=None):
                                             pass
                             except Exception as strm_err:
                                 print(f"[REPAIR] Note renaming strm {old_strm}: {strm_err}")
-
-            # 3. Purge Generation Iron misidentification
-            dir_lower = dirname.lower()
-            is_gen_iron_folder = "generation iron" in dir_lower
-            is_iron_man_folder = "iron" in dir_lower and "man" in dir_lower
-            has_gen_iron = is_gen_iron_folder
-
-            if is_iron_man_folder or is_gen_iron_folder:
-                try:
-                    curr_files = os.listdir(dirpath)
-                except Exception:
-                    curr_files = []
-                for fn in curr_files:
-                    if fn.lower().endswith(".nfo"):
-                        nfo_p = os.path.join(dirpath, fn)
-                        try:
-                            with open(nfo_p, "r", encoding="utf-8", errors="ignore") as nf:
-                                content = nf.read()
-                            if "210879" in content or "generation iron" in content.lower() or "tt2205904" in content:
-                                has_gen_iron = True
-                                break
-                        except Exception:
-                            pass
-                if has_gen_iron:
-                    print(f"[REPAIR] Purging mismatched 'Generation Iron' metadata from '{dirpath}'...")
-                    # If the folder on disk was named Generation Iron, rename to Iron Man 3 (2013)
-                    if is_gen_iron_folder:
-                        parent_d = os.path.dirname(dirpath)
-                        im3_dir = os.path.join(parent_d, "Iron Man 3 (2013)")
-                        for fn in list(curr_files):
-                            if fn.lower().endswith(".strm"):
-                                old_s = os.path.join(dirpath, fn)
-                                new_s = os.path.join(dirpath, "Iron Man 3 (2013).strm")
-                                if not os.path.exists(new_s):
-                                    try:
-                                        os.rename(old_s, new_s)
-                                    except Exception:
-                                        pass
-                        if not os.path.exists(im3_dir):
-                            try:
-                                os.rename(dirpath, im3_dir)
-                                dirpath = im3_dir
-                                curr_files = os.listdir(dirpath)
-                            except Exception:
-                                pass
-
-                    for fn in curr_files:
-                        fn_l = fn.lower()
-                        if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l in ("poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg", "logo.png", "clearlogo.png"):
-                            try:
-                                os.remove(os.path.join(dirpath, fn))
-                            except Exception:
-                                pass
-                    for db_p in db_list:
-                        if os.path.exists(db_p):
-                            try:
-                                conn = sqlite3.connect(db_p, timeout=5)
-                                conn.execute("DELETE FROM BaseItems WHERE Name LIKE '%Generation Iron%' OR Data LIKE '%210879%' OR Path LIKE '%Generation Iron%'")
-                                conn.commit()
-                                try:
-                                    conn.execute("UPDATE BaseItems SET Images = NULL WHERE Path LIKE '%Iron Man%'")
-                                    conn.commit()
-                                except Exception:
-                                    pass
-                                conn.close()
-                            except Exception:
-                                pass
-
-                # If this is Iron Man 3 folder, ensure stale Generation Iron logo is purged so official Iron Man 3 logo is downloaded
-                is_im3 = "iron" in dir_lower and "man" in dir_lower and ("3" in dir_lower or "2013" in dir_lower)
-                if is_im3:
-                    for fn in curr_files:
-                        if fn.lower() in ("logo.png", "clearlogo.png"):
-                            try:
-                                os.remove(os.path.join(dirpath, fn))
-                                print(f"[REPAIR] Purged stale logo from '{dirpath}' to force clean Iron Man 3 logo fetch.")
-                            except Exception:
-                                pass
-                    for db_p in db_list:
-                        if os.path.exists(db_p):
-                            try:
-                                conn = sqlite3.connect(db_p, timeout=5)
-                                conn.execute("DELETE FROM BaseItems WHERE Name LIKE '%Generation Iron%' OR Data LIKE '%210879%'")
-                                conn.commit()
-                                try:
-                                    conn.execute("UPDATE BaseItems SET Images = NULL WHERE Path LIKE '%Iron Man 3%'")
-                                    conn.commit()
-                                except Exception:
-                                    pass
-                                conn.close()
-                            except Exception:
-                                pass
-
-            # 4. Heal Aadu 3 misidentification (e.g. wrongly identified as Aadu 1 or placed in Aadu (2015))
-            has_aadu_3 = False
-            for f in curr_files:
-                fl = f.lower()
-                if fl.endswith(".strm") and "aadu" in fl and ("3" in fl or "part" in fl):
-                    has_aadu_3 = True
-                    break
-            if "aadu" in dir_lower and ("3" in dir_lower or "part" in dir_lower):
-                has_aadu_3 = True
-
-            if has_aadu_3:
-                mismatched_aadu = False
-                for fn in curr_files:
-                    if fn.lower().endswith(".nfo"):
-                        nfo_p = os.path.join(dirpath, fn)
-                        try:
-                            with open(nfo_p, "r", encoding="utf-8", errors="ignore") as nf:
-                                content = nf.read()
-                            if "324976" in content or "489709" in content or ("<title>Aadu</title>" in content and "<title>Aadu 3" not in content):
-                                mismatched_aadu = True
-                                break
-                        except Exception:
-                            pass
-                is_wrong_dir = dirname in ("Aadu (2015)", "Aadu", "Aadu 2") or "/Movies/English" in dirpath
-                if mismatched_aadu or is_wrong_dir:
-                    print(f"[REPAIR] Healing Aadu 3 media from '{dirpath}'...")
-                    target_aadu_dir = "/data/jellyfin/media/Movies/Malayalam/Aadu 3 Part 1 (2026)"
-                    os.makedirs(target_aadu_dir, exist_ok=True)
-                    for fn in list(curr_files):
-                        if fn.lower().endswith(".strm"):
-                            old_s = os.path.join(dirpath, fn)
-                            new_s = os.path.join(target_aadu_dir, "Aadu 3 Part 1 (2026).strm")
-                            if old_s != new_s:
-                                try:
-                                    if not os.path.exists(new_s):
-                                        os.rename(old_s, new_s)
-                                    else:
-                                        os.remove(old_s)
-                                    print(f"[REPAIR] Relocated Aadu 3 strm: '{old_s}' -> '{new_s}'")
-                                except Exception as mv_err:
-                                    print(f"[REPAIR] Error moving Aadu 3 strm: {mv_err}")
-                    # Remove mismatched artwork/nfo from old directory
-                    for fn in curr_files:
-                        fn_l = fn.lower()
-                        if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l in ("poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg"):
-                            try:
-                                os.remove(os.path.join(dirpath, fn))
-                            except Exception:
-                                pass
-                    for db_p in db_list:
-                        if os.path.exists(db_p):
-                            try:
-                                conn = sqlite3.connect(db_p, timeout=5)
-                                conn.execute("DELETE FROM BaseItems WHERE Path LIKE '%Aadu 3%' OR (Path LIKE '%Aadu%' AND (Data LIKE '%324976%' OR Data LIKE '%489709%'))")
-                                conn.commit()
-                                conn.close()
-                            except Exception:
-                                pass
-
-            # 5. Heal It: Welcome to Derry and purge accidental "The Summer I Turned Pretty" misidentification
-            has_derry_strm = any("derry" in f.lower() for f in curr_files if f.lower().endswith(".strm"))
-            is_summer_folder = "summer i turned pretty" in dir_lower or "the summer i turned pretty" in dir_lower
-            is_derry_folder = "derry" in dir_lower or "welcome to derry" in dir_lower
-
-            if is_summer_folder or has_derry_strm or (is_derry_folder and any("summer" in f.lower() for f in curr_files)):
-                print(f"[REPAIR] Healing Derry / Summer I Turned Pretty from '{dirpath}'...")
-                target_derry_root = "/data/jellyfin/media/TV Shows/It Welcome to Derry (2025)"
-                target_derry_s1 = os.path.join(target_derry_root, "Season 01")
-                os.makedirs(target_derry_s1, exist_ok=True)
-
-                for fn in list(curr_files):
-                    if fn.lower().endswith(".strm"):
-                        old_s = os.path.join(dirpath, fn)
-                        new_s = os.path.join(target_derry_s1, "It Welcome to Derry S01E01.strm")
-                        if old_s != new_s:
-                            try:
-                                if not os.path.exists(new_s):
-                                    os.rename(old_s, new_s)
-                                else:
-                                    os.remove(old_s)
-                                print(f"[REPAIR] Relocated Derry strm: '{old_s}' -> '{new_s}'")
-                            except Exception as mv_err:
-                                print(f"[REPAIR] Error relocating Derry strm: {mv_err}")
-
-                if is_summer_folder:
-                    try:
-                        shutil.rmtree(dirpath, ignore_errors=True)
-                        print(f"[REPAIR] Removed corrupt 'The Summer I Turned Pretty' directory: {dirpath}")
-                    except Exception as rm_err:
-                        print(f"[REPAIR] Error removing corrupt Summer folder: {rm_err}")
-                # Remove ANY stale artwork / logo / nfo from Derry show root and season dir to force clean fetch
-                for clean_dir in (dirpath, target_derry_root, target_derry_s1):
-                    if os.path.exists(clean_dir):
-                        try:
-                            for fn in os.listdir(clean_dir):
-                                fn_l = fn.lower()
-                                if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l.startswith("backdrop") or fn_l in ("poster.jpg", "folder.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg", "logo.png", "clearlogo.png"):
-                                    try:
-                                        os.remove(os.path.join(clean_dir, fn))
-                                        print(f"[REPAIR] Purged stale Derry art/nfo: {fn} from {clean_dir}")
-                                    except Exception:
-                                        pass
-                        except Exception:
-                            pass
-
-                for db_p in db_list:
-                    if os.path.exists(db_p):
-                        try:
-                            conn = sqlite3.connect(db_p, timeout=5)
-                            conn.execute("DELETE FROM BaseItems WHERE Name LIKE '%Summer I Turned Pretty%' OR Path LIKE '%Summer I Turned Pretty%'")
-                            conn.execute("DELETE FROM BaseItems WHERE Name LIKE '%Welcome to Derry%' OR Path LIKE '%Derry%'")
-                            conn.execute("DELETE FROM BaseItems WHERE Path LIKE '%194766%' OR Data LIKE '%194766%'")
-                            conn.commit()
-                            conn.close()
-                        except Exception as dbe:
-                            print(f"[REPAIR] DB cleanup notice for Derry/Summer: {dbe}")
-
-                # Atomically write authentic Derry tvshow.nfo
-                derry_nfo_path = os.path.join(target_derry_root, "tvshow.nfo")
-                derry_nfo_content = """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<tvshow>
-  <title>It: Welcome to Derry</title>
-  <originaltitle>It: Welcome to Derry</originaltitle>
-  <showtitle>It: Welcome to Derry</showtitle>
-  <year>2025</year>
-  <premiered>2025-10-01</premiered>
-  <plot>Set in the world of Stephen King's IT, the prequel series expands the vision established in the feature films.</plot>
-  <uniqueid type="imdb" default="true">tt19244304</uniqueid>
-  <uniqueid type="tmdb">200875</uniqueid>
-  <imdbid>tt19244304</imdbid>
-  <tmdbid>200875</tmdbid>
-  <genre>Drama</genre>
-  <genre>Mystery</genre>
-  <genre>Sci-Fi &amp; Fantasy</genre>
-</tvshow>
-"""
-                try:
-                    with open(derry_nfo_path, "w", encoding="utf-8") as f:
-                        f.write(derry_nfo_content)
-                    print(f"[REPAIR] Wrote authentic Derry tvshow.nfo: {derry_nfo_path}")
-                except Exception as we:
-                    print(f"[REPAIR] Error writing Derry tvshow.nfo: {we}")
-
-                # Download authentic Derry poster and backdrop immediately
-                derry_poster_url = "https://m.media-amazon.com/images/M/MV5BZWE0ZWM1MjUtNmYzYS00NzU3LTkxYmQtNmI3NTc0ZTY1NmVlXkEyXkFqcGc@._V1_.jpg"
-                derry_backdrop_url = "https://images.metahub.space/background/medium/tt19244304/img"
-                derry_p = os.path.join(target_derry_root, "poster.jpg")
-                derry_b = os.path.join(target_derry_root, "backdrop.jpg")
-
-                if _download_art_sync(derry_poster_url, derry_p):
-                    for cp in ("folder.jpg", "thumb.jpg", "season01-poster.jpg", "season-all-poster.jpg"):
-                        try:
-                            shutil.copyfile(derry_p, os.path.join(target_derry_root, cp))
-                        except Exception:
-                            pass
-                    try:
-                        shutil.copyfile(derry_p, os.path.join(target_derry_s1, "folder.jpg"))
-                        shutil.copyfile(derry_p, os.path.join(target_derry_s1, "poster.jpg"))
-                    except Exception:
-                        pass
-                    print(f"[REPAIR] Downloaded authentic Derry poster to {derry_p}")
-
-                if _download_art_sync(derry_backdrop_url, derry_b):
-                    for cp in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
-                        try:
-                            shutil.copyfile(derry_b, os.path.join(target_derry_root, cp))
-                        except Exception:
-                            pass
-                    print(f"[REPAIR] Downloaded authentic Derry backdrop to {derry_b}")
-
-            # 6. Heal What If...? (2021) Marvel and purge Chinese Romance drama (2024, tt27122945)
-            has_whatif_strm = any("what" in f.lower() and "if" in f.lower() for f in curr_files if f.lower().endswith(".strm"))
-            is_whatif_2024 = "what if (2024)" in dir_lower or (("what if" in dir_lower or "what.if" in dir_lower) and "2024" in dirpath)
-            is_whatif_folder = ("what if" in dir_lower or "what.if" in dir_lower) and "christmas" not in dir_lower
-
-            has_chinese_meta = False
-            for fn in curr_files:
-                if fn.lower().endswith(".nfo"):
-                    try:
-                        with open(os.path.join(dirpath, fn), "r", encoding="utf-8", errors="ignore") as nff:
-                            nfc = nff.read()
-                        if "27122945" in nfc or "2024" in nfc or "xia guo" in nfc.lower():
-                            has_chinese_meta = True
-                            break
-                    except Exception:
-                        pass
-
-            if is_whatif_2024 or has_chinese_meta or (is_whatif_folder and has_whatif_strm):
-                print(f"[REPAIR] Healing What If...? media from '{dirpath}'...")
-                target_whatif_root = "/data/jellyfin/media/TV Shows/What If (2021)"
-                target_whatif_s1 = os.path.join(target_whatif_root, "Season 01")
-                os.makedirs(target_whatif_s1, exist_ok=True)
-
-                for fn in list(curr_files):
-                    if fn.lower().endswith(".strm"):
-                        old_s = os.path.join(dirpath, fn)
-                        new_s = os.path.join(target_whatif_s1, "What If S01E01.strm")
-                        if old_s != new_s:
-                            try:
-                                if not os.path.exists(new_s):
-                                    os.rename(old_s, new_s)
-                                else:
-                                    os.remove(old_s)
-                                print(f"[REPAIR] Relocated What If strm: '{old_s}' -> '{new_s}'")
-                            except Exception as mv_err:
-                                print(f"[REPAIR] Error relocating What If strm: {mv_err}")
-
-                if is_whatif_2024 or has_chinese_meta:
-                    for clean_dir in (dirpath, target_whatif_root, target_whatif_s1):
-                        if os.path.exists(clean_dir):
-                            try:
-                                for fn in os.listdir(clean_dir):
-                                    fn_l = fn.lower()
-                                    if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l.startswith("backdrop") or fn_l in ("poster.jpg", "folder.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg", "logo.png", "clearlogo.png"):
-                                        try:
-                                            os.remove(os.path.join(clean_dir, fn))
-                                        except Exception:
-                                            pass
-                            except Exception:
-                                pass
-                    if is_whatif_2024:
-                        try:
-                            shutil.rmtree(dirpath, ignore_errors=True)
-                            print(f"[REPAIR] Removed corrupt 'What If (2024)' folder: {dirpath}")
-                        except Exception:
-                            pass
-
-                for db_p in db_list:
-                    if os.path.exists(db_p):
-                        try:
-                            conn = sqlite3.connect(db_p, timeout=5)
-                            conn.execute("DELETE FROM BaseItems WHERE (Name LIKE '%What If%' AND (Path LIKE '%2024%' OR Data LIKE '%27122945%'))")
-                            conn.execute("DELETE FROM BaseItems WHERE Name LIKE '%What If%' OR Path LIKE '%What If%'")
-                            conn.commit()
-                            conn.close()
-                        except Exception as dbe:
-                            print(f"[REPAIR] DB cleanup notice for What If: {dbe}")
-
-                # Atomically write authentic Marvel What If...? tvshow.nfo
-                whatif_nfo_path = os.path.join(target_whatif_root, "tvshow.nfo")
-                whatif_nfo_content = """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<tvshow>
-  <title>What If...?</title>
-  <originaltitle>What If...?</originaltitle>
-  <showtitle>What If...?</showtitle>
-  <year>2021</year>
-  <premiered>2021-08-11</premiered>
-  <plot>Exploring pivotal moments from the Marvel Cinematic Universe and turning them on their head, leading the audience into uncharted territory.</plot>
-  <uniqueid type="imdb" default="true">tt10168312</uniqueid>
-  <uniqueid type="tmdb">91363</uniqueid>
-  <imdbid>tt10168312</imdbid>
-  <tmdbid>91363</tmdbid>
-  <genre>Animation</genre>
-  <genre>Action &amp; Adventure</genre>
-  <genre>Sci-Fi &amp; Fantasy</genre>
-</tvshow>
-"""
-                try:
-                    with open(whatif_nfo_path, "w", encoding="utf-8") as f:
-                        f.write(whatif_nfo_content)
-                    print(f"[REPAIR] Wrote authentic What If tvshow.nfo: {whatif_nfo_path}")
-                except Exception as we:
-                    print(f"[REPAIR] Error writing What If tvshow.nfo: {we}")
-
-                # Download authentic Marvel What If...? poster and backdrop immediately
-                whatif_poster_url = "https://m.media-amazon.com/images/M/MV5BYWFiOTcwNzItMTg5Mi00ZTU4LThkZWYtYWNmZWQ1ODE5ZTVmXkEyXkFqcGc@._V1_.jpg"
-                whatif_backdrop_url = "https://images.metahub.space/background/medium/tt10168312/img"
-                whatif_p = os.path.join(target_whatif_root, "poster.jpg")
-                whatif_b = os.path.join(target_whatif_root, "backdrop.jpg")
-
-                if _download_art_sync(whatif_poster_url, whatif_p):
-                    for cp in ("folder.jpg", "thumb.jpg", "season01-poster.jpg", "season-all-poster.jpg"):
-                        try:
-                            shutil.copyfile(whatif_p, os.path.join(target_whatif_root, cp))
-                        except Exception:
-                            pass
-                    try:
-                        shutil.copyfile(whatif_p, os.path.join(target_whatif_s1, "folder.jpg"))
-                        shutil.copyfile(whatif_p, os.path.join(target_whatif_s1, "poster.jpg"))
-                    except Exception:
-                        pass
-                    print(f"[REPAIR] Downloaded authentic What If poster to {whatif_p}")
-
-                if _download_art_sync(whatif_backdrop_url, whatif_b):
-                    for cp in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
-                        try:
-                            shutil.copyfile(whatif_b, os.path.join(target_whatif_root, cp))
-                        except Exception:
-                            pass
-                    print(f"[REPAIR] Downloaded authentic What If backdrop to {whatif_b}")
 
 
 def repair_user_subtitle_preferences(configs=None):

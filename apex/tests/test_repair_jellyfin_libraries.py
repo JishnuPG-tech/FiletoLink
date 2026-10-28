@@ -304,7 +304,7 @@ def test_repair_user_policy_preferences(tmp_path):
     assert "<EnableAudioPlaybackTranscoding>true</EnableAudioPlaybackTranscoding>" in content
 
 
-def test_heal_mismatched_media_cleans_noise_and_purges_mismatch(tmp_path):
+def test_heal_mismatched_media_cleans_noise_and_updates_db_path(tmp_path):
     movies_dir = tmp_path / "media" / "Movies" / "English"
     movies_dir.mkdir(parents=True)
 
@@ -314,11 +314,9 @@ def test_heal_mismatched_media_cleans_noise_and_purges_mismatch(tmp_path):
     strm_file = im3_dir / "Iron Man 3 780Mb (2013).strm"
     strm_file.write_text("http://localhost:8080/stream/123")
     nfo_file = im3_dir / "movie.nfo"
-    nfo_file.write_text("<movie><title>Generation Iron</title><tmdbid>210879</tmdbid><id>tt2205904</id></movie>")
+    nfo_file.write_text("<movie><title>Iron Man 3</title><tmdbid>68721</tmdbid></movie>")
     poster_file = im3_dir / "poster.jpg"
-    poster_file.write_bytes(b"fake poster bytes")
-    sub_file = im3_dir / "Iron Man 3 780Mb (2013).eng.srt"
-    sub_file.write_text("1\n00:00:01,000 --> 00:00:03,000\nWrong dialogue\n")
+    poster_file.write_bytes(b"poster bytes")
 
     db_file = tmp_path / "jellyfin.db"
     conn = sqlite3.connect(str(db_file))
@@ -335,7 +333,7 @@ def test_heal_mismatched_media_cleans_noise_and_purges_mismatch(tmp_path):
     """)
     cur.execute(
         "INSERT INTO BaseItems VALUES (?, ?, ?, ?, ?, ?)",
-        ("im3-id", str(strm_file), "Generation Iron", "MediaBrowser.Controller.Entities.Movies.Movie", '{"tmdb_id": 210879}', "2026-10-24T00:00:00Z")
+        ("im3-id", str(strm_file), "Iron Man 3", "MediaBrowser.Controller.Entities.Movies.Movie", '{"tmdb_id": 68721}', "2026-10-24T00:00:00Z")
     )
     conn.commit()
     conn.close()
@@ -351,17 +349,91 @@ def test_heal_mismatched_media_cleans_noise_and_purges_mismatch(tmp_path):
     assert clean_strm.exists()
     assert clean_strm.read_text() == "http://localhost:8080/stream/123"
 
-    # Mismatched Generation Iron NFO, poster, and subtitle must be purged from disk
-    assert not (clean_dir / "movie.nfo").exists()
-    assert not (clean_dir / "poster.jpg").exists()
-    assert not (clean_dir / "Iron Man 3 (2013).eng.srt").exists()
+    # Sidecars are preserved non-destructively
+    assert (clean_dir / "movie.nfo").exists()
+    assert (clean_dir / "poster.jpg").exists()
 
-    # In database, Generation Iron row must be purged
+    # In database, the item must be preserved and its Path updated to the cleaned .strm path
     conn = sqlite3.connect(str(db_file))
     cur = conn.cursor()
     cur.execute("SELECT Id, Name, Path FROM BaseItems")
     rows = cur.fetchall()
     conn.close()
-    assert len(rows) == 0
+    assert len(rows) == 1
+    assert rows[0][0] == "im3-id"
+    assert rows[0][1] == "Iron Man 3"
+    assert rows[0][2] == str(clean_strm)
+
+
+def test_legitimate_media_preserved_during_repair(tmp_path):
+    """Ensure legitimate titles like Generation Iron, What If, The Summer I Turned Pretty,
+    It: Welcome to Derry, and Aadu 3 are never purged by repair routines."""
+    media_root = tmp_path / "media"
+    movies_dir = media_root / "Movies"
+    tv_dir = media_root / "TV Shows"
+    movies_dir.mkdir(parents=True)
+    tv_dir.mkdir(parents=True)
+
+    db_file = tmp_path / "jellyfin.db"
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE BaseItems (
+            Id TEXT PRIMARY KEY,
+            Path TEXT,
+            Name TEXT,
+            type TEXT,
+            Data TEXT,
+            DateModified TEXT
+        )
+    """)
+
+    test_titles = [
+        ("gen-iron-id", movies_dir / "Generation Iron (2013)", "Generation Iron (2013).strm", "Generation Iron", "MediaBrowser.Controller.Entities.Movies.Movie"),
+        ("what-if-id", movies_dir / "What If (2024)", "What If (2024).strm", "What If", "MediaBrowser.Controller.Entities.Movies.Movie"),
+        ("summer-id", tv_dir / "The Summer I Turned Pretty (2022)" / "Season 1", "The Summer I Turned Pretty - S01E01.strm", "The Summer I Turned Pretty", "MediaBrowser.Controller.Entities.TV.Episode"),
+        ("derry-id", tv_dir / "It Welcome to Derry (2025)" / "Season 1", "It Welcome to Derry - S01E01.strm", "It: Welcome to Derry", "MediaBrowser.Controller.Entities.TV.Episode"),
+        ("aadu3-id", movies_dir / "Aadu 3 (2026)", "Aadu 3 (2026).strm", "Aadu 3", "MediaBrowser.Controller.Entities.Movies.Movie"),
+    ]
+
+    for item_id, folder, strm_name, name, itype in test_titles:
+        folder.mkdir(parents=True, exist_ok=True)
+        strm_path = folder / strm_name
+        strm_path.write_text("http://stream/" + item_id)
+        nfo_path = folder / "movie.nfo"
+        nfo_path.write_text(f"<item><title>{name}</title></item>")
+        poster_path = folder / "poster.jpg"
+        poster_path.write_bytes(b"dummy poster")
+
+        cur.execute(
+            "INSERT INTO BaseItems VALUES (?, ?, ?, ?, ?, ?)",
+            (item_id, str(strm_path), name, itype, "{}", "2026-10-28T00:00:00Z")
+        )
+
+    conn.commit()
+    conn.close()
+
+    # Execute all repair procedures
+    heal_mismatched_media(roots=[str(media_root)], databases=[str(db_file)])
+    cleanup_empty_media_folders(roots=[str(movies_dir), str(tv_dir)])
+    repair_database(str(db_file))
+
+    # Verify that all media files, sidecars, and database rows are 100% intact
+    for item_id, folder, strm_name, name, itype in test_titles:
+        strm_path = folder / strm_name
+        assert strm_path.exists(), f"STRM file missing for {name}: {strm_path}"
+        assert (folder / "movie.nfo").exists(), f"NFO missing for {name}"
+        assert (folder / "poster.jpg").exists(), f"Poster missing for {name}"
+
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("SELECT Id, Name FROM BaseItems")
+    db_items = {row[0]: row[1] for row in cur.fetchall()}
+    conn.close()
+
+    for item_id, _, _, name, _ in test_titles:
+        assert item_id in db_items, f"BaseItems row was unexpectedly purged for {name} ({item_id})"
+        assert db_items[item_id] == name
+
 
 

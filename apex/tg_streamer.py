@@ -2205,20 +2205,7 @@ async def _enrich_media_metadata(entry):
                             break
                     except Exception:
                         pass
-            if not hit:
-                hit = {
-                    "id": 9898301,
-                    "title": "Aadu 3 Part 1",
-                    "original_title": "ആട് 3 പാർട്ട് 1",
-                    "release_date": "2026-03-19",
-                    "original_language": "ml",
-                    "overview": "Shaji Pappan and his eccentric gang return in an ambitious, multi-timeline adventure involving reincarnation and comedic chaos across eras.",
-                    "genres": [{"id": 35, "name": "Comedy"}, {"id": 14, "name": "Fantasy"}],
-                    "poster_path": "https://upload.wikimedia.org/wikipedia/en/6/6f/Aadu_3_Film.jpg",
-                }
-                used_query = "Aadu 3 Part 1"
-                entry["tmdb_id"] = 9898301
-                logger.info("[TMDB] Configured authoritative metadata for Aadu 3 Part 1 (2026)")
+
 
         # "Khalifa" (2026 Malayalam action-thriller starring Prithviraj Sukumaran, IMDb tt22797990):
         # Prevent any misclassification to unrelated indie films like "Queer Khalifa" (TMDB 1283921)
@@ -2258,30 +2245,6 @@ async def _enrich_media_metadata(entry):
         if "paradise" in raw_name_lower and "siege" not in raw_name_lower:
             if hit and ("siege" in str(hit.get("title") or "").lower() or hit.get("id") in (139281,)):
                 hit = None
-            if not hit:
-                entry["title"] = "The Paradise"
-                entry["clean_title"] = "The Paradise"
-                entry["search_title"] = "the paradise"
-                entry["strm_base"] = "The Paradise (2026)"
-                entry["year"] = 2026
-                entry["imdb_id"] = "tt31969655"
-                entry["_force_art_refresh"] = True
-                target_dir = strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
-                entry["target_dir"] = target_dir
-                entry["strm_path"] = os.path.join(target_dir, "The Paradise (2026).strm")
-                hit = {
-                    "id": 99931969,
-                    "title": "The Paradise",
-                    "original_title": "The Paradise",
-                    "release_date": "2026-06-01",
-                    "original_language": "te",
-                    "overview": "In 1980s Secunderabad, a marginalized tribe battles discrimination and fights for citizenship under an unexpected leader's guidance, challenging systemic oppression.",
-                    "genres": [{"id": 28, "name": "Action"}, {"id": 18, "name": "Drama"}],
-                    "imdb_id": "tt31969655",
-                    "poster_path": "https://m.media-amazon.com/images/M/MV5BMGI3N2I1ZWUtYzMyZS00MTRlLThlNDUtNWZhY2MxZTlmMDJjXkEyXkFqcGc@._V1_.jpg",
-                }
-                used_query = "The Paradise"
-                logger.info("[METADATA] Resolved The Paradise directly to official 2026 movie (IMDb tt31969655)")
 
         # "It: Welcome to Derry" (2025 TV Series, IMDb tt19244304):
         if "derry" in raw_name_lower:
@@ -2479,7 +2442,7 @@ async def _enrich_media_metadata(entry):
         tmdb_id = hit.get("id")
         img_lang_param = "en,null,hi,ta,te,ml,bn,mr,kn,pa"
         detail = None
-        if TMDB_API_KEY and tmdb_id and tmdb_id not in (9898301, 1036081, 99931969):
+        if TMDB_API_KEY and tmdb_id:
             try:
                 if is_tv:
                     detail = await _tmdb_get(f"/tv/{tmdb_id}", {"append_to_response": f"images,season/{int(entry.get('season') or 1)}", "include_image_language": img_lang_param})
