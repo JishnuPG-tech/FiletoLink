@@ -214,12 +214,7 @@ def load_cache():
         tmdb_t = (data.get("tmdb_title") or "").lower()
         title_l = (data.get("title") or "").lower()
 
-        # 0. Purge rogue/blacklisted items (e.g. WWE Money in the Bank)
-        if is_blacklisted(raw_name) or is_blacklisted(tmdb_t) or is_blacklisted(title_l) or any(r in raw_lower or r in tmdb_t or r in title_l for r in ("wwe", "money in the bank")):
-            logger.info(f"[CACHE-PURGE] Purging rogue/blacklisted item from cache: key={key}, raw='{raw_name}'")
-            FILE_ID_CACHE.pop(key, None)
-            cache_updated = True
-            continue
+
 
         # 1. Heal Generation Iron misidentification on Iron Man movies
         is_gen_iron = (
@@ -5563,64 +5558,34 @@ async def _reconcile_and_upgrade_library():
             except Exception as exc:
                 logger.warning(f"[MERGE-SHOWS] Error merging duplicate TV folders: {exc}")
 
-        # Purge any file containing "mot test servicing"
+        # Step 1: Scan library roots and clean only genuinely empty directories with os.rmdir
         for root in (MOVIES_DIR, SHOWS_DIR):
             if not os.path.exists(root):
                 continue
             for dirpath, dirnames, filenames in os.walk(root, topdown=False):
-                for fn in filenames:
-                    if is_blacklisted(fn):
-                        try:
-                            os.remove(os.path.join(dirpath, fn))
-                            logger.info(f"[PURGE] Removed blacklisted file: {fn}")
-                        except OSError:
-                            pass
+                if dirpath == root:
+                    continue
+                # Never delete media files or directories automatically based on blacklist strings
                 for dn in dirnames:
-                    if is_blacklisted(dn):
-                        try:
-                            shutil.rmtree(os.path.join(dirpath, dn), ignore_errors=True)
-                            logger.info(f"[PURGE] Removed blacklisted directory: {dn}")
-                        except OSError:
-                            pass
-
-                    # Remove abandoned movie directories that have no media (.strm) files left
                     full_dn = os.path.join(dirpath, dn)
-                    if root == MOVIES_DIR and os.path.isdir(full_dn):
+                    if os.path.isdir(full_dn):
                         try:
-                            subdirs = [sd for sd in os.listdir(full_dn) if os.path.isdir(os.path.join(full_dn, sd))]
-                            if not subdirs:
-                                has_strm = any(f.endswith((".strm", ".mp4", ".mkv")) for f in os.listdir(full_dn))
-                                if not has_strm:
-                                    shutil.rmtree(full_dn, ignore_errors=True)
-                                    logger.info(f"[PURGE] Removed abandoned movie folder without media: {dn}")
+                            # Only remove directory if it is genuinely empty (never recursive)
+                            if not os.listdir(full_dn):
+                                os.rmdir(full_dn)
+                                logger.info(f"[RECONCILE] Removed empty directory: {dn}")
                         except OSError:
                             pass
 
-        # Step 2: Remove blacklisted items from FILE_ID_CACHE
-        keys_to_purge = []
+        # Step 2: Quarantine blacklisted candidates into review queue without deleting files or directories
         for key, data in list(FILE_ID_CACHE.items()):
             if not isinstance(data, dict):
                 continue
             name = data.get("file_name") or data.get("title") or ""
             strm_path = data.get("strm_path") or ""
-            target_dir = data.get("target_dir") or ""
             if is_blacklisted(name) or is_blacklisted(strm_path):
-                keys_to_purge.append(key)
-                if strm_path and os.path.exists(strm_path):
-                    try:
-                        os.remove(strm_path)
-                    except OSError:
-                        pass
-                if target_dir and os.path.exists(target_dir):
-                    try:
-                        shutil.rmtree(target_dir, ignore_errors=True)
-                    except OSError:
-                        pass
-        if keys_to_purge:
-            for k in keys_to_purge:
-                FILE_ID_CACHE.pop(k, None)
-            await save_cache_async()
-            logger.info(f"[PURGE] Cleaned {len(keys_to_purge)} blacklisted cache items.")
+                logger.warning(f"[RECONCILE] Routing blacklisted candidate '{name}' to review queue (preserved on disk)")
+                _record_review_job(data, confidence=0.0, reason=f"blacklisted_review:{name}")
 
         # Step 3: Upgrade artwork or re-enrich mis-matched entries
         to_enrich = []

@@ -130,14 +130,14 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
                 print(f"[REPAIR] Healed '{name}' ({row_id}): Path -> '{views_path}', Locations -> {locs}")
                 repaired += 1
 
-        # Purge invalid structural entries (e.g. legacy flat TV folder that breaks series resolution)
-        cur.execute(
-            "DELETE FROM BaseItems WHERE Path IN ('/data/jellyfin/media/TV Shows/English', '/opt/jellyfin-local/media/TV Shows/English') "
-            "OR (Name = 'English' AND type LIKE '%Series%')"
-        )
-        purged = cur.rowcount
-        if purged > 0:
-            print(f"[REPAIR] Purged {purged} invalid structural item rows from {db_path}.")
+        # Safe structural check: clean legacy flat TV collection folder row only if the legacy directory no longer exists on disk
+        legacy_flat_paths = ('/data/jellyfin/media/TV Shows/English', '/opt/jellyfin-local/media/TV Shows/English')
+        for lp in legacy_flat_paths:
+            if not os.path.exists(lp):
+                cur.execute(
+                    "DELETE FROM BaseItems WHERE Path = ? AND type LIKE '%CollectionFolder%'",
+                    (lp,)
+                )
 
         # Clean up orphaned rows whose media files do not exist on disk (prevents duplicate ghost items).
         # Safeguard: strictly verify that path is a managed media file path (within library roots with media extensions)
@@ -178,15 +178,20 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
             print(f"[REPAIR] Removed {len(orphaned)} orphaned item row(s) whose files no longer exist on disk.")
 
         # Deduplicate identical database rows pointing to the exact same file path on disk
+        # Restricted strictly to playable media items (Movies and Episodes) so structural,
+        # CollectionFolder, and library entities are preserved.
         cur.execute(
-            "SELECT Id, Path FROM BaseItems WHERE Path IS NOT NULL"
+            "SELECT Id, Path, type FROM BaseItems "
+            "WHERE Path IS NOT NULL AND (type LIKE '%Movie%' OR type LIKE '%Episode%')"
         )
         seen_paths = set()
         dup_to_delete = []
-        for row_id, item_path in cur.fetchall():
+        for row_id, item_path, itype in cur.fetchall():
             if not item_path:
                 continue
             norm_p = os.path.normpath(item_path).lower()
+            if not norm_p.endswith(media_exts):
+                continue
             if norm_p in seen_paths:
                 dup_to_delete.append(row_id)
             else:
@@ -303,19 +308,34 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
 
 
 def cleanup_empty_media_folders(roots=None):
-    """Remove abandoned movie/show directories that contain no playable media files."""
+    """Safely remove genuinely empty movie/show directories using os.rmdir (non-recursive)."""
     search_roots = roots or ["/data/jellyfin/media/Movies", "/data/jellyfin/media/TV Shows", "/opt/jellyfin-local/media"]
+    all_media_exts = (
+        ".strm", ".mp4", ".mkv", ".avi", ".ts", ".mov", ".wmv",
+        ".m4v", ".webm", ".flv", ".iso", ".mpg", ".mpeg", ".m2ts"
+    )
+    sidecar_exts = (".nfo", ".xml", ".txt")
+
     for root_dir in search_roots:
         if not os.path.exists(root_dir):
             continue
         for dirpath, dirnames, filenames in os.walk(root_dir, topdown=False):
             if dirpath == root_dir:
                 continue
-            media_files = [f for f in filenames if f.endswith((".strm", ".mp4", ".mkv", ".avi", ".ts"))]
-            if not media_files and not dirnames:
+            has_media = any(f.lower().endswith(all_media_exts) for f in filenames)
+            if not has_media and not dirnames:
+                # If directory has only abandoned sidecars, clean sidecars first
+                sidecars = [f for f in filenames if f.lower().endswith(sidecar_exts)]
+                if len(sidecars) == len(filenames):
+                    for sf in sidecars:
+                        try:
+                            os.remove(os.path.join(dirpath, sf))
+                        except Exception:
+                            pass
+                # Prefer safe os.rmdir() when the directory is actually empty (never recursive)
                 try:
-                    shutil.rmtree(dirpath, ignore_errors=True)
-                except Exception:
+                    os.rmdir(dirpath)
+                except OSError:
                     pass
 
     # Clean up empty metadata library cache entries
@@ -334,46 +354,8 @@ def cleanup_empty_media_folders(roots=None):
 
 
 def purge_plugin_databases():
-    """Scan Jellyfin local and persistent data dirs for all plugin SQLite databases
-    (e.g., IntroSkipper.db, SkipMe.db) and purge any queued or metadata rows referencing
-    blacklisted items like Ms.Rose & Mr.Cane."""
-    search_dirs = [
-        "/opt/jellyfin-local/data",
-        "/data/jellyfin/data",
-    ]
-    for sdir in search_dirs:
-        if not os.path.exists(sdir):
-            continue
-        for root, _, files in os.walk(sdir):
-            for f in files:
-                if not f.endswith(".db"):
-                    continue
-                db_file = os.path.join(root, f)
-                try:
-                    conn = sqlite3.connect(db_file, timeout=5)
-                    cur = conn.cursor()
-                    cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-                    tables = [r[0] for r in cur.fetchall() if r[0] not in ("BaseItems", "sqlite_sequence")]
-                    for tbl in tables:
-                        cur.execute(f"PRAGMA table_info('{tbl}')")
-                        cols = cur.fetchall()
-                        text_cols = [
-                            c[1] for c in cols
-                            if any(t in str(c[2]).upper() for t in ("TEXT", "CHAR", "VARCHAR", "CLOB", "BLOB"))
-                            or c[1].lower() in ("path", "name", "title", "itemname")
-                        ]
-                        for col in text_cols:
-                            try:
-                                cur.execute(
-                                    f"DELETE FROM '{tbl}' WHERE \"{col}\" LIKE '%rose%cane%' "
-                                    f"OR \"{col}\" LIKE '%ms.rose%' OR \"{col}\" LIKE '%ms rose%'"
-                                )
-                            except Exception:
-                                pass
-                    conn.commit()
-                    conn.close()
-                except Exception:
-                    pass
+    """No-op safety stub: title-based plugin database purges have been completely eliminated."""
+    pass
 
 
 def heal_subtitle_files(roots=None):

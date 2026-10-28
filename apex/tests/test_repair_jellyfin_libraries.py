@@ -518,5 +518,87 @@ def test_cleanup_empty_media_folders_preserves_legitimate_metadata_cache(tmp_pat
     assert (whatif_cache / "backdrop.jpg").exists()
 
 
+def test_duplicate_path_cleanup_preserves_structural_and_collection_rows(tmp_path):
+    """Ensure duplicate path cleanup strictly deduplicates playable media items,
+    and preserves structural and collection folder entries."""
+    db_file = tmp_path / "jellyfin.db"
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE BaseItems (
+            Id TEXT PRIMARY KEY,
+            Path TEXT,
+            Name TEXT,
+            type TEXT,
+            Data TEXT,
+            DateModified TEXT
+        )
+    """)
+
+    shared_media_dir = tmp_path / "media" / "Movies" / "Movie A (2025)"
+    shared_media_dir.mkdir(parents=True)
+    shared_strm = shared_media_dir / "Movie A (2025).strm"
+    shared_strm.write_text("http://stream/a")
+
+    # Insert two duplicates pointing to the same strm file
+    cur.execute(
+        "INSERT INTO BaseItems VALUES (?, ?, ?, ?, ?, ?)",
+        ("mov-dup-1", str(shared_strm), "Movie A", "MediaBrowser.Controller.Entities.Movies.Movie", "{}", "2026-10-28T00:00:00Z")
+    )
+    cur.execute(
+        "INSERT INTO BaseItems VALUES (?, ?, ?, ?, ?, ?)",
+        ("mov-dup-2", str(shared_strm), "Movie A", "MediaBrowser.Controller.Entities.Movies.Movie", "{}", "2026-10-28T00:00:00Z")
+    )
+
+    # Insert structural CollectionFolder and Series folder
+    cur.execute(
+        "INSERT INTO BaseItems VALUES (?, ?, ?, ?, ?, ?)",
+        ("col-folder", "/data/jellyfin/data/collections/Movies", "Movies", "MediaBrowser.Controller.Entities.CollectionFolder", "{}", "2026-10-28T00:00:00Z")
+    )
+    cur.execute(
+        "INSERT INTO BaseItems VALUES (?, ?, ?, ?, ?, ?)",
+        ("series-english", str(tmp_path / "media" / "TV Shows" / "English (2022)"), "English", "MediaBrowser.Controller.Entities.TV.Series", "{}", "2026-10-28T00:00:00Z")
+    )
+    conn.commit()
+    conn.close()
+
+    # Create the series directory so it is existent on disk
+    (tmp_path / "media" / "TV Shows" / "English (2022)").mkdir(parents=True)
+
+    repair_database(str(db_file))
+
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("SELECT Id, Name FROM BaseItems")
+    items = {row[0]: row[1] for row in cur.fetchall()}
+    conn.close()
+
+    # Structural CollectionFolder must be preserved
+    assert "col-folder" in items
+    # Series named English must NOT be purged
+    assert "series-english" in items
+    assert items["series-english"] == "English"
+    # Exactly one Movie A duplicate must be retained
+    assert ("mov-dup-1" in items) ^ ("mov-dup-2" in items)
+
+
+def test_cleanup_empty_media_folders_never_deletes_non_empty_unrecognized_formats(tmp_path):
+    """Ensure cleanup_empty_media_folders never deletes a folder that contains files other than sidecars."""
+    movies_root = tmp_path / "Movies"
+    movies_root.mkdir()
+
+    # Folder with unrecognized media format or download artifact
+    folder_with_unrecognized = movies_root / "Unknown Format Movie"
+    folder_with_unrecognized.mkdir()
+    (folder_with_unrecognized / "movie.bin").write_bytes(b"arbitrary binary media")
+
+    cleanup_empty_media_folders(roots=[str(movies_root)])
+
+    # The folder and its binary file MUST be preserved
+    assert folder_with_unrecognized.exists()
+    assert (folder_with_unrecognized / "movie.bin").exists()
+
+
+
 
 
