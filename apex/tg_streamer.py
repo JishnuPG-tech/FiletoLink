@@ -2454,10 +2454,11 @@ async def _enrich_media_metadata(entry):
                 except Exception as scan_exc:
                     logger.warning(f"[TMDB] Metadata published but Jellyfin refresh failed: {scan_exc}")
                 return True
+            _record_review_job(entry, confidence=0.0, reason=f"unmatched_query:{query}")
             logger.warning(
-                f"[TMDB] No match for '{query}' (tv={is_tv}, year={entry.get('year')}, "
+                f"[TMDB] No confident match for '{query}' (tv={is_tv}, year={entry.get('year')}, "
                 f"lang={entry.get('language') or '-'}, candidates={candidates}); "
-                "verify the filename/title or add a TMDB title hint in the caption."
+                "held in review queue to prevent incorrect library publication."
             )
             return False
 

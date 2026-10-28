@@ -58,22 +58,15 @@ restore_jellyfin_local() {
         cp -a -f /data/jellyfin/cache/. "$LOCAL_ROOT/cache/" 2>/dev/null || true
     fi
 
-    # Scrub corrupted directories from media and metadata snapshot BEFORE library repair
+    # Remove invalid legacy flat TV directory (Jellyfin TV libraries must have show roots directly under TV Shows)
     rm -rf "/data/jellyfin/media/TV Shows/English" "/opt/jellyfin-local/media/TV Shows/English" 2>/dev/null || true
-    find /data/jellyfin/media /opt/jellyfin-local/media /data/movies /data/tvshows -iname "*summer*turned*pretty*" -exec rm -rf {} + 2>/dev/null || true
-    find /data/jellyfin/media /opt/jellyfin-local/media /data/movies /data/tvshows -iname "*what*if*(2024)*" -exec rm -rf {} + 2>/dev/null || true
-    find /data/jellyfin/data/metadata /data/jellyfin/data/metadata.snapshot "$LOCAL_ROOT/data/metadata" -iname "*summer*pretty*" -o -iname "*tt194766*" -o -iname "*194766*" -exec rm -rf {} + 2>/dev/null || true
 
     # Run library and auth repair after restoring both database and config
     if [ -f "$LOCAL_ROOT/data/data/jellyfin.db" ] || [ -f "/data/jellyfin/data/data/jellyfin.db" ]; then
         python3 /opt/apex/repair_jellyfin_libraries.py || python3 "$(dirname "$0")/repair_jellyfin_libraries.py" || true
     fi
 
-    # Permanently delete blacklisted demo episodes from media paths
-    find /data/jellyfin/media /data/movies /data/tvshows /data /opt/jellyfin-local -iname "*mot*test*servicing*" -exec rm -rf {} + 2>/dev/null || true
-    find /data/jellyfin/media /data/movies /data/tvshows /data /opt/jellyfin-local -iname "*rose*cane*" -o -iname "*ms.rose*" -o -iname "*ms rose*" -exec rm -rf {} + 2>/dev/null || true
-    find /data/jellyfin/media/Movies/Telugu /data/movies/Telugu /opt/jellyfin-local -iname "*kattalan*" -exec rm -rf {} + 2>/dev/null || true
-    # Clean up empty movie directories or orphaned folders left behind after moves
+    # Clean up empty movie directories or orphaned folders left behind after safe moves
     find /data/jellyfin/media/Movies -mindepth 2 -type d -empty -delete 2>/dev/null || true
     if [ -d "/data/jellyfin/media/Movies/English" ]; then
         find "/data/jellyfin/media/Movies/English" -mindepth 1 -maxdepth 1 -type d -exec bash -c 'for d; do [ -z "$(find "$d" -name "*.strm" 2>/dev/null)" ] && rm -rf "$d"; done' _ {} + 2>/dev/null || true

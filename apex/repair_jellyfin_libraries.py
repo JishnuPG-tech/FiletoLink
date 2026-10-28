@@ -130,35 +130,14 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
                 print(f"[REPAIR] Healed '{name}' ({row_id}): Path -> '{views_path}', Locations -> {locs}")
                 repaired += 1
 
-        # Permanently purge blacklisted demo items, Ms.Rose & Mr.Cane, invalid TV Shows/English items, and rogue misidentifications
+        # Purge invalid structural entries (e.g. legacy flat TV folder that breaks series resolution)
         cur.execute(
             "DELETE FROM BaseItems WHERE Path LIKE '%/TV Shows/English%' "
-            "OR Path LIKE '%Mot test servicing%' "
-            "OR Name LIKE '%Mot test servicing%' "
-            "OR Path LIKE '%Rose%Cane%' "
-            "OR Name LIKE '%Rose%Cane%' "
-            "OR Name LIKE '%Ms.Rose%' "
-            "OR Name LIKE '%Ms Rose%' "
-            "OR Path LIKE '%Ms.Rose%' "
-            "OR Path LIKE '%Ms Rose%' "
-            "OR (Path LIKE '%kattalan%' AND Path LIKE '%Telugu%') "
-            "OR (Name LIKE '%kattalan%' AND Path LIKE '%Telugu%') "
-            "OR Name LIKE '%Generation Iron%' "
-            "OR Data LIKE '%210879%' "
-            "OR Path LIKE '%Generation Iron%' "
-            "OR (Name = 'English' AND type LIKE '%Series%') "
-            "OR Name LIKE '%Summer I Turned Pretty%' "
-            "OR Path LIKE '%Summer I Turned Pretty%' "
-            "OR Data LIKE '%194766%' "
-            "OR Path LIKE '%194766%' "
-            "OR Name LIKE '%What If (2024)%' "
-            "OR Path LIKE '%What If (2024)%' "
-            "OR Data LIKE '%27122945%' "
-            "OR Path LIKE '%27122945%'"
+            "OR (Name = 'English' AND type LIKE '%Series%')"
         )
         purged = cur.rowcount
         if purged > 0:
-            print(f"[REPAIR] Purged {purged} blacklisted / stale item rows from {db_path}.")
+            print(f"[REPAIR] Purged {purged} invalid structural item rows from {db_path}.")
 
         # Clean up orphaned rows whose media files do not exist on disk (prevents duplicate ghost items)
         cur.execute(
