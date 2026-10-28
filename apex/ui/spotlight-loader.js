@@ -90,7 +90,7 @@
       "@media (min-width:1920px) { ." + FRAME_CLASS + " { height:68vh;max-height:860px; } }" +
       "@media (max-width:1024px) and (orientation:portrait) { ." + FRAME_CLASS + " { height:54vh;min-height:360px;max-height:500px; } }" +
       "@media (max-width:1024px) and (orientation:landscape) and (hover:none) and (pointer:coarse) { ." + FRAME_CLASS + " { height:100vh;min-height:280px;max-height:420px; } }" +
-      "@media (max-width:600px) and (orientation:portrait) { ." + FRAME_CLASS + " { height:52vh;min-height:340px;max-height:460px; } }" +
+      "@media (max-width:768px) and (orientation:portrait) { ." + FRAME_CLASS + " { height:48vh;min-height:380px;max-height:450px; } }" +
       "@media (max-width:900px) and (orientation:landscape) and (max-height:500px) { ." + FRAME_CLASS + " { height:100vh;min-height:200px; } }";
     document.head.appendChild(style);
   }
@@ -386,6 +386,105 @@
     return installed;
   }
 
+  var scrubberHud = null;
+  var scrubberActive = false;
+  var lastScrubbedLetter = "";
+
+  function ensureScrubberHud() {
+    if (scrubberHud && scrubberHud.isConnected) return scrubberHud;
+    scrubberHud = document.getElementById("alpha-scrubber-hud");
+    if (!scrubberHud) {
+      scrubberHud = document.createElement("div");
+      scrubberHud.id = "alpha-scrubber-hud";
+      document.body.appendChild(scrubberHud);
+    }
+    return scrubberHud;
+  }
+
+  function showScrubberHud(letter) {
+    var hud = ensureScrubberHud();
+    if (!hud) return;
+    hud.textContent = letter;
+    hud.classList.add("visible");
+  }
+
+  function hideScrubberHud() {
+    if (scrubberHud) {
+      scrubberHud.classList.remove("visible");
+    }
+    var activeButtons = document.querySelectorAll(".alphaPickerButton.active-scrub");
+    for (var i = 0; i < activeButtons.length; i++) {
+      activeButtons[i].classList.remove("active-scrub");
+    }
+    lastScrubbedLetter = "";
+  }
+
+  function installAlphaPickerScrubber() {
+    safe(function () {
+      var pickers = document.querySelectorAll(
+        ".alphaPicker, .alphaPicker-fixed, .alphaPicker-fixed-right, .alphanumeric-scrollbar, div[class*='alphaPicker']"
+      );
+      for (var p = 0; p < pickers.length; p++) {
+        var picker = pickers[p];
+        if (picker._scrubberInstalled) continue;
+        picker._scrubberInstalled = true;
+
+        var handleTouch = function (e) {
+          if (!e.touches || !e.touches.length) return;
+          var touch = e.touches[0];
+          var rect = picker.getBoundingClientRect();
+          var buttons = picker.querySelectorAll("button, .alphaPickerButton, .MuiButtonBase-root");
+          if (!buttons.length) return;
+
+          var relY = (touch.clientY - rect.top) / rect.height;
+          var index = Math.floor(relY * buttons.length);
+          if (index < 0) index = 0;
+          if (index >= buttons.length) index = buttons.length - 1;
+
+          var targetBtn = buttons[index];
+          if (!targetBtn) return;
+
+          var letter = (targetBtn.textContent || "").trim();
+          if (letter && letter !== lastScrubbedLetter) {
+            lastScrubbedLetter = letter;
+            showScrubberHud(letter);
+
+            var activeButtons = picker.querySelectorAll(".active-scrub");
+            for (var a = 0; a < activeButtons.length; a++) {
+              activeButtons[a].classList.remove("active-scrub");
+            }
+            targetBtn.classList.add("active-scrub");
+
+            targetBtn.click();
+
+            if (navigator.vibrate) {
+              try { navigator.vibrate(5); } catch (ve) {}
+            }
+          }
+        };
+
+        picker.addEventListener("touchstart", function (e) {
+          scrubberActive = true;
+          handleTouch(e);
+        }, { passive: true });
+
+        picker.addEventListener("touchmove", function (e) {
+          if (!scrubberActive) return;
+          if (e.cancelable) e.preventDefault();
+          handleTouch(e);
+        }, { passive: false });
+
+        var endHandler = function () {
+          scrubberActive = false;
+          hideScrubberHud();
+        };
+
+        picker.addEventListener("touchend", endHandler, { passive: true });
+        picker.addEventListener("touchcancel", endHandler, { passive: true });
+      }
+    });
+  }
+
   function boot() {
     function ensureDarkTheme() {
       try {
@@ -487,6 +586,7 @@
       var run = function () {
         installScheduled = false;
         installSpotlight();
+        installAlphaPickerScrubber();
         replaceServerNameText();
       };
 
@@ -525,6 +625,7 @@
     setInterval(function () {
       syncSettingsTheme();
       scheduleInstall();
+      installAlphaPickerScrubber();
       replaceServerNameText();
       if (currentSync) safe(currentSync);
     }, 2000);
