@@ -423,19 +423,41 @@ def load_cache():
             logger.info(f"[CACHE-HEAL] Corrected What If...? metadata and artwork for '{raw_name}' -> S{s_num:02d}E{e_num:02d}")
 
         # 2g. Purge or heal any "Summer I Turned Pretty" entry in cache
-        if "summer i turned pretty" in raw_lower or "the summer i turned pretty" in title_l or "summer i turned pretty" in title_l:
+        if "summer i turned pretty" in raw_lower or "the summer i turned pretty" in title_l or "summer i turned pretty" in title_l or data.get("tmdb_id") == 194766:
             if "derry" in raw_lower:
+                s_match = re.search(r"(?i)[sS](\d{1,2})[eE](\d{1,2})", raw_name)
+                s_num = int(s_match.group(1)) if s_match else int(data.get("season") or 1)
+                e_num = int(s_match.group(2)) if s_match else int(data.get("episode") or 1)
                 data["title"] = "It: Welcome to Derry"
                 data["clean_title"] = "It: Welcome to Derry"
                 data["show_name"] = "It: Welcome to Derry"
                 data["is_tv"] = True
                 data["year"] = 2025
+                data["season"] = s_num
+                data["episode"] = e_num
                 data["imdb_id"] = "tt19244304"
                 data["tmdb_id"] = 200875
                 data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BZWE0ZWM1MjUtNmYzYS00NzU3LTkxYmQtNmI3NTc0ZTY1NmVlXkEyXkFqcGc@._V1_.jpg"
                 data["backdrop_url"] = "https://images.metahub.space/background/medium/tt19244304/img"
+                show_root = tv_show_root(SHOWS_DIR, data.get("language") or "English", "It: Welcome to Derry", 2025)
+                data["show_root"] = show_root
+                data["target_dir"] = os.path.join(show_root, f"Season {s_num:02d}")
+                data["strm_base"] = f"It: Welcome to Derry S{s_num:02d}E{e_num:02d}"
+                old_strm = data.get("strm_path")
+                new_strm = os.path.join(data["target_dir"], f"{data['strm_base']}.strm")
+                data["strm_path"] = new_strm
+                if old_strm and old_strm != new_strm and os.path.exists(old_strm):
+                    try:
+                        os.makedirs(data["target_dir"], exist_ok=True)
+                        shutil.move(old_strm, new_strm)
+                        old_p = os.path.dirname(old_strm)
+                        if "summer" in old_p.lower():
+                            shutil.rmtree(os.path.dirname(old_p) if "season" in old_p.lower() else old_p, ignore_errors=True)
+                    except Exception:
+                        pass
                 data["_force_art_refresh"] = True
                 cache_updated = True
+                logger.info(f"[CACHE-HEAL] Healed Derry from Summer I Turned Pretty collision -> '{new_strm}'")
             else:
                 logger.info(f"[CACHE-PURGE] Purging rogue Summer I Turned Pretty entry: {key}")
                 FILE_ID_CACHE.pop(key, None)
@@ -3508,13 +3530,15 @@ async def deduplicate_jellyfin_items():
 
                 is_rogue = (
                     is_blacklisted(item_name)
-                    or any(r in item_name for r in ("wwe", "money in the bank"))
-                    or any(r in path.lower() for r in ("wwe", "money in the bank"))
+                    or any(r in item_name for r in ("wwe", "money in the bank", "summer i turned pretty", "the summer i turned pretty", "what if (2024)"))
+                    or any(r in path.lower() for r in ("wwe", "money in the bank", "summer i turned pretty", "summer_i_turned_pretty", "what if (2024)"))
+                    or provider_ids.get("Tmdb") in ("194766", 194766)
+                    or provider_ids.get("Imdb") in ("tt27122945",)
                 )
 
                 # 1. Series deduplication
                 if itype == "Series":
-                    if is_rogue:
+                    if is_rogue or (path and not os.path.exists(path)):
                         orphan_items.append((item, path))
                         continue
                     s_name = item_name

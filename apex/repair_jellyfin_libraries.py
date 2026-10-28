@@ -50,6 +50,24 @@ LIBRARIES = {
 }
 
 
+def _download_art_sync(url: str, dest_path: str) -> bool:
+    """Download authentic artwork synchronously with user-agent and size validation."""
+    import urllib.request
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            if resp.status == 200:
+                data = resp.read()
+                if len(data) >= 5000:
+                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                    with open(dest_path, "wb") as f:
+                        f.write(data)
+                    return True
+    except Exception as e:
+        print(f"[REPAIR] Note downloading art {url} -> {dest_path}: {e}")
+    return False
+
+
 def repair_database(db_path: str, marker_file: str | None = None, force_reset_password: bool | None = None) -> bool:
     if not os.path.exists(db_path):
         return False
@@ -112,7 +130,7 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
                 print(f"[REPAIR] Healed '{name}' ({row_id}): Path -> '{views_path}', Locations -> {locs}")
                 repaired += 1
 
-        # Permanently purge blacklisted demo items, Ms.Rose & Mr.Cane, and invalid TV Shows/English items
+        # Permanently purge blacklisted demo items, Ms.Rose & Mr.Cane, invalid TV Shows/English items, and rogue misidentifications
         cur.execute(
             "DELETE FROM BaseItems WHERE Path LIKE '%/TV Shows/English%' "
             "OR Path LIKE '%Mot test servicing%' "
@@ -128,7 +146,15 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
             "OR Name LIKE '%Generation Iron%' "
             "OR Data LIKE '%210879%' "
             "OR Path LIKE '%Generation Iron%' "
-            "OR (Name = 'English' AND type LIKE '%Series%')"
+            "OR (Name = 'English' AND type LIKE '%Series%') "
+            "OR Name LIKE '%Summer I Turned Pretty%' "
+            "OR Path LIKE '%Summer I Turned Pretty%' "
+            "OR Data LIKE '%194766%' "
+            "OR Path LIKE '%194766%' "
+            "OR Name LIKE '%What If (2024)%' "
+            "OR Path LIKE '%What If (2024)%' "
+            "OR Data LIKE '%27122945%' "
+            "OR Path LIKE '%27122945%'"
         )
         purged = cur.rowcount
         if purged > 0:
@@ -136,12 +162,12 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
 
         # Clean up orphaned rows whose media files do not exist on disk (prevents duplicate ghost items)
         cur.execute(
-            "SELECT Id, Path, Name FROM BaseItems "
-            "WHERE (Path LIKE '/data/jellyfin/media/%' OR Path LIKE '/opt/jellyfin-local/%' OR Path LIKE '/data/movies/%') "
-            "AND (type LIKE '%Movie%' OR type LIKE '%Episode%')"
+            "SELECT Id, Path, Name, type FROM BaseItems "
+            "WHERE (Path LIKE '/data/jellyfin/media/%' OR Path LIKE '/opt/jellyfin-local/%' OR Path LIKE '/data/movies/%' OR Path LIKE '/data/tvshows/%') "
+            "AND (type LIKE '%Movie%' OR type LIKE '%Episode%' OR type LIKE '%Series%' OR type LIKE '%Season%')"
         )
         orphaned = []
-        for row_id, item_path, item_name in cur.fetchall():
+        for row_id, item_path, item_name, itype in cur.fetchall():
             if item_path and not os.path.exists(item_path):
                 orphaned.append(row_id)
         if orphaned:
@@ -665,6 +691,59 @@ def heal_mismatched_media(roots=None, databases=None):
                         except Exception as dbe:
                             print(f"[REPAIR] DB cleanup notice for Derry/Summer: {dbe}")
 
+                # Atomically write authentic Derry tvshow.nfo
+                derry_nfo_path = os.path.join(target_derry_root, "tvshow.nfo")
+                derry_nfo_content = """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<tvshow>
+  <title>It: Welcome to Derry</title>
+  <originaltitle>It: Welcome to Derry</originaltitle>
+  <showtitle>It: Welcome to Derry</showtitle>
+  <year>2025</year>
+  <premiered>2025-10-01</premiered>
+  <plot>Set in the world of Stephen King's IT, the prequel series expands the vision established in the feature films.</plot>
+  <uniqueid type="imdb" default="true">tt19244304</uniqueid>
+  <uniqueid type="tmdb">200875</uniqueid>
+  <imdbid>tt19244304</imdbid>
+  <tmdbid>200875</tmdbid>
+  <genre>Drama</genre>
+  <genre>Mystery</genre>
+  <genre>Sci-Fi &amp; Fantasy</genre>
+</tvshow>
+"""
+                try:
+                    with open(derry_nfo_path, "w", encoding="utf-8") as f:
+                        f.write(derry_nfo_content)
+                    print(f"[REPAIR] Wrote authentic Derry tvshow.nfo: {derry_nfo_path}")
+                except Exception as we:
+                    print(f"[REPAIR] Error writing Derry tvshow.nfo: {we}")
+
+                # Download authentic Derry poster and backdrop immediately
+                derry_poster_url = "https://m.media-amazon.com/images/M/MV5BZWE0ZWM1MjUtNmYzYS00NzU3LTkxYmQtNmI3NTc0ZTY1NmVlXkEyXkFqcGc@._V1_.jpg"
+                derry_backdrop_url = "https://images.metahub.space/background/medium/tt19244304/img"
+                derry_p = os.path.join(target_derry_root, "poster.jpg")
+                derry_b = os.path.join(target_derry_root, "backdrop.jpg")
+
+                if _download_art_sync(derry_poster_url, derry_p):
+                    for cp in ("folder.jpg", "thumb.jpg", "season01-poster.jpg", "season-all-poster.jpg"):
+                        try:
+                            shutil.copyfile(derry_p, os.path.join(target_derry_root, cp))
+                        except Exception:
+                            pass
+                    try:
+                        shutil.copyfile(derry_p, os.path.join(target_derry_s1, "folder.jpg"))
+                        shutil.copyfile(derry_p, os.path.join(target_derry_s1, "poster.jpg"))
+                    except Exception:
+                        pass
+                    print(f"[REPAIR] Downloaded authentic Derry poster to {derry_p}")
+
+                if _download_art_sync(derry_backdrop_url, derry_b):
+                    for cp in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
+                        try:
+                            shutil.copyfile(derry_b, os.path.join(target_derry_root, cp))
+                        except Exception:
+                            pass
+                    print(f"[REPAIR] Downloaded authentic Derry backdrop to {derry_b}")
+
             # 6. Heal What If...? (2021) Marvel and purge Chinese Romance drama (2024, tt27122945)
             has_whatif_strm = any("what" in f.lower() and "if" in f.lower() for f in curr_files if f.lower().endswith(".strm"))
             is_whatif_2024 = "what if (2024)" in dir_lower or (("what if" in dir_lower or "what.if" in dir_lower) and "2024" in dirpath)
@@ -732,6 +811,59 @@ def heal_mismatched_media(roots=None, databases=None):
                             conn.close()
                         except Exception as dbe:
                             print(f"[REPAIR] DB cleanup notice for What If: {dbe}")
+
+                # Atomically write authentic Marvel What If...? tvshow.nfo
+                whatif_nfo_path = os.path.join(target_whatif_root, "tvshow.nfo")
+                whatif_nfo_content = """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<tvshow>
+  <title>What If...?</title>
+  <originaltitle>What If...?</originaltitle>
+  <showtitle>What If...?</showtitle>
+  <year>2021</year>
+  <premiered>2021-08-11</premiered>
+  <plot>Exploring pivotal moments from the Marvel Cinematic Universe and turning them on their head, leading the audience into uncharted territory.</plot>
+  <uniqueid type="imdb" default="true">tt10168312</uniqueid>
+  <uniqueid type="tmdb">91363</uniqueid>
+  <imdbid>tt10168312</imdbid>
+  <tmdbid>91363</tmdbid>
+  <genre>Animation</genre>
+  <genre>Action &amp; Adventure</genre>
+  <genre>Sci-Fi &amp; Fantasy</genre>
+</tvshow>
+"""
+                try:
+                    with open(whatif_nfo_path, "w", encoding="utf-8") as f:
+                        f.write(whatif_nfo_content)
+                    print(f"[REPAIR] Wrote authentic What If tvshow.nfo: {whatif_nfo_path}")
+                except Exception as we:
+                    print(f"[REPAIR] Error writing What If tvshow.nfo: {we}")
+
+                # Download authentic Marvel What If...? poster and backdrop immediately
+                whatif_poster_url = "https://m.media-amazon.com/images/M/MV5BYWFiOTcwNzItMTg5Mi00ZTU4LThkZWYtYWNmZWQ1ODE5ZTVmXkEyXkFqcGc@._V1_.jpg"
+                whatif_backdrop_url = "https://images.metahub.space/background/medium/tt10168312/img"
+                whatif_p = os.path.join(target_whatif_root, "poster.jpg")
+                whatif_b = os.path.join(target_whatif_root, "backdrop.jpg")
+
+                if _download_art_sync(whatif_poster_url, whatif_p):
+                    for cp in ("folder.jpg", "thumb.jpg", "season01-poster.jpg", "season-all-poster.jpg"):
+                        try:
+                            shutil.copyfile(whatif_p, os.path.join(target_whatif_root, cp))
+                        except Exception:
+                            pass
+                    try:
+                        shutil.copyfile(whatif_p, os.path.join(target_whatif_s1, "folder.jpg"))
+                        shutil.copyfile(whatif_p, os.path.join(target_whatif_s1, "poster.jpg"))
+                    except Exception:
+                        pass
+                    print(f"[REPAIR] Downloaded authentic What If poster to {whatif_p}")
+
+                if _download_art_sync(whatif_backdrop_url, whatif_b):
+                    for cp in ("fanart.jpg", "landscape.jpg", "thumb.jpg"):
+                        try:
+                            shutil.copyfile(whatif_b, os.path.join(target_whatif_root, cp))
+                        except Exception:
+                            pass
+                    print(f"[REPAIR] Downloaded authentic What If backdrop to {whatif_b}")
 
 
 def repair_user_subtitle_preferences(configs=None):
