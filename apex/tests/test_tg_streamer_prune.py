@@ -366,16 +366,24 @@ def test_reindex_all_with_imdb_preserves_untracked_strm_and_directories(tmp_path
         def ClientSession(self, *args, **kwargs):
             return MockSession()
 
+    async def mock_async_noop(*args, **kwargs):
+        pass
+
     import socket
     ns = {
         "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
         "os": os,
         "socket": socket,
         "aiohttp": MockAiohttp(),
+        "asyncio": asyncio,
         "MOVIES_DIR": str(movies_dir),
         "SHOWS_DIR": str(shows_dir),
         "FILE_ID_CACHE": {},
         "MEDIA_CATALOG": MockCatalog(),
+        "save_cache_async": mock_async_noop,
+        "deduplicate_jellyfin_items": mock_async_noop,
+        "refresh_jellyfin_item_by_path": mock_async_noop,
+        "request_jellyfin_scan": mock_async_noop,
         "_record_review_job": lambda data, confidence=0.0, reason="": recorded_reviews.append((data, confidence, reason)),
     }
     exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
