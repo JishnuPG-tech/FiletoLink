@@ -3573,7 +3573,7 @@ def extract_version_tag(path: str) -> str:
             if codec in base:
                 tags.append(codec.upper())
                 break
-    return " ".join(tags) if tags else "Alt"
+    return " ".join(tags)
 
 
 async def deduplicate_jellyfin_items():
@@ -3686,17 +3686,31 @@ async def deduplicate_jellyfin_items():
 
                 # Movie Identity:
                 year_match = re.search(r"\((\d{4})\)", path)
-                year_val = item.get("ProductionYear") or (int(year_match.group(1)) if year_match else None)
-                parsed = parse_media_meta(os.path.splitext(os.path.basename(path))[0] or item.get("Name") or "")
-                year_val = year_val or parsed.get("year") or "unknown"
-                dir_lang = os.path.basename(os.path.dirname(os.path.dirname(path)))
-                lang = (detect_language(dir_lang) or parsed.get("language") or DEFAULT_LANGUAGE).lower()
-                clean_title = re.sub(r"[^a-z0-9]+", "-", str(parsed.get("clean_title") or item.get("Name") or "").lower()).strip("-")
-                tmdb_id = provider_ids.get("Tmdb")
-                if tmdb_id and str(tmdb_id).isdigit():
-                    identity = f"movie:tmdb:{tmdb_id}:{lang}"
+                year_suffix = year_match.group(1) if year_match else ""
+                if provider_ids.get("Tmdb"):
+                    identity = f"tmdb:{provider_ids['Tmdb']}"
                 else:
-                    identity = f"movie:name:{clean_title}:{year_val}:{lang}"
+                    parsed = parse_media_meta(
+                        os.path.splitext(os.path.basename(path))[0]
+                        or item.get("Name")
+                        or ""
+                    )
+                    dir_lang = os.path.basename(os.path.dirname(os.path.dirname(path)))
+                    default_lang = globals().get("DEFAULT_LANGUAGE", "English")
+                    detect_lang_fn = globals().get("detect_language")
+                    detected_lang = detect_lang_fn(dir_lang) if callable(detect_lang_fn) else None
+                    parsed_entry = {
+                        **parsed,
+                        "language": detected_lang or dir_lang or default_lang,
+                    }
+                    canonical_key_fn = globals().get("_canonical_media_key")
+                    identity = canonical_key_fn(parsed_entry) if callable(canonical_key_fn) else f"name:{parsed.get('clean_title') or 'unknown'}"
+                    if identity.endswith(":unknown:" + str(parsed_entry["language"]).lower()):
+                        clean_item_name = re.sub(
+                            r"[^a-z0-9]+", "-",
+                            str(item.get("Name") or "").lower(),
+                        ).strip("-")
+                        identity = f"name:{clean_item_name}:{year_suffix}"
                 groups.setdefault(identity, []).append((item, path))
 
             duplicates = list(orphan_items)
@@ -3733,10 +3747,9 @@ async def deduplicate_jellyfin_items():
                 keep = sorted(
                     existing or entries,
                     key=lambda pair: (
-                        1 if not re.search(r" - (?:alt|\d{3,4}p)", os.path.basename(pair[1]).lower()) else 0,
+                        1 if re.search(r"(?: - (?:alt|\d{3,4}p)|\.\d{3,4}p\.)", os.path.basename(pair[1]).lower()) else 0,
                         len(pair[1]),
                     ),
-                    reverse=True,
                 )[0]
                 norm_keep = os.path.normpath(keep[1]).lower()
                 keep_dir = os.path.dirname(keep[1])
@@ -3762,8 +3775,9 @@ async def deduplicate_jellyfin_items():
                             continue
 
                         # If they are in different folders, consolidate alternate movie release into canonical folder:
-                        if identity.startswith("movie:"):
-                            version_tag = extract_version_tag(pair[1])
+                        extract_tag_fn = globals().get("extract_version_tag")
+                        version_tag = extract_tag_fn(pair[1]) if callable(extract_tag_fn) else ""
+                        if (identity.startswith("movie:") or identity.startswith("tmdb:")) and version_tag:
                             base_keep = os.path.splitext(os.path.basename(keep[1]))[0]
                             clean_base = re.sub(r" - (?:alt|\d{3,4}p.*)$", "", base_keep, flags=re.IGNORECASE)
                             target_strm_name = f"{clean_base} - {version_tag}.strm"
@@ -3776,11 +3790,13 @@ async def deduplicate_jellyfin_items():
                                         f"[DEDUPLICATE] Consolidated alternate movie release: '{pair[1]}' -> '{target_strm_path}'"
                                     )
                                     # Update cache if applicable
+                                    save_cache_fn = globals().get("_save_cache_sync")
                                     for cv in FILE_ID_CACHE.values():
                                         if isinstance(cv, dict) and os.path.normpath(str(cv.get("strm_path") or "")).lower() == norm_pair:
                                             cv["strm_path"] = target_strm_path
                                             cv["target_dir"] = keep_dir
-                                            _save_cache_sync()
+                                            if callable(save_cache_fn):
+                                                save_cache_fn()
                                             break
                                     try:
                                         os.rmdir(pair_dir)
