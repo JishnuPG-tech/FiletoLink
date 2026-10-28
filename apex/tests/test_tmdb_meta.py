@@ -408,6 +408,36 @@ class TestBestTmdbMatch:
         hit = best_tmdb_match(results, "the beast", "movie", year=2024, language="en")
         assert hit is None
 
+    def test_ambiguous_tied_candidates_rejected(self):
+        # Two distinct movies with identical title tokens, language, and same release year
+        # Must be rejected as ambiguous rather than picking one arbitrarily.
+        results = [
+            {"id": 101, "title": "Obsession", "release_date": "2024-05-01", "original_language": "en"},
+            {"id": 102, "title": "Obsession", "release_date": "2024-05-01", "original_language": "en"},
+        ]
+        hit = best_tmdb_match(results, "obsession", "movie", year=2024, language="en")
+        assert hit is None
+
+    def test_ambiguous_candidates_resolved_by_exact_year(self):
+        # Two movies with same title, but candidate 1 has exact year 2024 while candidate 2 is 2023
+        results = [
+            {"id": 101, "title": "Obsession", "release_date": "2024-05-01", "original_language": "en"},
+            {"id": 102, "title": "Obsession", "release_date": "2023-05-01", "original_language": "en"},
+        ]
+        hit = best_tmdb_match(results, "obsession", "movie", year=2024, language="en")
+        assert hit is not None
+        assert hit["id"] == 101
+
+    def test_duplicate_same_id_candidates_not_ambiguous(self):
+        # Multiple hits with identical TMDB ID (e.g. from multi-page search or aliases)
+        results = [
+            {"id": 101, "title": "Obsession", "release_date": "2024-05-01", "original_language": "en"},
+            {"id": 101, "title": "Obsession", "release_date": "2024-05-01", "original_language": "en"},
+        ]
+        hit = best_tmdb_match(results, "obsession", "movie", year=2024, language="en")
+        assert hit is not None
+        assert hit["id"] == 101
+
 
 class TestExtractImdbId:
     def test_radarr_brace_imdb(self):

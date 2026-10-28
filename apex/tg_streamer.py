@@ -1823,7 +1823,7 @@ async def _ai_disambiguate_candidates(raw_context, candidates, media_type="movie
 
 
 async def _download_image(session, url, save_path):
-    """Download an image (e.g. TMDB poster/backdrop) to save_path."""
+    """Download an image (e.g. TMDB poster/backdrop) to save_path with size & corruption guards."""
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -1831,8 +1831,18 @@ async def _download_image(session, url, save_path):
         async with session.get(url, headers=headers, timeout=15) as resp:
             if resp.status == 200:
                 data = await resp.read()
-                with open(save_path, "wb") as f:
+                if len(data) < 1000:
+                    logger.warning(f"[TMDB] Image from '{url}' too small ({len(data)} bytes), skipping")
+                    return False
+                if os.path.exists(save_path) and os.path.getsize(save_path) >= 15000 and len(data) < 15000:
+                    logger.warning(
+                        f"[TMDB] Refusing to overwrite existing {os.path.getsize(save_path)}-byte artwork with {len(data)}-byte payload"
+                    )
+                    return False
+                tmp_path = f"{save_path}.tmp.{os.getpid()}"
+                with open(tmp_path, "wb") as f:
                     f.write(data)
+                os.replace(tmp_path, save_path)
                 return True
     except Exception as e:
         logger.warning(f"[TMDB] image download notice for '{url}': {e}")
@@ -1841,6 +1851,8 @@ async def _download_image(session, url, save_path):
 
 def _generate_fallback_backdrop(poster_path: str, backdrop_path: str) -> bool:
     """Generate a crisp 1920x1080 cinematic backdrop from poster when TMDB lacks one."""
+    if os.path.exists(backdrop_path) and (_image_is_hd(backdrop_path, _BACKDROP_MIN_WIDTH) or os.path.getsize(backdrop_path) >= 15000):
+        return True
     try:
         from PIL import Image
         if not os.path.exists(poster_path) or os.path.getsize(poster_path) < 1000:
@@ -1925,10 +1937,12 @@ async def _enrich_media_metadata(entry):
                 movie_nfo = os.path.join(
                     target_dir, f"{entry.get('strm_base', strm_base(entry))}.nfo"
                 )
+                generic_nfo = os.path.join(target_dir, "movie.nfo")
+                nfo_file = movie_nfo if os.path.exists(movie_nfo) else generic_nfo
                 movie_backdrop = os.path.join(target_dir, "backdrop.jpg")
                 has_backdrop = os.path.exists(movie_backdrop) and os.path.getsize(movie_backdrop) >= 15000
-                if (os.path.exists(movie_nfo) and _poster_art_ok(target_dir)
-                        and has_backdrop and not _nfo_needs_repair(movie_nfo)):
+                if (os.path.exists(nfo_file) and _poster_art_ok(target_dir)
+                        and has_backdrop and not _nfo_needs_repair(nfo_file)):
                     return True
 
         query = entry.get("search_title") or entry.get("show_name") or entry.get("title")
@@ -2870,13 +2884,19 @@ def _image_is_hd(path, min_width=_POSTER_MIN_WIDTH):
 
 
 def _poster_art_ok(folder):
-    """True when the folder already has acceptable poster art (HD, or marked
+    """True when the folder already has acceptable poster art (HD, or size >= 15KB, or marked
     best-effort so we don't re-fetch TMDB on every restart)."""
     poster = os.path.join(folder, "poster.jpg")
     if not os.path.exists(poster):
-        return False
-    return _image_is_hd(poster, _POSTER_MIN_WIDTH) or os.path.exists(
-        os.path.join(folder, ".art_best_effort")
+        folder_art = os.path.join(folder, "folder.jpg")
+        if os.path.exists(folder_art):
+            poster = folder_art
+        else:
+            return False
+    return (
+        _image_is_hd(poster, _POSTER_MIN_WIDTH)
+        or os.path.getsize(poster) >= 15000
+        or os.path.exists(os.path.join(folder, ".art_best_effort"))
     )
 
 
@@ -4922,20 +4942,23 @@ async def reconcile(request):
     """Repair missing publications while leaving explicit catalog tombstones alone."""
     if not _is_review_admin(request):
         return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
+    dry_run = request.query.get("dry_run", "").lower() in ("1", "true", "yes")
     repaired = 0
     skipped_deleted = 0
+    would_repair = []
     for key, data in list(FILE_ID_CACHE.items()):
         if not isinstance(data, dict):
             continue
         entry = dict(data)
         if _is_unknown_media(entry):
             path = entry.get("strm_path") or _entry_strm_path(entry)
-            try:
-                if os.path.exists(path):
-                    os.remove(path)
-            except OSError as exc:
-                logger.info(f"[RECONCILE] Could not remove unknown media path: {type(exc).__name__}")
-            FILE_ID_CACHE.pop(key, None)
+            if not dry_run:
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except OSError as exc:
+                    logger.info(f"[RECONCILE] Could not remove unknown media path: {type(exc).__name__}")
+                FILE_ID_CACHE.pop(key, None)
             continue
         path = entry.get("strm_path") or _entry_strm_path(entry)
         record = MEDIA_CATALOG.find_by_source(
@@ -4945,16 +4968,21 @@ async def reconcile(request):
             skipped_deleted += 1
             continue
         if not os.path.exists(path):
-            await create_strm_file_async(entry)
-            FILE_ID_CACHE[key] = entry
+            if dry_run:
+                would_repair.append(entry.get("title") or path)
+            else:
+                await create_strm_file_async(entry)
+                FILE_ID_CACHE[key] = entry
             repaired += 1
-    if repaired:
+    if repaired and not dry_run:
         await save_cache_async()
         await request_jellyfin_scan()
-    cleanup = await deduplicate_jellyfin_items()
+    cleanup = await deduplicate_jellyfin_items() if not dry_run else {"dry_run": True}
     return web.json_response({
         "ok": True,
+        "dry_run": dry_run,
         "repaired": repaired,
+        "would_repair": would_repair if dry_run else None,
         "skipped_deleted": skipped_deleted,
         "jellyfin_cleanup": cleanup,
     })
@@ -5104,10 +5132,12 @@ async def _prune_orphan_strms(movies_dir, shows_dir, keep):
                 stream_port = os.environ.get(
                     "TG_LISTEN_PORT", os.environ.get("PORT", "8080")
                 )
-                if (
-                    f"127.0.0.1:{stream_port}" not in content
-                    and f"{stream_port}/stream" not in content
-                ):
+                is_our_stream = (
+                    "/stream/" in content
+                    or f"127.0.0.1:{stream_port}" in content
+                    or f":{stream_port}/" in content
+                )
+                if not is_our_stream:
                     continue
                 try:
                     os.remove(path)
@@ -5216,15 +5246,10 @@ async def restore_cached_strm_files():
             for r, _, fs in os.walk(rdir):
                 existing_strm_count += sum(1 for f in fs if f.lower().endswith(".strm"))
 
-    try:
-        with MEDIA_CATALOG._connect() as conn:
-            conn.execute("UPDATE catalog SET deleted=0 WHERE deleted=1")
-            conn.commit()
-    except Exception:
-        pass
-
     for entry in winners.values():
         record = _catalog_upsert(entry)
+        if record and record.deleted:
+            continue
         await create_strm_file_async(entry)
         if entry.get("target_dir") and entry.get("strm_base"):
             expected_paths.add(os.path.normpath(
@@ -5275,27 +5300,7 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
     and forces item-level Jellyfin refreshes.
     """
     logger.info(f"[IMDB-REINDEX] Starting full IMDb re-indexing pass (force_all={force_all})...")
-    # Step 1: Scan and purge corrupted directories on disk
-    corrupted_patterns = [
-        "queer", "siege", "the money (1976)", "the money (2014)", "the money",
-        "ms.rose", "ms rose", "wwe", "money in the bank", "money_in_the_bank",
-        "wwe money in the bank 2014", "derry girls", "what if (2024)", "the summer i turned pretty"
-    ]
-    for root in (MOVIES_DIR, SHOWS_DIR):
-        if not os.path.isdir(root):
-            continue
-        for dp, dns, _ in os.walk(root, topdown=False):
-            for dn in dns:
-                dn_l = dn.lower()
-                if any(cp in dn_l for cp in corrupted_patterns) or (dn_l == "derry" and "shows" in dp.lower()):
-                    full_p = os.path.join(dp, dn)
-                    try:
-                        shutil.rmtree(full_p, ignore_errors=True)
-                        logger.info(f"[IMDB-REINDEX] Purged corrupted directory: {full_p}")
-                    except Exception as e:
-                        logger.warning(f"[IMDB-REINDEX] Error removing {full_p}: {e}")
-
-    # Step 1b: Purge untracked rogue .strm files and empty/untracked directories on disk
+    # Step 1: Purge untracked rogue .strm files and empty untracked directories on disk
     valid_dirs = set()
     valid_strms = set()
     for d in FILE_ID_CACHE.values():
@@ -5307,32 +5312,50 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
             if d.get("show_root"):
                 valid_dirs.add(os.path.normpath(d["show_root"]).lower())
 
-    for root in (MOVIES_DIR, SHOWS_DIR):
-        if not os.path.isdir(root):
-            continue
-        for dp, dns, fns in os.walk(root, topdown=False):
-            for fn in fns:
-                if fn.lower().endswith(".strm"):
-                    fp = os.path.normpath(os.path.join(dp, fn)).lower()
-                    if valid_strms and fp not in valid_strms:
-                        try:
-                            os.remove(fp)
-                            logger.info(f"[ROUGUE-PURGE] Removed untracked .strm file: {fp}")
-                        except Exception:
-                            pass
-            norm_dp = os.path.normpath(dp)
-            if norm_dp in (os.path.normpath(MOVIES_DIR), os.path.normpath(SHOWS_DIR)):
+    for rec in MEDIA_CATALOG.list_records(include_deleted=False):
+        job = MEDIA_CATALOG.find_job(rec.source_chat_id, rec.source_message_id)
+        if job and isinstance(job.payload, dict):
+            p_strm = job.payload.get("strm_path")
+            if p_strm:
+                valid_strms.add(os.path.normpath(p_strm).lower())
+            p_tdir = job.payload.get("target_dir")
+            if p_tdir:
+                valid_dirs.add(os.path.normpath(p_tdir).lower())
+            p_sroot = job.payload.get("show_root")
+            if p_sroot:
+                valid_dirs.add(os.path.normpath(p_sroot).lower())
+
+    # Only purge untracked files when valid catalog records exist (safety guard)
+    if valid_strms:
+        for root in (MOVIES_DIR, SHOWS_DIR):
+            if not os.path.isdir(root):
                 continue
-            parent = os.path.dirname(norm_dp)
-            if os.path.normpath(parent) in (os.path.normpath(MOVIES_DIR), os.path.normpath(SHOWS_DIR)):
-                continue
-            remaining = os.listdir(dp)
-            if not remaining or (valid_dirs and norm_dp.lower() not in valid_dirs and not any(f.lower().endswith('.strm') for f in remaining)):
-                try:
-                    shutil.rmtree(dp, ignore_errors=True)
-                    logger.info(f"[ROUGUE-PURGE] Cleaned untracked directory: {dp}")
-                except Exception:
-                    pass
+            for dp, dns, fns in os.walk(root, topdown=False):
+                for fn in fns:
+                    if fn.lower().endswith(".strm"):
+                        fp = os.path.normpath(os.path.join(dp, fn))
+                        if fp.lower() not in valid_strms:
+                            try:
+                                with open(fp, "r", encoding="utf-8", errors="ignore") as _sf:
+                                    _c = _sf.read(256)
+                                if "/stream/" in _c or "127.0.0.1" in _c:
+                                    os.remove(fp)
+                                    logger.info(f"[ROGUE-PURGE] Removed untracked .strm file: {fp}")
+                            except Exception:
+                                pass
+                norm_dp = os.path.normpath(dp)
+                if norm_dp in (os.path.normpath(MOVIES_DIR), os.path.normpath(SHOWS_DIR)):
+                    continue
+                parent = os.path.dirname(norm_dp)
+                if os.path.normpath(parent) in (os.path.normpath(MOVIES_DIR), os.path.normpath(SHOWS_DIR)):
+                    continue
+                remaining = os.listdir(dp)
+                if not remaining or (valid_dirs and norm_dp.lower() not in valid_dirs and not any(f.lower().endswith('.strm') for f in remaining)):
+                    try:
+                        shutil.rmtree(dp, ignore_errors=True)
+                        logger.info(f"[ROGUE-PURGE] Cleaned untracked directory: {dp}")
+                    except Exception:
+                        pass
 
     # Step 2: Iterate through all cached media
     updated_count = 0
@@ -5408,11 +5431,19 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
 
             data["strm_base"] = new_strm_base
 
-            # If old_target exists and differs from target_dir, remove old_target
-            if old_target and os.path.normpath(old_target) != os.path.normpath(target_dir) and os.path.exists(old_target):
+            # If old_target exists and differs from target_dir, remove old_target safely
+            norm_old = os.path.normpath(old_target) if old_target else ""
+            norm_new = os.path.normpath(target_dir) if target_dir else ""
+            if (
+                norm_old
+                and norm_old != norm_new
+                and os.path.exists(norm_old)
+                and norm_old not in (os.path.normpath(MOVIES_DIR), os.path.normpath(SHOWS_DIR))
+                and os.path.dirname(norm_old) not in (os.path.normpath(MOVIES_DIR), os.path.normpath(SHOWS_DIR))
+            ):
                 try:
-                    shutil.rmtree(old_target, ignore_errors=True)
-                    logger.info(f"[IMDB-REINDEX] Cleaned obsolete folder: {old_target}")
+                    shutil.rmtree(norm_old, ignore_errors=True)
+                    logger.info(f"[IMDB-REINDEX] Cleaned obsolete folder: {norm_old}")
                 except Exception:
                     pass
 

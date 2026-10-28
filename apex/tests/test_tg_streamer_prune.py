@@ -24,7 +24,7 @@ def _helper():
         n for n in tree.body
         if isinstance(n, ast.AsyncFunctionDef) and n.name == "_prune_orphan_strms"
     )
-    ns = {"logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(), "os": os}
+    ns = {"logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(), "os": os, "shutil": shutil}
     exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
     return ns["_prune_orphan_strms"]
 

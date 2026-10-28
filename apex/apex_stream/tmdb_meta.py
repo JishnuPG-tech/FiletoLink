@@ -580,17 +580,19 @@ _INDIAN_LANG_CODES = {"ml", "ta", "te", "hi", "kn", "bn", "pa", "mr", "gu", "ur"
 
 
 def best_tmdb_match(results: List[Dict], query: str, media_type: str,
-                    year: Optional[int] = None, threshold: float = 0.5,
+                    year: Optional[int] = None, threshold: float = 0.70,
                     language: Optional[str] = None):
     """Return the best TMDB search result for (query, year, type), or None.
 
     Scoring: token overlap against the hit's title merged with its
     original_title. Uses Dice coefficient to balance query precision and hit length.
-    Year proximity provides strong signal: exact year +0.3, ±1 year +0.15,
+    Year proximity provides strong signal: exact year +0.35, ±1 year +0.15,
     >2 years off heavily penalized.
     Regional language affinity: if release language is Indian regional (Tamil, Malayalam, etc.)
     and hit language is a non-Indian foreign language (Portuguese, German, etc.),
     a strong mismatch penalty is applied to prevent false-positive hijacking.
+    Ambiguity guard: if top candidates have scores within 0.05 without a distinguishing
+    attribute, returns None to avoid guessing.
     """
     q_toks = _sig_tokens(query)
     if not q_toks:
@@ -598,7 +600,7 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
     lang_raw = (language or "").strip()
     lang = tmdb_language_code(lang_raw) or lang_raw.lower()
     is_indian = lang in _INDIAN_LANG_CODES
-    best, best_score = None, -1.0
+    scored: List[Tuple[float, Dict]] = []
     for r in results or []:
         mt = r.get("media_type")
         if mt and mt != media_type:
@@ -735,9 +737,33 @@ def best_tmdb_match(results: List[Dict], query: str, media_type: str,
         except (ValueError, TypeError):
             pass
 
-        if score > best_score:
-            best, best_score = r, score
-    return best if best_score >= threshold else None
+        scored.append((score, r))
+
+    if not scored:
+        return None
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    best_score, best = scored[0]
+    if best_score < threshold:
+        return None
+
+    if len(scored) > 1:
+        second_score, second = scored[1]
+        # Ambiguity detection: if top 2 candidates are virtually tied (score difference < 0.05)
+        if (best_score - second_score) < 0.05:
+            # Check if duplicate result returned for the same ID
+            if best.get("id") and best.get("id") == second.get("id"):
+                return best
+            best_date = (best.get("release_date") or best.get("first_air_date") or "")[:4]
+            sec_date = (second.get("release_date") or second.get("first_air_date") or "")[:4]
+            best_year_exact = bool(year and best_date.isdigit() and int(best_date) == year)
+            sec_year_exact = bool(year and sec_date.isdigit() and int(sec_date) == year)
+            if best_year_exact and not sec_year_exact:
+                return best
+            # Indistinguishable candidates: reject as ambiguous rather than guessing
+            return None
+
+    return best
 
 
 def tmdb_image_url(path: Optional[str], size: str = "w500") -> Optional[str]:
