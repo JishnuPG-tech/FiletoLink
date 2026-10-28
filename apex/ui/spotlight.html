@@ -307,6 +307,8 @@
 				zoomAnimation = null;
 				image.style.transform = 'scale(1) translate(0, 0)';
 				if (paused || reducedMotion.matches) return;
+				const isMobile = window.innerWidth <= 768 && window.innerHeight > window.innerWidth;
+				if (isMobile) return;
 				const angle = Math.random() * Math.PI * 2;
 				const panX = Math.cos(angle) * 1.5;
 				const panY = Math.sin(angle) * 1.5;
