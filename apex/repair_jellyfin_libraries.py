@@ -308,13 +308,15 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
 
 
 def cleanup_empty_media_folders(roots=None):
-    """Safely remove genuinely empty movie/show directories using os.rmdir (non-recursive)."""
+    """Safely remove genuinely empty movie/show directories using os.rmdir (non-recursive).
+    Restricts metadata cleanup strictly to confirmed application-generated NFOs (movie.nfo, tvshow.nfo)
+    in managed directories; user files (.txt, .xml, etc.) are never deleted."""
     search_roots = roots or ["/data/jellyfin/media/Movies", "/data/jellyfin/media/TV Shows", "/opt/jellyfin-local/media"]
     all_media_exts = (
         ".strm", ".mp4", ".mkv", ".avi", ".ts", ".mov", ".wmv",
         ".m4v", ".webm", ".flv", ".iso", ".mpg", ".mpeg", ".m2ts"
     )
-    sidecar_exts = (".nfo", ".xml", ".txt")
+    known_app_nfo = {"movie.nfo", "tvshow.nfo"}
 
     for root_dir in search_roots:
         if not os.path.exists(root_dir):
@@ -324,10 +326,9 @@ def cleanup_empty_media_folders(roots=None):
                 continue
             has_media = any(f.lower().endswith(all_media_exts) for f in filenames)
             if not has_media and not dirnames:
-                # If directory has only abandoned sidecars, clean sidecars first
-                sidecars = [f for f in filenames if f.lower().endswith(sidecar_exts)]
-                if len(sidecars) == len(filenames):
-                    for sf in sidecars:
+                # If directory has ONLY confirmed application-generated NFO metadata, clean those
+                if filenames and all(f.lower() in known_app_nfo for f in filenames):
+                    for sf in filenames:
                         try:
                             os.remove(os.path.join(dirpath, sf))
                         except Exception:

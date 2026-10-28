@@ -445,19 +445,11 @@ def load_cache():
                     os.makedirs(data["target_dir"], exist_ok=True)
                     shutil.move(old_strm, new_strm)
                     old_p = os.path.dirname(old_strm)
-                    if os.path.isdir(old_p):
-                        sidecars = [f for f in os.listdir(old_p) if f.lower().endswith((".nfo", ".xml", ".txt"))]
-                        if len(sidecars) == len(os.listdir(old_p)):
-                            for sf in sidecars:
-                                try:
-                                    os.remove(os.path.join(old_p, sf))
-                                except OSError:
-                                    pass
-                        if not os.listdir(old_p):
-                            try:
-                                os.rmdir(old_p)
-                            except OSError:
-                                pass
+                    if os.path.isdir(old_p) and not os.listdir(old_p):
+                        try:
+                            os.rmdir(old_p)
+                        except OSError:
+                            pass
                 except Exception:
                     pass
             data["_force_art_refresh"] = True
@@ -3327,13 +3319,13 @@ async def purge_media_item(
             except OSError as exc:
                 logger.warning(f"[PURGE] Could not delete STRM file {strm_path}: {exc}")
 
-        # Safely remove target directory IF genuinely empty or sidecar-only (preserves other files/media)
+        # Safely remove target directory IF genuinely empty or contains only application-generated NFO
         if target_dir and os.path.isdir(target_dir):
             try:
                 remaining = os.listdir(target_dir)
-                sidecars = [f for f in remaining if f.lower().endswith((".nfo", ".xml", ".txt"))]
-                if len(sidecars) == len(remaining):
-                    for sf in sidecars:
+                known_app_nfo = {"movie.nfo", "tvshow.nfo"}
+                if remaining and all(f.lower() in known_app_nfo or f.lower().endswith(".nfo") for f in remaining):
+                    for sf in remaining:
                         try:
                             os.remove(os.path.join(target_dir, sf))
                         except OSError:
@@ -5123,20 +5115,12 @@ async def _prune_orphan_strms(movies_dir, shows_dir, keep):
                     removed += 1
                     logger.info(f"[RESTORE] Pruned orphaned .strm: {path}")
                     parent_dir = os.path.dirname(path)
-                    if os.path.isdir(parent_dir):
-                        sidecars = [f for f in os.listdir(parent_dir) if f.lower().endswith((".nfo", ".xml", ".txt"))]
-                        if len(sidecars) == len(os.listdir(parent_dir)):
-                            for sf in sidecars:
-                                try:
-                                    os.remove(os.path.join(parent_dir, sf))
-                                except OSError:
-                                    pass
-                        if not os.listdir(parent_dir):
-                            try:
-                                os.rmdir(parent_dir)
-                                logger.info(f"[RESTORE] Cleaned empty parent folder: {parent_dir}")
-                            except OSError:
-                                pass
+                    if os.path.isdir(parent_dir) and not os.listdir(parent_dir):
+                        try:
+                            os.rmdir(parent_dir)
+                            logger.info(f"[RESTORE] Cleaned empty parent folder: {parent_dir}")
+                        except OSError:
+                            pass
                 except OSError as e:
                     logger.warning(f"[RESTORE] Could not prune {path}: {e}")
     return removed
@@ -5281,11 +5265,11 @@ _RE_ENRICH_RUNNING = False
 
 async def reindex_all_with_imdb(force_all: bool = True) -> int:
     """Re-index all movies & TV media using official IMDb suggestion API (omkarcloud/imdb-scraper).
-    Purges corrupted/mismatched folders, writes authentic NFOs, downloads Amazon CDN posters,
-    and forces item-level Jellyfin refreshes.
+    Safely reconciles metadata, writes authentic NFOs, downloads Amazon CDN posters, routes untracked
+    files and directories to the review queue without deleting, and forces item-level Jellyfin refreshes.
     """
     logger.info(f"[IMDB-REINDEX] Starting full IMDb re-indexing pass (force_all={force_all})...")
-    # Step 1: Purge untracked rogue .strm files and empty untracked directories on disk
+    # Step 1: Scan untracked stream pointers and directories on disk (route to review queue; clean genuinely empty folders)
     valid_dirs = set()
     valid_strms = set()
     for d in FILE_ID_CACHE.values():
@@ -5310,7 +5294,7 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
             if p_sroot:
                 valid_dirs.add(os.path.normpath(p_sroot).lower())
 
-    # Only purge untracked files when valid catalog records exist (safety guard)
+    # Only scan untracked files when valid catalog records exist (safety guard)
     if valid_strms:
         for root in (MOVIES_DIR, SHOWS_DIR):
             if not os.path.isdir(root):
@@ -5345,29 +5329,15 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                         logger.info(f"[CLEANUP] Removed empty directory: {dp}")
                     except OSError:
                         pass
-                else:
-                    # Check if remaining files are only abandoned metadata sidecars (.nfo, .xml, .txt)
-                    sidecar_exts = (".nfo", ".xml", ".txt")
-                    sidecars = [f for f in remaining if f.lower().endswith(sidecar_exts)]
-                    if len(sidecars) == len(remaining):
-                        for sf in sidecars:
-                            try:
-                                os.remove(os.path.join(dp, sf))
-                            except OSError:
-                                pass
-                        try:
-                            os.rmdir(dp)
-                            logger.info(f"[CLEANUP] Removed abandoned sidecar-only directory: {dp}")
-                        except OSError:
-                            pass
-                    elif valid_dirs and norm_dp.lower() not in valid_dirs and not any(f.lower().endswith('.strm') for f in remaining):
-                        # Directory contains unknown formats or non-strm media - NEVER rmtree; preserve and record review
-                        logger.warning(f"[REINDEX] Preserving untracked directory with unrecognized files: {dp}")
-                        _record_review_job(
-                            {"directory": dp, "files": remaining[:10]},
-                            confidence=0.0,
-                            reason=f"untracked_directory:{os.path.basename(dp)}"
-                        )
+                elif valid_dirs and norm_dp.lower() not in valid_dirs and not any(f.lower().endswith('.strm') for f in remaining):
+                    # Directory contains files without tracked .strm media (whether sidecars, unknown formats, or user data)
+                    # NEVER delete files; preserve and record review job
+                    logger.warning(f"[REINDEX] Preserving untracked directory with files: {dp}")
+                    _record_review_job(
+                        {"directory": dp, "files": remaining[:10]},
+                        confidence=0.0,
+                        reason=f"untracked_directory:{os.path.basename(dp)}"
+                    )
 
     # Step 2: Iterate through all cached media
     updated_count = 0
@@ -5454,14 +5424,7 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                 and os.path.dirname(norm_old) not in (os.path.normpath(MOVIES_DIR), os.path.normpath(SHOWS_DIR))
             ):
                 try:
-                    sidecars = [f for f in os.listdir(norm_old) if f.lower().endswith((".nfo", ".xml", ".txt"))]
-                    if len(sidecars) == len(os.listdir(norm_old)):
-                        for sf in sidecars:
-                            try:
-                                os.remove(os.path.join(norm_old, sf))
-                            except OSError:
-                                pass
-                    if not os.listdir(norm_old):
+                    if os.path.isdir(norm_old) and not os.listdir(norm_old):
                         os.rmdir(norm_old)
                         logger.info(f"[IMDB-REINDEX] Cleaned obsolete empty folder: {norm_old}")
                 except Exception:

@@ -583,7 +583,7 @@ def test_duplicate_path_cleanup_preserves_structural_and_collection_rows(tmp_pat
 
 
 def test_cleanup_empty_media_folders_never_deletes_non_empty_unrecognized_formats(tmp_path):
-    """Ensure cleanup_empty_media_folders never deletes a folder that contains files other than sidecars."""
+    """Ensure cleanup_empty_media_folders never deletes a folder that contains user files (.txt, .xml, .bin)."""
     movies_root = tmp_path / "Movies"
     movies_root.mkdir()
 
@@ -592,11 +592,25 @@ def test_cleanup_empty_media_folders_never_deletes_non_empty_unrecognized_format
     folder_with_unrecognized.mkdir()
     (folder_with_unrecognized / "movie.bin").write_bytes(b"arbitrary binary media")
 
+    # Folder with user text notes (e.g. info.txt)
+    folder_with_txt = movies_root / "User Notes Movie"
+    folder_with_txt.mkdir()
+    (folder_with_txt / "notes.txt").write_text("personal user notes")
+
+    # Folder with xml data (e.g. custom.xml)
+    folder_with_xml = movies_root / "Custom XML Movie"
+    folder_with_xml.mkdir()
+    (folder_with_xml / "data.xml").write_text("<data>user xml</data>")
+
     cleanup_empty_media_folders(roots=[str(movies_root)])
 
-    # The folder and its binary file MUST be preserved
+    # All folders and their files MUST be preserved
     assert folder_with_unrecognized.exists()
     assert (folder_with_unrecognized / "movie.bin").exists()
+    assert folder_with_txt.exists()
+    assert (folder_with_txt / "notes.txt").exists()
+    assert folder_with_xml.exists()
+    assert (folder_with_xml / "data.xml").exists()
 
 
 

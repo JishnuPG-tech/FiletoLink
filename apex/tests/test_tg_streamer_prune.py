@@ -329,10 +329,15 @@ def test_reindex_all_with_imdb_preserves_untracked_strm_and_directories(tmp_path
     untracked_strm = untracked_strm_dir / "untracked.strm"
     untracked_strm.write_text("http://127.0.0.1:8080/stream/1:999/video.mp4")
 
-    # 4. Untracked directory with ONLY abandoned sidecar files (.nfo)
-    sidecar_only = movies_dir / "English" / "Abandoned Sidecars"
-    sidecar_only.mkdir(parents=True)
-    (sidecar_only / "movie.nfo").write_text("<movie></movie>")
+    # 4. Untracked directory with sidecar files (.nfo, .txt)
+    sidecar_dir = movies_dir / "English" / "Sidecar Title"
+    sidecar_dir.mkdir(parents=True)
+    (sidecar_dir / "movie.nfo").write_text("<movie></movie>")
+    (sidecar_dir / "notes.txt").write_text("user notes")
+
+    # 5. Genuinely empty directory (no files, no subdirectories)
+    truly_empty = movies_dir / "English" / "Truly Empty Folder"
+    truly_empty.mkdir(parents=True)
 
     recorded_reviews = []
 
@@ -404,10 +409,16 @@ def test_reindex_all_with_imdb_preserves_untracked_strm_and_directories(tmp_path
     assert tracked_folder.exists()
     assert tracked_strm.exists()
 
-    # Sidecar-only directory MUST be safely cleaned
-    assert not sidecar_only.exists()
+    # Sidecar directory MUST survive and be routed to review
+    assert sidecar_dir.exists()
+    assert (sidecar_dir / "movie.nfo").exists()
+    assert (sidecar_dir / "notes.txt").exists()
 
-    # Review queue must have recorded both the untracked directory and the untracked strm
+    # Truly empty directory MUST be cleaned via os.rmdir
+    assert not truly_empty.exists()
+
+    # Review queue must have recorded both untracked directories and untracked strm
     reasons = [r[2] for r in recorded_reviews]
     assert any("untracked_directory:Unknown Format Title" in r for r in reasons)
+    assert any("untracked_directory:Sidecar Title" in r for r in reasons)
     assert any("untracked_strm_file:untracked.strm" in r for r in reasons)
