@@ -136,6 +136,17 @@ def safe_folder(name: str) -> str:
 def folder_name(title: Optional[str], year: Optional[int] = None) -> str:
     """Jellyfin folder name for a title, e.g. `Spider-Man (2017)`."""
     name = safe_folder(title) if title else "Unknown"
+    # Repeatedly strip any existing trailing (YYYY) tags to prevent duplicate years
+    while True:
+        m = re.search(r"\s*\((\d{4})\)$", name)
+        if not m:
+            break
+        if not year:
+            try:
+                year = int(m.group(1))
+            except (ValueError, TypeError):
+                pass
+        name = name[:m.start()].strip()
     if year:
         name = f"{name} ({year})"
     return name
@@ -212,11 +223,12 @@ def strm_base(entry: Dict) -> str:
     `Show - SxxEyy`, so sidecars always sit byte-for-byte next to the .strm.
     """
     if entry.get("is_tv"):
-        show = entry.get("show_name") or entry.get("title") or "Unknown_Show"
+        show = entry.get("show_name") or entry.get("clean_title") or entry.get("title") or "Unknown_Show"
+        clean_show = re.sub(r"\s*\(\d{4}\)$", "", safe_folder(show)).strip()
         season = int(entry.get("season") or 1)
         episode = int(entry.get("episode") or 1)
-        return safe_folder(f"{show} - S{season:02d}E{episode:02d}")
-    title = entry.get("title") or "Unknown"
+        return safe_folder(f"{clean_show} - S{season:02d}E{episode:02d}")
+    title = entry.get("clean_title") or entry.get("title") or "Unknown"
     return folder_name(title, entry.get("year"))
 
 

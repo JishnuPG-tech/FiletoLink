@@ -216,6 +216,28 @@ def load_cache():
 
 
 
+        # 0. Heal bogus/synthetic TMDB IDs (e.g. raw IMDb numbers like 5568976, 3215778)
+        if data.get("tmdb_id") in (5568976, 3215778):
+            data.pop("tmdb_id", None)
+            cache_updated = True
+
+        # 0b. Heal Spider-Man: Homecoming (2017)
+        if ("homecoming" in raw_lower or "spiderman homecoming" in title_l) and ("spider" in raw_lower or "spiderman" in raw_lower or "wmr" in raw_lower):
+            data["title"] = "Spider-Man: Homecoming"
+            data["clean_title"] = "Spider-Man: Homecoming"
+            data["search_title"] = "spider-man homecoming"
+            data["tmdb_id"] = 315635
+            data["imdb_id"] = "tt2250912"
+            data["year"] = 2017
+            data["tmdb_year"] = 2017
+            data["strm_base"] = "Spider-Man: Homecoming (2017)"
+            lang = data.get("language") or "English"
+            data["target_dir"] = os.path.join(MOVIES_DIR, lang, "Spider-Man: Homecoming (2017)")
+            data["strm_path"] = os.path.join(data["target_dir"], "Spider-Man: Homecoming (2017).strm")
+            data["_force_art_refresh"] = True
+            cache_updated = True
+            logger.info(f"[CACHE-HEAL] Corrected Spider-Man Homecoming metadata for '{raw_name}'")
+
         # 1. Heal Generation Iron misidentification on Iron Man movies
         is_gen_iron = (
             data.get("tmdb_id") == 210879
@@ -344,7 +366,7 @@ def load_cache():
             show_root = tv_show_root(SHOWS_DIR, lang, "It: Welcome to Derry", 2025)
             data["show_root"] = show_root
             data["target_dir"] = os.path.join(show_root, f"Season {s_num:02d}")
-            data["strm_base"] = f"It: Welcome to Derry S{s_num:02d}E{e_num:02d}"
+            data["strm_base"] = f"It: Welcome to Derry - S{s_num:02d}E{e_num:02d}"
             data["strm_path"] = os.path.join(data["target_dir"], f"{data['strm_base']}.strm")
             data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BZWE0ZWM1MjUtNmYzYS00NzU3LTkxYmQtNmI3NTc0ZTY1NmVlXkEyXkFqcGc@._V1_.jpg"
             data["backdrop_url"] = "https://images.metahub.space/background/medium/tt19244304/img"
@@ -376,7 +398,7 @@ def load_cache():
             show_root = tv_show_root(SHOWS_DIR, lang, "Wednesday", 2022)
             data["show_root"] = show_root
             data["target_dir"] = os.path.join(show_root, f"Season {s_num:02d}")
-            data["strm_base"] = f"Wednesday S{s_num:02d}E{e_num:02d}"
+            data["strm_base"] = f"Wednesday - S{s_num:02d}E{e_num:02d}"
             data["strm_path"] = os.path.join(data["target_dir"], f"{data['strm_base']}.strm")
             data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BMDE1NjNmNmQtMGQ5OC00NzczLTgwMDItNTI3NDZjNDk2NDYyXkEyXkFqcGc@._V1_.jpg"
             data["backdrop_url"] = "https://images.metahub.space/background/medium/tt13443470/img"
@@ -409,7 +431,7 @@ def load_cache():
             show_root = tv_show_root(SHOWS_DIR, lang, "What If...?", 2021)
             data["show_root"] = show_root
             data["target_dir"] = os.path.join(show_root, f"Season {s_num:02d}")
-            data["strm_base"] = f"What If...? S{s_num:02d}E{e_num:02d}"
+            data["strm_base"] = f"What If...? - S{s_num:02d}E{e_num:02d}"
             data["strm_path"] = os.path.join(data["target_dir"], f"{data['strm_base']}.strm")
             data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BYWFiOTcwNzItMTg5Mi00ZTU4LThkZWYtYWNmZWQ1ODE5ZTVmXkEyXkFqcGc@._V1_.jpg"
             data["backdrop_url"] = "https://images.metahub.space/background/medium/tt10168312/img"
@@ -436,7 +458,7 @@ def load_cache():
             show_root = tv_show_root(SHOWS_DIR, data.get("language") or "English", "It: Welcome to Derry", 2025)
             data["show_root"] = show_root
             data["target_dir"] = os.path.join(show_root, f"Season {s_num:02d}")
-            data["strm_base"] = f"It: Welcome to Derry S{s_num:02d}E{e_num:02d}"
+            data["strm_base"] = f"It: Welcome to Derry - S{s_num:02d}E{e_num:02d}"
             old_strm = data.get("strm_path")
             new_strm = os.path.join(data["target_dir"], f"{data['strm_base']}.strm")
             data["strm_path"] = new_strm
@@ -1559,10 +1581,29 @@ async def _fetch_imdb_suggestion(query: str, year: Optional[int] = None, media_t
                         if title_score <= 0.0:
                             continue
 
-                        # 2. Year alignment score
+                        # 2. Year alignment score with strict movie vs tv validation
                         if year and s_year:
-                            ydiff = abs(int(s_year) - int(year))
-                            year_score = 2.0 if ydiff == 0 else (1.0 if ydiff == 1 else (0.0 if ydiff <= 3 else -2.0))
+                            try:
+                                sy = int(s_year)
+                                y = int(year)
+                                if media_type == "movie":
+                                    ydiff = abs(sy - y)
+                                    if ydiff == 0:
+                                        year_score = 2.0
+                                    elif ydiff == 1:
+                                        year_score = 0.5
+                                    else:
+                                        # Strict movie rule: >=2 year gap is rejected to prevent mismatched films
+                                        year_score = -5.0
+                                else:
+                                    # TV Series: season release year (y) is normally >= series premiere year (sy)
+                                    if y >= sy:
+                                        year_score = 1.5 if (y - sy) <= 3 else 0.5
+                                    else:
+                                        # Series cannot premiere in the future compared to file year
+                                        year_score = -5.0
+                            except (ValueError, TypeError):
+                                year_score = 0.0
                         else:
                             year_score = 0.0
 
@@ -1572,10 +1613,22 @@ async def _fetch_imdb_suggestion(query: str, year: Optional[int] = None, media_t
                         has_img = 0.2 if (s.get("i") or {}).get("imageUrl") else 0.0
 
                         total_score = title_score + year_score + rank_score + has_img
-                        candidates.append((total_score, idx, s))
+                        # Strict confidence gate: require at least 3.2 total score
+                        if total_score >= 3.2:
+                            candidates.append((total_score, idx, s))
 
                     if candidates:
                         candidates.sort(key=lambda c: (c[0], -c[1]), reverse=True)
+                        # Ambiguity detection: if top 2 candidates are virtually tied (< 0.15 diff)
+                        if len(candidates) > 1:
+                            top_score = candidates[0][0]
+                            second_score = candidates[1][0]
+                            if (top_score - second_score) < 0.15 and candidates[0][2].get("id") != candidates[1][2].get("id"):
+                                logger.info(
+                                    f"[IMDB-SUGGEST] Ambiguous candidates for '{query}' "
+                                    f"('{candidates[0][2].get('l')}' {top_score:.2f} vs '{candidates[1][2].get('l')}' {second_score:.2f}); held for review"
+                                )
+                                return None
                         best = candidates[0][2]
                         logger.info(f"[IMDB-SUGGEST] Matched '{query}' ({year or 'any'}) -> '{best.get('l')}' ({best.get('y')}) [{best.get('id')}] (score={candidates[0][0]:.2f})")
                         return best
@@ -1956,7 +2009,8 @@ async def _enrich_media_metadata(entry):
 
         # If this item was already verified with a valid TMDB ID, lock directly to that ID
         # NEVER re-run fuzzy text search against candidates for an already verified movie!
-        if known_tmdb and known_tmdb not in (210879,):
+        # Reject synthetic or known 404 IDs (e.g. 210879, 5568976, 3215778)
+        if known_tmdb and known_tmdb not in (210879, 5568976, 3215778):
             hit = {"id": known_tmdb}
             used_query = f"tmdb:{known_tmdb}"
             logger.info(f"[TMDB-LOCK] Preserved verified identity tmdb_id={known_tmdb} for '{entry.get('title')}'")
@@ -2019,7 +2073,7 @@ async def _enrich_media_metadata(entry):
                                 pass
 
                         hit = {
-                            "id": resolved_tmdb_id or int(re.sub(r"\D", "", imdb_id)[:8]),
+                            "id": resolved_tmdb_id,
                             "imdb_id": imdb_id,
                             "title": official_title,
                             "name": official_title,
@@ -2447,7 +2501,11 @@ async def _enrich_media_metadata(entry):
             if hit and ("title" in hit or "name" in hit):
                 detail = hit
             else:
-                logger.info(f"[METADATA] No detail for id={tmdb_id} ({query})")
+                logger.info(f"[METADATA] No detail for id={tmdb_id} ({query}); invalidating unverified TMDB ID")
+                entry.pop("tmdb_id", None)
+                if key in FILE_ID_CACHE and isinstance(FILE_ID_CACHE[key], dict):
+                    FILE_ID_CACHE[key].pop("tmdb_id", None)
+                    await save_cache_async()
                 return False
         else:
             # Preserve genuine IMDb identity and Amazon CDN artwork
@@ -3231,8 +3289,26 @@ def create_strm_file(entry):
 _last_jf_scan_time = 0.0
 _jf_scan_lock = None
 
-async def trigger_jellyfin_scan(debounce_seconds: float = 15.0):
-    """Trigger Jellyfin Library Scan automatically with debounce and retry while Jellyfin boots."""
+async def is_jellyfin_scanning() -> bool:
+    """Check if Jellyfin is currently running a ScheduledTasks library scan."""
+    headers = _jellyfin_auth_header()
+    if not headers:
+        return False
+    try:
+        connector = aiohttp.TCPConnector(family=socket.AF_INET)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.get("http://127.0.0.1:8096/ScheduledTasks", headers=headers, timeout=5) as resp:
+                if resp.status == 200:
+                    tasks = await resp.json()
+                    for task in tasks:
+                        if task.get("Key") in ("RefreshMediaLibrary", "ScanMediaLibrary") or "Scan Media Library" in str(task.get("Name")):
+                            return task.get("State") == "Running"
+    except Exception:
+        pass
+    return False
+
+async def trigger_jellyfin_scan(debounce_seconds: float = 30.0):
+    """Trigger Jellyfin Library Scan automatically with debounce, serialization, and retry."""
     global _last_jf_scan_time, _jf_scan_lock
     if _jf_scan_lock is None:
         _jf_scan_lock = asyncio.Lock()
@@ -3240,9 +3316,15 @@ async def trigger_jellyfin_scan(debounce_seconds: float = 15.0):
     if now - _last_jf_scan_time < debounce_seconds:
         logger.info(f"[JELLYFIN-SCAN] Scan request debounced ({now - _last_jf_scan_time:.1f}s < {debounce_seconds}s)")
         return
+    if await is_jellyfin_scanning():
+        logger.info("[JELLYFIN-SCAN] Library scan already active in Jellyfin; skipping redundant trigger.")
+        return
     async with _jf_scan_lock:
         now = time.monotonic()
         if now - _last_jf_scan_time < debounce_seconds:
+            return
+        if await is_jellyfin_scanning():
+            logger.info("[JELLYFIN-SCAN] Library scan currently active; skipping redundant trigger.")
             return
         _last_jf_scan_time = now
         headers = _jellyfin_auth_header()
@@ -3424,7 +3506,7 @@ async def refresh_jellyfin_item_by_path(strm_path, alt_paths=None, retries=12, d
                 if not matched_item:
                     # Every few attempts, nudge a library scan so a freshly
                     # created/moved .strm is indexed before the next lookup.
-                    if attempt % 4 == 0:
+                    if attempt > 0 and attempt % 3 == 0:
                         try:
                             await request_jellyfin_scan()
                         except Exception:
@@ -3594,17 +3676,50 @@ async def deduplicate_jellyfin_items():
             for s_ident, s_entries in series_groups.items():
                 if len(s_entries) > 1:
                     existing_s = [pair for pair in s_entries if os.path.exists(pair[1])]
-                    # Keep series with the deepest or existing folder path
                     keep_s = sorted(existing_s or s_entries, key=lambda pair: len(pair[1]), reverse=True)[0]
-                    duplicates.extend(pair for pair in s_entries if pair is not keep_s)
+                    norm_keep_s = os.path.normpath(keep_s[1]).lower()
+                    for pair in s_entries:
+                        if pair is keep_s:
+                            continue
+                        norm_pair_s = os.path.normpath(pair[1]).lower()
+                        if norm_pair_s == norm_keep_s or not os.path.exists(pair[1]):
+                            duplicates.append(pair)
+                        else:
+                            _record_review_job(
+                                {"item": pair[0], "path": pair[1], "keep_path": keep_s[1]},
+                                confidence=0.0,
+                                reason=f"conflicting_series_path:{s_ident}",
+                            )
 
             for identity, entries in groups.items():
                 if identity == "unknown-media":
-                    duplicates.extend(entries)
+                    for pair in entries:
+                        _record_review_job(
+                            {"item": pair[0], "path": pair[1]},
+                            confidence=0.0,
+                            reason="unknown_media_jellyfin_item",
+                        )
                     continue
                 existing = [pair for pair in entries if os.path.exists(pair[1])]
                 keep = sorted(existing or entries, key=lambda pair: len(pair[1]))[0]
-                duplicates.extend(pair for pair in entries if pair is not keep)
+                norm_keep = os.path.normpath(keep[1]).lower()
+                for pair in entries:
+                    if pair is keep:
+                        continue
+                    norm_pair = os.path.normpath(pair[1]).lower()
+                    if norm_pair == norm_keep:
+                        # Identical path duplicate in Jellyfin database
+                        duplicates.append(pair)
+                    elif not os.path.exists(pair[1]):
+                        # Nonexistent ghost path
+                        duplicates.append(pair)
+                    else:
+                        # Existing file on a different path: DO NOT DELETE! Route to review.
+                        _record_review_job(
+                            {"item": pair[0], "path": pair[1], "keep_path": keep[1]},
+                            confidence=0.0,
+                            reason=f"conflicting_identity_path:{identity}",
+                        )
 
             for item, path in duplicates:
                 item_id = item.get("Id")
@@ -5392,13 +5507,16 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                 data["show_name"] = official_title
                 data["season"] = s_num
                 data["episode"] = e_num
-                new_strm_base = f"{official_title} S{s_num:02d}E{e_num:02d}"
+                data["strm_base"] = strm_base(data)
+                target_dir = strm_dir(MOVIES_DIR, SHOWS_DIR, data)
                 show_root = tv_show_root(SHOWS_DIR, lang, official_title, official_year)
-                target_dir = os.path.join(show_root, f"Season {s_num:02d}")
                 data["show_root"] = show_root
+                new_strm_base = data["strm_base"]
             else:
-                new_strm_base = f"{official_title} ({official_year})" if official_year else official_title
-                target_dir = os.path.join(MOVIES_DIR, lang, new_strm_base)
+                data["is_tv"] = False
+                data["strm_base"] = strm_base(data)
+                target_dir = strm_dir(MOVIES_DIR, SHOWS_DIR, data)
+                new_strm_base = data["strm_base"]
 
             data["strm_base"] = new_strm_base
 
@@ -5520,10 +5638,18 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
     # Step 3: Deduplicate & purge stale items from Jellyfin SQLite DB
     await deduplicate_jellyfin_items()
 
-    # Step 4: Refresh newly created / updated items in Jellyfin
-    for p in refreshed_paths:
-        asyncio.create_task(refresh_jellyfin_item_by_path(p, retries=4, delay=2.0))
+    # Step 4: Batch trigger single Jellyfin scan after reindexing completes
     await request_jellyfin_scan()
+
+    # Step 5: Refresh newly created / updated items with bounded concurrency
+    async def _bounded_refreshes():
+        sem = asyncio.Semaphore(4)
+        async def _one(p):
+            async with sem:
+                await refresh_jellyfin_item_by_path(p, retries=2, delay=2.0)
+        await asyncio.gather(*(_one(p) for p in refreshed_paths), return_exceptions=True)
+    asyncio.create_task(_bounded_refreshes())
+
     logger.info(f"[IMDB-REINDEX] Completed full IMDb re-indexing of {updated_count} media items.")
     return updated_count
 
@@ -5532,13 +5658,13 @@ async def _reconcile_and_upgrade_library():
     """Startup reconciliation:
     1. Permanently remove TV Shows/English and blacklisted demo entries.
     2. Reset mis-matched entries in FILE_ID_CACHE (e.g. Indian film matched to Portuguese/European).
-    3. Re-index all media with IMDb suggestion API and download authentic Amazon CDN posters.
+    3. Re-index un-indexed or outdated media with IMDb suggestion API and download authentic Amazon CDN posters.
     4. Re-enrich entries needing HD artwork.
     """
     try:
-        # Step 0: Run comprehensive IMDb re-indexing pass
+        # Step 0: Run safe IMDb re-indexing pass (force_all=False prevents hammering during startup)
         try:
-            await reindex_all_with_imdb(force_all=True)
+            await reindex_all_with_imdb(force_all=False)
         except Exception as _re_exc:
             logger.warning(f"[RECONCILE] IMDb re-indexing notice: {_re_exc}")
 

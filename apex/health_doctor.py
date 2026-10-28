@@ -60,12 +60,22 @@ def check_disk_space(target_path: str = DATA_DIR):
     try:
         if os.path.exists(target_path):
             total, used, free = shutil.disk_usage(target_path)
-            used_pct = (used / total) * 100
+            used_pct = (used / total) * 100 if total > 0 else 0.0
             free_gib = free / (1024 ** 3)
+            # If filesystem reports virtual/synthetic infinite capacity (>50,000 GiB), query root or report cloud storage
+            if free_gib > 50000:
+                try:
+                    _, _, r_free = shutil.disk_usage("/")
+                    r_free_gib = r_free / (1024 ** 3)
+                    if r_free_gib < 50000:
+                        free_gib = r_free_gib
+                except Exception:
+                    pass
+            free_str = f"{free_gib:.2f} GiB free" if free_gib < 50000 else "unlimited cloud storage"
             if used_pct > 90:
-                logger.warning(f"High disk usage on {target_path}: {used_pct:.1f}% used ({free_gib:.2f} GiB free)")
+                logger.warning(f"High disk usage on {target_path}: {used_pct:.1f}% used ({free_str})")
             else:
-                logger.info(f"Disk usage on {target_path}: {used_pct:.1f}% used ({free_gib:.2f} GiB free)")
+                logger.info(f"Disk usage on {target_path}: {used_pct:.1f}% used ({free_str})")
     except Exception as exc:
         logger.warning(f"Could not inspect disk usage: {exc}")
 

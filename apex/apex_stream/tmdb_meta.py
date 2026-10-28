@@ -380,6 +380,8 @@ def _clean_search_title(text: str) -> str:
     text = _strip_noise(_drop_dotted_group_tail(text))
     text = YEAR_RE.sub(" ", text)
     text = re.sub(r"\(\s*\)", " ", text)
+    # Strip leading "Episode NN -" or "Ep NN -" prefix (e.g. "Episode 3 - Green Lantern")
+    text = re.sub(r"(?i)^\s*(?:episode|ep)\.?\s*\d+\s*[-_.:]\s*", " ", text)
     # Remove audio/dub tails BEFORE generic token removal so codec words are
     # still present to anchor the trailing pattern.
     text = _strip_audio_lang_tail(text)

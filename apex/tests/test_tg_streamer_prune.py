@@ -588,3 +588,96 @@ def test_reconciliation_end_to_end_library_behavior(tmp_path):
     reasons = [r[2] for r in recorded_reviews]
     assert any("untracked_strm_file:Untracked Indie Film (2024).strm" in r for r in reasons)
     assert any("untracked_directory:User Curated Title (2023)" in r for r in reasons)
+
+
+def test_folder_name_idempotent_single_year():
+    from apex_stream.organize import folder_name, strm_base
+    assert folder_name("Iron Man 3 (2013)", 2013) == "Iron Man 3 (2013)"
+    assert folder_name("Iron Man 3 (2013) (2013)", 2013) == "Iron Man 3 (2013)"
+    assert folder_name("Ne Zha (2019) (2019)", 2019) == "Ne Zha (2019)"
+    assert folder_name("Ne Zha (2019)", 2019) == "Ne Zha (2019)"
+    assert folder_name("Khalifa (2026)", 2026) == "Khalifa (2026)"
+    assert folder_name("Khalifa (2026) (2026)", 2026) == "Khalifa (2026)"
+    # TV episode filename base with hyphen
+    tv_entry = {"clean_title": "Wednesday", "year": 2024, "is_tv": True, "season": 2, "episode": 1}
+    assert strm_base(tv_entry) == "Wednesday - S02E01"
+    tv_entry2 = {"title": "Wednesday (2024)", "year": 2024, "is_tv": True, "season": 2, "episode": 8}
+    assert strm_base(tv_entry2) == "Wednesday - S02E08"
+
+
+def test_clean_search_title_strips_leading_episode():
+    from apex_stream.tmdb_meta import _clean_search_title, _search_candidates
+    assert _clean_search_title("Episode 3 - Green Lantern (2011)") == "green lantern"
+    cands = _search_candidates("Episode 3 - Green Lantern (2011)")
+    assert "green lantern" in cands
+
+
+def test_deduplicate_jellyfin_items_preserves_conflicting_paths(tmp_path):
+    movies_dir = tmp_path / "Movies"
+    path1 = movies_dir / "English" / "Ne Zha (2019)" / "Ne Zha (2019).strm"
+    path2 = movies_dir / "English" / "Ne Zha (2019) (2019)" / "Ne Zha (2019) (2019).strm"
+    path1.parent.mkdir(parents=True, exist_ok=True)
+    path2.parent.mkdir(parents=True, exist_ok=True)
+    path1.write_text("stream-url-1")
+    path2.write_text("stream-url-2")
+
+    items = [
+        {"Id": "item-1", "Name": "Ne Zha", "Type": "Movie", "Path": str(path1), "ProviderIds": {"Tmdb": "615453"}},
+        {"Id": "item-2", "Name": "Ne Zha", "Type": "Movie", "Path": str(path2), "ProviderIds": {"Tmdb": "615453"}},
+    ]
+
+    deleted_item_ids = []
+    recorded_reviews = []
+
+    class MockResponse:
+        def __init__(self, status=200, json_data=None):
+            self.status = status
+            self._json = json_data or {}
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def json(self): return self._json
+
+    class MockSession:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        def get(self, url, params=None, headers=None, timeout=None):
+            return MockResponse(200, {"Items": items})
+        def delete(self, url, params=None, headers=None, timeout=None):
+            item_id = url.rstrip("/").split("/")[-1]
+            deleted_item_ids.append(item_id)
+            return MockResponse(204)
+
+    class MockAiohttp:
+        ClientSession = MockSession
+
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    node = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "deduplicate_jellyfin_items")
+
+    ns = {
+        "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
+        "os": os,
+        "re": re,
+        "aiohttp": MockAiohttp(),
+        "_jellyfin_auth_header": lambda: {"X-Emby-Token": "test-token"},
+        "_read_jellyfin_api_key": lambda: "test-token",
+        "MOVIES_DIR": str(movies_dir),
+        "SHOWS_DIR": str(tmp_path / "TV Shows"),
+        "FILE_ID_CACHE": {},
+        "is_blacklisted": lambda text: False,
+        "_record_review_job": lambda data, confidence=0.0, reason="": recorded_reviews.append((data, confidence, reason)),
+        "parse_media_meta": lambda name: {"title": name, "clean_title": name},
+        "_canonical_media_key": lambda e: "tmdb:615453",
+        "DEFAULT_LANGUAGE": "English",
+    }
+    exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
+    dedup = ns["deduplicate_jellyfin_items"]
+
+    res = asyncio.run(dedup())
+
+    # Neither existing path should be deleted from Jellyfin!
+    assert "item-1" not in deleted_item_ids
+    assert "item-2" not in deleted_item_ids
+    assert len(deleted_item_ids) == 0
+
+    # Conflicting existing paths must be sent to review
+    assert any("conflicting_identity_path:tmdb:615453" in r[2] for r in recorded_reviews)
