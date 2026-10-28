@@ -333,7 +333,7 @@ def load_cache():
             data["clean_title"] = "It: Welcome to Derry"
             data["search_title"] = "it welcome to derry"
             data["imdb_id"] = "tt19244304"
-            data["tmdb_id"] = 194766
+            data["tmdb_id"] = 200875
             data["year"] = 2025
             lang = data.get("language") or "English"
             data["language"] = lang
@@ -431,7 +431,7 @@ def load_cache():
                 data["is_tv"] = True
                 data["year"] = 2025
                 data["imdb_id"] = "tt19244304"
-                data["tmdb_id"] = 194766
+                data["tmdb_id"] = 200875
                 data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BZWE0ZWM1MjUtNmYzYS00NzU3LTkxYmQtNmI3NTc0ZTY1NmVlXkEyXkFqcGc@._V1_.jpg"
                 data["backdrop_url"] = "https://images.metahub.space/background/medium/tt19244304/img"
                 data["_force_art_refresh"] = True
@@ -2258,7 +2258,7 @@ async def _enrich_media_metadata(entry):
             entry["search_title"] = "it welcome to derry"
             entry["year"] = 2025
             entry["imdb_id"] = "tt19244304"
-            entry["tmdb_id"] = 194766
+            entry["tmdb_id"] = 200875
             entry["_force_art_refresh"] = True
             s_num = int(entry.get("season") or 1)
             e_num = int(entry.get("episode") or 1)
@@ -2270,7 +2270,7 @@ async def _enrich_media_metadata(entry):
             entry["target_dir"] = os.path.join(show_root, f"Season {s_num:02d}")
             entry["strm_path"] = os.path.join(entry["target_dir"], f"{entry['strm_base']}.strm")
             hit = {
-                "id": 194766,
+                "id": 200875,
                 "name": "It: Welcome to Derry",
                 "original_name": "It: Welcome to Derry",
                 "first_air_date": "2025-10-01",

@@ -67,6 +67,8 @@ restore_jellyfin_local() {
     rm -rf "/data/jellyfin/media/TV Shows/English" "/opt/jellyfin-local/media/TV Shows/English" 2>/dev/null || true
     find /data/jellyfin/media /data/movies /data/tvshows /data /opt/jellyfin-local -iname "*mot*test*servicing*" -exec rm -rf {} + 2>/dev/null || true
     find /data/jellyfin/media /data/movies /data/tvshows /data /opt/jellyfin-local -iname "*rose*cane*" -o -iname "*ms.rose*" -o -iname "*ms rose*" -exec rm -rf {} + 2>/dev/null || true
+    find /data/jellyfin/media /opt/jellyfin-local/media /data/tvshows -iname "*summer*turned*pretty*" -exec rm -rf {} + 2>/dev/null || true
+    find /data/jellyfin/media /opt/jellyfin-local/media /data/tvshows -iname "*what*if*(2024)*" -exec rm -rf {} + 2>/dev/null || true
     find /data/jellyfin/media/Movies/Telugu /data/movies/Telugu /opt/jellyfin-local -iname "*kattalan*" -exec rm -rf {} + 2>/dev/null || true
     # Clean up empty movie directories or orphaned folders left behind after moves
     find /data/jellyfin/media/Movies -mindepth 2 -type d -empty -delete 2>/dev/null || true

@@ -638,14 +638,20 @@ def heal_mismatched_media(roots=None, databases=None):
                         print(f"[REPAIR] Removed corrupt 'The Summer I Turned Pretty' directory: {dirpath}")
                     except Exception as rm_err:
                         print(f"[REPAIR] Error removing corrupt Summer folder: {rm_err}")
-                else:
-                    for fn in curr_files:
-                        fn_l = fn.lower()
-                        if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l in ("poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg"):
-                            try:
-                                os.remove(os.path.join(dirpath, fn))
-                            except Exception:
-                                pass
+                # Remove ANY stale artwork / logo / nfo from Derry show root and season dir to force clean fetch
+                for clean_dir in (dirpath, target_derry_root, target_derry_s1):
+                    if os.path.exists(clean_dir):
+                        try:
+                            for fn in os.listdir(clean_dir):
+                                fn_l = fn.lower()
+                                if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l.startswith("backdrop") or fn_l in ("poster.jpg", "folder.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg", "logo.png", "clearlogo.png"):
+                                    try:
+                                        os.remove(os.path.join(clean_dir, fn))
+                                        print(f"[REPAIR] Purged stale Derry art/nfo: {fn} from {clean_dir}")
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
 
                 for db_p in db_list:
                     if os.path.exists(db_p):
@@ -653,6 +659,7 @@ def heal_mismatched_media(roots=None, databases=None):
                             conn = sqlite3.connect(db_p, timeout=5)
                             conn.execute("DELETE FROM BaseItems WHERE Name LIKE '%Summer I Turned Pretty%' OR Path LIKE '%Summer I Turned Pretty%'")
                             conn.execute("DELETE FROM BaseItems WHERE Name LIKE '%Welcome to Derry%' OR Path LIKE '%Derry%'")
+                            conn.execute("DELETE FROM BaseItems WHERE Path LIKE '%194766%' OR Data LIKE '%194766%'")
                             conn.commit()
                             conn.close()
                         except Exception as dbe:
@@ -696,11 +703,16 @@ def heal_mismatched_media(roots=None, databases=None):
                                 print(f"[REPAIR] Error relocating What If strm: {mv_err}")
 
                 if is_whatif_2024 or has_chinese_meta:
-                    for fn in curr_files:
-                        fn_l = fn.lower()
-                        if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l in ("poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg"):
+                    for clean_dir in (dirpath, target_whatif_root, target_whatif_s1):
+                        if os.path.exists(clean_dir):
                             try:
-                                os.remove(os.path.join(dirpath, fn))
+                                for fn in os.listdir(clean_dir):
+                                    fn_l = fn.lower()
+                                    if fn_l.endswith((".nfo", ".srt", ".vtt", ".ass")) or fn_l.startswith("backdrop") or fn_l in ("poster.jpg", "folder.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg", "logo.png", "clearlogo.png"):
+                                        try:
+                                            os.remove(os.path.join(clean_dir, fn))
+                                        except Exception:
+                                            pass
                             except Exception:
                                 pass
                     if is_whatif_2024:
