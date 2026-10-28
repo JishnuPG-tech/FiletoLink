@@ -1062,6 +1062,7 @@ def test_refresh_jellyfin_item_handles_double_year_and_preserves_artwork(tmp_pat
         async def json(self): return self._json
 
     class MockSession:
+        def __init__(self, *args, **kwargs): pass
         async def __aenter__(self): return self
         async def __aexit__(self, *args): pass
         def get(self, url, params=None, headers=None, timeout=None):
