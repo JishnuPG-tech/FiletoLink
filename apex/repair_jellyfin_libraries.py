@@ -189,9 +189,14 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
                     print(f"[AUTH] Found Jellyfin user '{u_name}' (locked_attempts={u_attempts}, has_password={bool(u_pwd)}) in {db_path}")
 
                 db_dir = os.path.dirname(db_path)
-                markers = [marker_file] if marker_file else list(PASSWORD_RESET_MARKERS)
-                if not marker_file and db_dir:
-                    markers.append(os.path.join(db_dir, ".password_reset_done"))
+                if marker_file:
+                    markers = [marker_file]
+                elif any(db_path.startswith(p) for p in ("/data/jellyfin", "/opt/jellyfin-local")):
+                    markers = list(PASSWORD_RESET_MARKERS)
+                    if db_dir:
+                        markers.append(os.path.join(db_dir, ".password_reset_done"))
+                else:
+                    markers = [os.path.join(db_dir, ".password_reset_done")] if db_dir else []
 
                 marker_exists = any(os.path.exists(m) for m in markers)
                 env_force = os.environ.get("RESET_JELLYFIN_PASSWORD", "").strip().lower() in ("1", "true", "yes")
