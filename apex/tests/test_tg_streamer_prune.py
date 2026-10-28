@@ -548,7 +548,7 @@ def test_reconciliation_end_to_end_library_behavior(tmp_path):
         "refresh_jellyfin_item_by_path": mock_async_noop,
         "request_jellyfin_scan": mock_async_noop,
         "parse_media_meta": lambda name: {"title": name, "clean_title": name},
-        "_canonical_media_key": lambda e: "tmdb:27205",
+        "_canonical_media_key": lambda e: f"name:{e.get('title') or e.get('clean_title') or 'unknown'}",
         "DEFAULT_LANGUAGE": "English",
     }
 
