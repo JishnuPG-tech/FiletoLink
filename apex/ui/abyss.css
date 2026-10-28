@@ -402,28 +402,30 @@ input[type="radio"]:checked {
 
 /* Jellyfin 12 modern app shell (React / MUI) [BETA] */
 
-/* Jellyfin Alphabet Picker (A-Z Quick Scroller) - Transparent, Full Height, Edge-Pinned & Evenly Spaced */
+/* Jellyfin Alphabet Picker (A-Z Quick Scroller) - 100% Transparent, Top-to-Bottom Edge, Letters Only */
 .alphaPicker,
 .alphaPicker-fixed,
 .alphaPicker-fixed-right,
 .alphanumeric-scrollbar,
 div[class*="alphaPicker"] {
     position: fixed !important;
-    top: 72px !important;
-    bottom: 24px !important;
-    right: 2px !important;
-    height: calc(100vh - 96px) !important;
-    max-height: calc(100vh - 96px) !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    right: 0 !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
     margin: 0 !important;
-    padding: 2px 0 !important;
-    width: 22px !important;
+    padding: calc(env(safe-area-inset-top, 0px) + 6px) 2px calc(env(safe-area-inset-bottom, 0px) + 6px) 0 !important;
+    width: 18px !important;
     min-width: 0 !important;
-    max-width: 24px !important;
+    max-width: 20px !important;
+    box-sizing: border-box !important;
     background: transparent !important;
     background-color: transparent !important;
     background-image: none !important;
     box-shadow: none !important;
     border: none !important;
+    border-radius: 0 !important;
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
     pointer-events: auto !important;
@@ -447,6 +449,7 @@ div[class*="alphaPickerInner"] {
     background-image: none !important;
     box-shadow: none !important;
     border: none !important;
+    border-radius: 0 !important;
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
     padding: 0 !important;
@@ -454,11 +457,21 @@ div[class*="alphaPickerInner"] {
     width: 100% !important;
     height: 100% !important;
     max-height: 100% !important;
-    border-radius: 0 !important;
+    box-sizing: border-box !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: space-between !important;
+}
+
+/* Exclude # symbol completely - alphabets only */
+.alphaPickerButton[data-value="#"],
+.alphaPickerButton[data-letter="#"],
+.alphaPickerButton[data-item="#"],
+.alphaPickerRow[data-prefix="#"],
+.alphaPickerRow[data-item="#"],
+.hide-hash {
+    display: none !important;
 }
 
 .alphaPickerButton,
@@ -469,27 +482,35 @@ div[class*="alphaPicker"] button,
 div[class*="alphaPickerButton"] {
     background: transparent !important;
     background-color: transparent !important;
-    color: rgba(255, 255, 255, 0.6) !important;
-    font-size: 8.5px !important;
-    font-weight: 700 !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace, sans-serif !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    color: rgba(255, 255, 255, 0.42) !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif !important;
     line-height: 1 !important;
     padding: 0 !important;
     margin: 0 !important;
-    width: 20px !important;
+    width: 18px !important;
     min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
     flex: 1 1 0% !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    border: none !important;
-    border-radius: 2px !important;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.9) !important;
-    transition: color 0.1s ease, transform 0.1s ease, background-color 0.1s ease !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9) !important;
+    transform: none !important;
+    transition: color 0.12s ease !important;
     touch-action: none !important;
     cursor: pointer !important;
 }
 
+/* Scrolling/Hover: NO shapes, NO box, NO scaling - change letter color only */
 .alphaPickerButton:hover,
 .alphaPickerButton:focus,
 .alphaPickerButton:active,
@@ -498,45 +519,20 @@ div[class*="alphaPickerButton"] {
 .alphaPickerButton-selected,
 .alphaPicker-fixed-right .MuiButtonBase-root:hover,
 .alphaPicker-fixed-right .MuiButtonBase-root.Mui-selected {
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    transform: none !important;
     color: #ffffff !important;
-    background: rgba(var(--abyss-accent, 0, 164, 220), 0.35) !important;
-    transform: scale(1.3) !important;
-    font-weight: 900 !important;
-    text-shadow: 0 0 8px rgba(var(--abyss-accent, 0, 164, 220), 0.9) !important;
+    font-weight: 800 !important;
+    text-shadow: 0 0 6px rgba(255, 255, 255, 0.95), 0 1px 2px #000000 !important;
 }
 
-/* Floating Alphabet Scrub HUD Bubble */
 #alpha-scrubber-hud {
-    position: fixed !important;
-    top: 50% !important;
-    right: 48px !important;
-    transform: translateY(-50%) scale(0.9) !important;
-    width: 64px !important;
-    height: 64px !important;
-    border-radius: 50% !important;
-    background: rgba(12, 14, 20, 0.92) !important;
-    border: 1.5px solid rgba(var(--abyss-accent, 0, 164, 220), 0.7) !important;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.75), 0 0 20px rgba(var(--abyss-accent, 0, 164, 220), 0.4) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-    color: #ffffff !important;
-    font-size: 32px !important;
-    font-weight: 900 !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    z-index: 10001 !important;
-    pointer-events: none !important;
-    opacity: 0 !important;
-    visibility: hidden !important;
-    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease !important;
-}
-
-#alpha-scrubber-hud.visible {
-    opacity: 1 !important;
-    visibility: visible !important;
-    transform: translateY(-50%) scale(1) !important;
+    display: none !important;
 }
 
 .MuiTouchRipple-root {
@@ -3550,4 +3546,70 @@ a,
     main.MuiBox-root {
         padding: 16px 12px !important;
     }
+}
+/* Claude-Style Stepped Hamburger Menu Bar (Exact Match: Top long, Middle medium, Bottom short) */
+.mainDrawerButton,
+.headerButtonMenu,
+button[data-drawer="main"],
+.barsMenuButton,
+.skinHeader .headerLeft > button.paper-icon-button-light:first-child,
+.skinHeader .headerLeft > button:first-child {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: relative !important;
+}
+
+.mainDrawerButton > span,
+.mainDrawerButton > i,
+.mainDrawerButton > svg,
+.mainDrawerButton .material-icons,
+.mainDrawerButton .MuiSvgIcon-root,
+.headerButtonMenu > span,
+.headerButtonMenu > i,
+.headerButtonMenu > svg,
+.headerButtonMenu .material-icons,
+.barsMenuButton > span,
+.barsMenuButton > i,
+.barsMenuButton > svg,
+button[data-drawer="main"] > span,
+button[data-drawer="main"] > i,
+button[data-drawer="main"] > svg,
+.skinHeader .headerLeft > button.paper-icon-button-light:first-child > span,
+.skinHeader .headerLeft > button.paper-icon-button-light:first-child > i,
+.skinHeader .headerLeft > button.paper-icon-button-light:first-child > svg,
+.skinHeader .headerLeft > button:first-child > span,
+.skinHeader .headerLeft > button:first-child > i,
+.skinHeader .headerLeft > button:first-child > svg {
+    display: none !important;
+    opacity: 0 !important;
+    font-size: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    pointer-events: none !important;
+}
+
+.mainDrawerButton::after,
+.headerButtonMenu::after,
+button[data-drawer="main"]::after,
+.barsMenuButton::after,
+.skinHeader .headerLeft > button.paper-icon-button-light:first-child::after,
+.skinHeader .headerLeft > button:first-child::after {
+    content: "" !important;
+    display: block !important;
+    width: 20px !important;
+    height: 15px !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='15' viewBox='0 0 20 15' fill='none'%3E%3Crect x='0' y='0.5' width='20' height='2' rx='1' fill='white'/%3E%3Crect x='0' y='6.5' width='13.5' height='2' rx='1' fill='white'/%3E%3Crect x='0' y='12.5' width='7.5' height='2' rx='1' fill='white'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-size: contain !important;
+    transition: opacity 0.15s ease, transform 0.15s ease !important;
+}
+
+.mainDrawerButton:active::after,
+.headerButtonMenu:active::after,
+button[data-drawer="main"]:active::after,
+.skinHeader .headerLeft > button:first-child:active::after {
+    opacity: 0.7 !important;
+    transform: scale(0.94) !important;
 }

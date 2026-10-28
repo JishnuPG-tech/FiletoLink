@@ -386,54 +386,75 @@
     return installed;
   }
 
-  var scrubberHud = null;
   var scrubberActive = false;
   var lastScrubbedLetter = "";
 
-  function ensureScrubberHud() {
-    if (scrubberHud && scrubberHud.isConnected) return scrubberHud;
-    scrubberHud = document.getElementById("alpha-scrubber-hud");
-    if (!scrubberHud) {
-      scrubberHud = document.createElement("div");
-      scrubberHud.id = "alpha-scrubber-hud";
-      document.body.appendChild(scrubberHud);
-    }
-    return scrubberHud;
-  }
-
-  function showScrubberHud(letter) {
-    var hud = ensureScrubberHud();
-    if (!hud) return;
-    hud.textContent = letter;
-    hud.classList.add("visible");
-  }
-
-  function hideScrubberHud() {
-    if (scrubberHud) {
-      scrubberHud.classList.remove("visible");
-    }
-    var activeButtons = document.querySelectorAll(".alphaPickerButton.active-scrub");
-    for (var i = 0; i < activeButtons.length; i++) {
-      activeButtons[i].classList.remove("active-scrub");
-    }
-    lastScrubbedLetter = "";
+  function installClaudeMenuIcon() {
+    safe(function () {
+      var buttons = document.querySelectorAll(
+        ".mainDrawerButton, .headerButtonMenu, button[data-drawer='main'], .barsMenuButton, .skinHeader .headerLeft > button:first-child"
+      );
+      for (var i = 0; i < buttons.length; i++) {
+        var btn = buttons[i];
+        if (btn.classList.contains("claude-menu-installed")) continue;
+        btn.classList.add("claude-menu-installed");
+        var children = btn.children;
+        for (var c = 0; c < children.length; c++) {
+          children[c].style.setProperty("display", "none", "important");
+        }
+      }
+    });
   }
 
   function installAlphaPickerScrubber() {
     safe(function () {
+      // Remove any leftover hud elements
+      var oldHud = document.getElementById("alpha-scrubber-hud");
+      if (oldHud && oldHud.parentNode) oldHud.parentNode.removeChild(oldHud);
+
       var pickers = document.querySelectorAll(
         ".alphaPicker, .alphaPicker-fixed, .alphaPicker-fixed-right, .alphanumeric-scrollbar, div[class*='alphaPicker']"
       );
       for (var p = 0; p < pickers.length; p++) {
         var picker = pickers[p];
+
+        // Hide '#' symbol button if present
+        var allButtons = picker.querySelectorAll("button, .alphaPickerButton, .MuiButtonBase-root");
+        for (var b = 0; b < allButtons.length; b++) {
+          var bEl = allButtons[b];
+          var txt = (bEl.textContent || "").trim();
+          if (txt === "#" || bEl.getAttribute("data-value") === "#" || bEl.getAttribute("data-item") === "#") {
+            bEl.style.setProperty("display", "none", "important");
+            bEl.classList.add("hide-hash");
+          }
+        }
+
         if (picker._scrubberInstalled) continue;
         picker._scrubberInstalled = true;
+
+        var getCleanButtons = function () {
+          var raw = picker.querySelectorAll("button, .alphaPickerButton, .MuiButtonBase-root");
+          var list = [];
+          for (var i = 0; i < raw.length; i++) {
+            var el = raw[i];
+            var txt = (el.textContent || "").trim();
+            if (txt === "#" || el.getAttribute("data-value") === "#" || el.getAttribute("data-item") === "#") {
+              el.style.setProperty("display", "none", "important");
+              el.classList.add("hide-hash");
+              continue;
+            }
+            if (el.offsetParent !== null || el.style.display !== "none") {
+              list.push(el);
+            }
+          }
+          return list;
+        };
 
         var handleTouch = function (e) {
           if (!e.touches || !e.touches.length) return;
           var touch = e.touches[0];
           var rect = picker.getBoundingClientRect();
-          var buttons = picker.querySelectorAll("button, .alphaPickerButton, .MuiButtonBase-root");
+          var buttons = getCleanButtons();
           if (!buttons.length) return;
 
           var relY = (touch.clientY - rect.top) / rect.height;
@@ -447,7 +468,6 @@
           var letter = (targetBtn.textContent || "").trim();
           if (letter && letter !== lastScrubbedLetter) {
             lastScrubbedLetter = letter;
-            showScrubberHud(letter);
 
             var activeButtons = picker.querySelectorAll(".active-scrub");
             for (var a = 0; a < activeButtons.length; a++) {
@@ -476,7 +496,11 @@
 
         var endHandler = function () {
           scrubberActive = false;
-          hideScrubberHud();
+          var activeButtons = picker.querySelectorAll(".active-scrub");
+          for (var a = 0; a < activeButtons.length; a++) {
+            activeButtons[a].classList.remove("active-scrub");
+          }
+          lastScrubbedLetter = "";
         };
 
         picker.addEventListener("touchend", endHandler, { passive: true });
@@ -587,6 +611,7 @@
         installScheduled = false;
         installSpotlight();
         installAlphaPickerScrubber();
+        installClaudeMenuIcon();
         replaceServerNameText();
       };
 
@@ -626,6 +651,7 @@
       syncSettingsTheme();
       scheduleInstall();
       installAlphaPickerScrubber();
+        installClaudeMenuIcon();
       replaceServerNameText();
       if (currentSync) safe(currentSync);
     }, 2000);
