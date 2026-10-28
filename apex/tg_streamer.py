@@ -445,8 +445,19 @@ def load_cache():
                     os.makedirs(data["target_dir"], exist_ok=True)
                     shutil.move(old_strm, new_strm)
                     old_p = os.path.dirname(old_strm)
-                    if os.path.isdir(old_p) and not any(f.endswith(".strm") for f in os.listdir(old_p)):
-                        shutil.rmtree(old_p, ignore_errors=True)
+                    if os.path.isdir(old_p):
+                        sidecars = [f for f in os.listdir(old_p) if f.lower().endswith((".nfo", ".xml", ".txt"))]
+                        if len(sidecars) == len(os.listdir(old_p)):
+                            for sf in sidecars:
+                                try:
+                                    os.remove(os.path.join(old_p, sf))
+                                except OSError:
+                                    pass
+                        if not os.listdir(old_p):
+                            try:
+                                os.rmdir(old_p)
+                            except OSError:
+                                pass
                 except Exception:
                     pass
             data["_force_art_refresh"] = True
@@ -3316,16 +3327,22 @@ async def purge_media_item(
             except OSError as exc:
                 logger.warning(f"[PURGE] Could not delete STRM file {strm_path}: {exc}")
 
-        # Remove target directory IF it has no other .strm files (preserves TV show seasons / shared dirs)
+        # Safely remove target directory IF genuinely empty or sidecar-only (preserves other files/media)
         if target_dir and os.path.isdir(target_dir):
             try:
-                strms_left = [
-                    f for f in os.listdir(target_dir)
-                    if f.lower().endswith(".strm")
-                ]
-                if not strms_left:
-                    shutil.rmtree(target_dir, ignore_errors=True)
+                remaining = os.listdir(target_dir)
+                sidecars = [f for f in remaining if f.lower().endswith((".nfo", ".xml", ".txt"))]
+                if len(sidecars) == len(remaining):
+                    for sf in sidecars:
+                        try:
+                            os.remove(os.path.join(target_dir, sf))
+                        except OSError:
+                            pass
+                if not os.listdir(target_dir):
+                    os.rmdir(target_dir)
                     logger.info(f"[PURGE] Deleted empty media directory: {target_dir}")
+                else:
+                    logger.warning(f"[PURGE] Preserving directory with remaining files: {target_dir}")
             except OSError as exc:
                 logger.warning(f"[PURGE] Could not remove media directory {target_dir}: {exc}")
 
@@ -3503,9 +3520,28 @@ async def deduplicate_jellyfin_items():
 
                 is_rogue = is_blacklisted(item_name) or is_blacklisted(path)
 
+                # Blacklisted items are NEVER candidates for Jellyfin item deletion; route to review queue
+                if is_rogue:
+                    logger.warning(
+                        f"[DEDUPLICATE] Item '{item.get('Name')}' (ID: {item.get('Id')}) matched blacklist; "
+                        f"routing to review queue without deleting Jellyfin item or media file"
+                    )
+                    _record_review_job(
+                        {
+                            "item_id": item.get("Id"),
+                            "title": item.get("Name"),
+                            "path": path,
+                            "type": itype,
+                            "provider_ids": provider_ids,
+                        },
+                        confidence=0.0,
+                        reason=f"blacklisted_jellyfin_item:{item.get('Name') or item_name}",
+                    )
+                    continue
+
                 # 1. Series deduplication
                 if itype == "Series":
-                    if is_rogue or (path and not os.path.exists(path)):
+                    if path and not os.path.exists(path):
                         orphan_items.append((item, path))
                         continue
                     s_name = item_name
@@ -3514,18 +3550,14 @@ async def deduplicate_jellyfin_items():
                     series_groups.setdefault(s_ident, []).append((item, path))
                     continue
 
-                if is_rogue:
-                    orphan_items.append((item, path))
-                    continue
-
                 if not path.lower().endswith(".strm"):
                     continue
                 if not (path.startswith(os.path.normpath(MOVIES_DIR)) or
                         path.startswith(os.path.normpath(SHOWS_DIR))):
                     continue
 
-                # If .strm does not exist on disk or is not in valid_cached_paths, mark immediately as orphan for cleanup
-                if not os.path.exists(path) or (valid_cached_paths and path.lower() not in valid_cached_paths):
+                # If .strm does not exist on disk, mark immediately as orphan for cleanup
+                if not os.path.exists(path):
                     orphan_items.append((item, path))
                     continue
 
@@ -4360,12 +4392,13 @@ async def _process_and_index_message(message, chat_id):
     file_name = media_file_name(message, media)
     caption = getattr(message, "caption", None)
     if is_blacklisted(file_name) or is_blacklisted(caption):
-        logger.info(f"[BLACKLIST] Skipping blacklisted media during reindex: {file_name}")
+        logger.info(f"[BLACKLIST] Routing blacklisted media to review queue during reindex: {file_name}")
+        _record_review_job({"file_name": file_name, "caption": caption, "chat_id": msg_chat_id, "msg_id": msg_id}, confidence=0.0, reason=f"blacklisted_message:{file_name}")
         return False, False
     existing = _cache_lookup(msg_id, msg_chat_id)
     if isinstance(existing, dict):
         if is_blacklisted(existing.get("title")) or is_blacklisted(existing.get("file_name")):
-            FILE_ID_CACHE.pop(_cache_key(msg_chat_id, msg_id), None)
+            _record_review_job(existing, confidence=0.0, reason=f"blacklisted_reindex:{existing.get('title') or existing.get('file_name')}")
             return False, False
         strm_path = existing.get("strm_path") or _entry_strm_path(existing)
         if strm_path and os.path.exists(strm_path):
@@ -5091,13 +5124,19 @@ async def _prune_orphan_strms(movies_dir, shows_dir, keep):
                     logger.info(f"[RESTORE] Pruned orphaned .strm: {path}")
                     parent_dir = os.path.dirname(path)
                     if os.path.isdir(parent_dir):
-                        remaining_media = [
-                            m for m in os.listdir(parent_dir)
-                            if m.lower().endswith((".strm", ".mp4", ".mkv", ".avi"))
-                        ]
-                        if not remaining_media:
-                            shutil.rmtree(parent_dir, ignore_errors=True)
-                            logger.info(f"[RESTORE] Cleaned empty parent folder: {parent_dir}")
+                        sidecars = [f for f in os.listdir(parent_dir) if f.lower().endswith((".nfo", ".xml", ".txt"))]
+                        if len(sidecars) == len(os.listdir(parent_dir)):
+                            for sf in sidecars:
+                                try:
+                                    os.remove(os.path.join(parent_dir, sf))
+                                except OSError:
+                                    pass
+                        if not os.listdir(parent_dir):
+                            try:
+                                os.rmdir(parent_dir)
+                                logger.info(f"[RESTORE] Cleaned empty parent folder: {parent_dir}")
+                            except OSError:
+                                pass
                 except OSError as e:
                     logger.warning(f"[RESTORE] Could not prune {path}: {e}")
     return removed
@@ -5296,12 +5335,35 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                 if os.path.normpath(parent) in (os.path.normpath(MOVIES_DIR), os.path.normpath(SHOWS_DIR)):
                     continue
                 remaining = os.listdir(dp)
-                if not remaining or (valid_dirs and norm_dp.lower() not in valid_dirs and not any(f.lower().endswith('.strm') for f in remaining)):
+                if not remaining:
                     try:
-                        shutil.rmtree(dp, ignore_errors=True)
-                        logger.info(f"[ROGUE-PURGE] Cleaned untracked directory: {dp}")
-                    except Exception:
+                        os.rmdir(dp)
+                        logger.info(f"[CLEANUP] Removed empty directory: {dp}")
+                    except OSError:
                         pass
+                else:
+                    # Check if remaining files are only abandoned metadata sidecars (.nfo, .xml, .txt)
+                    sidecar_exts = (".nfo", ".xml", ".txt")
+                    sidecars = [f for f in remaining if f.lower().endswith(sidecar_exts)]
+                    if len(sidecars) == len(remaining):
+                        for sf in sidecars:
+                            try:
+                                os.remove(os.path.join(dp, sf))
+                            except OSError:
+                                pass
+                        try:
+                            os.rmdir(dp)
+                            logger.info(f"[CLEANUP] Removed abandoned sidecar-only directory: {dp}")
+                        except OSError:
+                            pass
+                    elif valid_dirs and norm_dp.lower() not in valid_dirs and not any(f.lower().endswith('.strm') for f in remaining):
+                        # Directory contains unknown formats or non-strm media - NEVER rmtree; preserve and record review
+                        logger.warning(f"[REINDEX] Preserving untracked directory with unrecognized files: {dp}")
+                        _record_review_job(
+                            {"directory": dp, "files": remaining[:10]},
+                            confidence=0.0,
+                            reason=f"untracked_directory:{os.path.basename(dp)}"
+                        )
 
     # Step 2: Iterate through all cached media
     updated_count = 0
@@ -5388,9 +5450,15 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                 and os.path.dirname(norm_old) not in (os.path.normpath(MOVIES_DIR), os.path.normpath(SHOWS_DIR))
             ):
                 try:
-                    remaining_media = [f for f in os.listdir(norm_old) if f.lower().endswith((".strm", ".mp4", ".mkv", ".avi"))]
-                    if not remaining_media:
-                        shutil.rmtree(norm_old, ignore_errors=True)
+                    sidecars = [f for f in os.listdir(norm_old) if f.lower().endswith((".nfo", ".xml", ".txt"))]
+                    if len(sidecars) == len(os.listdir(norm_old)):
+                        for sf in sidecars:
+                            try:
+                                os.remove(os.path.join(norm_old, sf))
+                            except OSError:
+                                pass
+                    if not os.listdir(norm_old):
+                        os.rmdir(norm_old)
                         logger.info(f"[IMDB-REINDEX] Cleaned obsolete empty folder: {norm_old}")
                 except Exception:
                     pass
@@ -5554,7 +5622,16 @@ async def _reconcile_and_upgrade_library():
                                         shutil.move(src_f, dst_f)
                                     except Exception:
                                         pass
-                        shutil.rmtree(dup_path, ignore_errors=True)
+                        for root_dup, dirs_dup, _ in os.walk(dup_path, topdown=False):
+                            for d in dirs_dup:
+                                try:
+                                    os.rmdir(os.path.join(root_dup, d))
+                                except OSError:
+                                    pass
+                        try:
+                            os.rmdir(dup_path)
+                        except OSError:
+                            pass
             except Exception as exc:
                 logger.warning(f"[MERGE-SHOWS] Error merging duplicate TV folders: {exc}")
 

@@ -132,3 +132,217 @@ def test_purge_media_item_by_title_and_msg_id(tmp_path):
     assert not movie_dir.exists()
     assert len(cache) == 0
     assert catalog_deleted == [(-100, 100)]
+
+
+def test_deduplicate_jellyfin_items_preserves_blacklisted_media(tmp_path):
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    node = next(
+        n for n in tree.body
+        if isinstance(n, ast.AsyncFunctionDef) and n.name == "deduplicate_jellyfin_items"
+    )
+
+    deleted_item_ids = []
+    recorded_reviews = []
+
+    class MockResponse:
+        def __init__(self, data=None, status=200):
+            self.data = data or {}
+            self.status = status
+
+        async def json(self):
+            return self.data
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+    class MockSession:
+        def __init__(self, items):
+            self.items = items
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        def get(self, url, **kwargs):
+            return MockResponse({"Items": self.items}, status=200)
+
+        def delete(self, url, **kwargs):
+            item_id = url.rsplit("/", 1)[-1]
+            deleted_item_ids.append(item_id)
+            return MockResponse(status=204)
+
+    class MockAiohttp:
+        def __init__(self, items):
+            self.items = items
+
+        def ClientSession(self, *args, **kwargs):
+            return MockSession(self.items)
+
+    movies_dir = tmp_path / "Movies"
+    shows_dir = tmp_path / "TV Shows"
+    movies_dir.mkdir(parents=True)
+    shows_dir.mkdir(parents=True)
+
+    # Physical strm file for blacklisted movie
+    blacklisted_folder = movies_dir / "Ms.Rose & Mr.Cane (2026)"
+    blacklisted_folder.mkdir()
+    blacklisted_strm = blacklisted_folder / "Ms.Rose & Mr.Cane (2026).strm"
+    blacklisted_strm.write_text("http://127.0.0.1:8080/stream/1:200/video.mp4")
+
+    # Physical dir for blacklisted series
+    blacklisted_series = shows_dir / "WWE Money in the Bank"
+    blacklisted_series.mkdir()
+
+    # Physical strm for legitimate duplicates
+    legit_folder = movies_dir / "Legit Movie (2025)"
+    legit_folder.mkdir()
+    legit_strm = legit_folder / "Legit Movie (2025).strm"
+    legit_strm.write_text("http://127.0.0.1:8080/stream/1:300/video.mp4")
+
+    items = [
+        {
+            "Id": "blacklisted-movie-id",
+            "Name": "Ms.Rose & Mr.Cane",
+            "Type": "Movie",
+            "Path": str(blacklisted_strm),
+            "ProviderIds": {},
+        },
+        {
+            "Id": "blacklisted-series-id",
+            "Name": "WWE Money in the Bank",
+            "Type": "Series",
+            "Path": str(blacklisted_series),
+            "ProviderIds": {},
+        },
+        {
+            "Id": "legit-dup-1",
+            "Name": "Legit Movie",
+            "Type": "Movie",
+            "Path": str(legit_strm),
+            "ProviderIds": {"Tmdb": "9999"},
+        },
+        {
+            "Id": "legit-dup-2",
+            "Name": "Legit Movie",
+            "Type": "Movie",
+            "Path": str(legit_strm),
+            "ProviderIds": {"Tmdb": "9999"},
+        },
+        {
+            "Id": "ghost-orphan-id",
+            "Name": "Deleted Media",
+            "Type": "Movie",
+            "Path": str(tmp_path / "nonexistent.strm"),
+            "ProviderIds": {},
+        },
+    ]
+
+    from tg_streamer import is_blacklisted
+
+    ns = {
+        "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
+        "os": os,
+        "re": re,
+        "aiohttp": MockAiohttp(items),
+        "_jellyfin_auth_header": lambda: {"X-Emby-Token": "test-token"},
+        "_read_jellyfin_api_key": lambda: "test-token",
+        "MOVIES_DIR": str(movies_dir),
+        "SHOWS_DIR": str(shows_dir),
+        "FILE_ID_CACHE": {},
+        "is_blacklisted": is_blacklisted,
+        "_record_review_job": lambda data, confidence=0.0, reason="": recorded_reviews.append((data, confidence, reason)),
+        "parse_media_meta": lambda name: {"title": name, "clean_title": name},
+        "_canonical_media_key": lambda e: "tmdb:9999",
+        "DEFAULT_LANGUAGE": "English",
+    }
+    exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
+    dedup = ns["deduplicate_jellyfin_items"]
+
+    res = asyncio.run(dedup())
+
+    # Blacklisted items MUST NEVER be deleted from Jellyfin
+    assert "blacklisted-movie-id" not in deleted_item_ids
+    assert "blacklisted-series-id" not in deleted_item_ids
+
+    # Both blacklisted media on disk MUST be preserved
+    assert blacklisted_strm.exists()
+    assert blacklisted_series.exists()
+
+    # Blacklisted items MUST be routed to the review queue
+    review_reasons = [r[2] for r in recorded_reviews]
+    assert any("blacklisted_jellyfin_item:Ms.Rose & Mr.Cane" in r for r in review_reasons)
+    assert any("blacklisted_jellyfin_item:WWE Money in the Bank" in r for r in review_reasons)
+
+    # Genuine orphan item (nonexistent file) must be deleted
+    assert "ghost-orphan-id" in deleted_item_ids
+
+    # Exactly one duplicate of the legitimate movie must be deleted
+    assert ("legit-dup-1" in deleted_item_ids) ^ ("legit-dup-2" in deleted_item_ids)
+
+
+def test_untracked_directory_cleanup_preserves_unrecognized_formats(tmp_path):
+    """Verify that untracked directories with unrecognized formats survive and are routed to review."""
+    movies_dir = tmp_path / "Movies"
+    shows_dir = tmp_path / "TV Shows"
+    movies_dir.mkdir()
+    shows_dir.mkdir()
+
+    # 1. Untracked directory containing an unrecognized format or valuable file (e.g. .bin, .dat, .mp4)
+    untracked_unknown = movies_dir / "English" / "Unknown Format Title"
+    untracked_unknown.mkdir(parents=True)
+    bin_file = untracked_unknown / "payload.bin"
+    bin_file.write_bytes(b"binary media payload")
+
+    # 2. Untracked directory with ONLY sidecar files (.nfo)
+    sidecar_only = movies_dir / "English" / "Abandoned Sidecars"
+    sidecar_only.mkdir(parents=True)
+    (sidecar_only / "movie.nfo").write_text("<movie></movie>")
+
+    recorded_reviews = []
+
+    # Run the exact non-destructive directory cleanup logic implemented in reindex_all_with_imdb
+    valid_dirs = {str(movies_dir / "English" / "Tracked Movie").lower()}
+
+    for root in (str(movies_dir), str(shows_dir)):
+        for dp, dns, fns in os.walk(root, topdown=False):
+            norm_dp = os.path.normpath(dp)
+            if norm_dp in (os.path.normpath(str(movies_dir)), os.path.normpath(str(shows_dir))):
+                continue
+            parent = os.path.dirname(norm_dp)
+            if os.path.normpath(parent) in (os.path.normpath(str(movies_dir)), os.path.normpath(str(shows_dir))):
+                continue
+            remaining = os.listdir(dp)
+            if not remaining:
+                try:
+                    os.rmdir(dp)
+                except OSError:
+                    pass
+            else:
+                sidecar_exts = (".nfo", ".xml", ".txt")
+                sidecars = [f for f in remaining if f.lower().endswith(sidecar_exts)]
+                if len(sidecars) == len(remaining):
+                    for sf in sidecars:
+                        try:
+                            os.remove(os.path.join(dp, sf))
+                        except OSError:
+                            pass
+                    try:
+                        os.rmdir(dp)
+                    except OSError:
+                        pass
+                elif valid_dirs and norm_dp.lower() not in valid_dirs and not any(f.lower().endswith('.strm') for f in remaining):
+                    recorded_reviews.append({"directory": dp, "files": remaining[:10]})
+
+    # Directory with unrecognized file MUST survive!
+    assert untracked_unknown.exists()
+    assert bin_file.exists()
+    assert len(recorded_reviews) == 1
+    assert recorded_reviews[0]["directory"] == str(untracked_unknown)
+
+    # Sidecar-only directory MUST be safely cleaned
+    assert not sidecar_only.exists()
