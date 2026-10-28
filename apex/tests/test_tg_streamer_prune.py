@@ -683,27 +683,21 @@ def test_deduplicate_jellyfin_items_preserves_conflicting_paths(tmp_path):
     assert any("conflicting_identity_path:tmdb:615453" in r[2] for r in recorded_reviews)
 
 
-def test_deduplicate_jellyfin_items_refuses_deletion_when_dir_has_files(tmp_path):
+def test_deduplicate_jellyfin_items_passes_delete_file_false(tmp_path):
     movies_dir = tmp_path / "Movies"
-    movie_folder = movies_dir / "Malayalam" / "Khalifa (2026)"
-    movie_folder.mkdir(parents=True)
-    # Strm path does not exist, but directory has other files (e.g. sidecar or poster)
-    sidecar = movie_folder / "movie.nfo"
-    sidecar.write_text("<movie></movie>")
-    ghost_strm = movie_folder / "Khalifa (2026).strm"
+    ghost_strm = movies_dir / "Malayalam" / "Ghost (2026)" / "Ghost (2026).strm"
 
     items = [
         {
             "Id": "ghost-item-1",
-            "Name": "Khalifa (2026)",
+            "Name": "Ghost (2026)",
             "Path": str(ghost_strm),
             "Type": "Movie",
             "ProviderIds": {"Tmdb": "1036081"},
         }
     ]
 
-    deleted_item_ids = []
-    recorded_reviews = []
+    deleted_params = []
 
     class MockResponse:
         def __init__(self, status=200, json_data=None):
@@ -719,8 +713,7 @@ def test_deduplicate_jellyfin_items_refuses_deletion_when_dir_has_files(tmp_path
         def get(self, url, params=None, headers=None, timeout=None):
             return MockResponse(200, {"Items": items})
         def delete(self, url, params=None, headers=None, timeout=None):
-            item_id = url.rstrip("/").split("/")[-1]
-            deleted_item_ids.append(item_id)
+            deleted_params.append(params)
             return MockResponse(204)
 
     class MockAiohttp:
@@ -740,7 +733,7 @@ def test_deduplicate_jellyfin_items_refuses_deletion_when_dir_has_files(tmp_path
         "SHOWS_DIR": str(tmp_path / "TV Shows"),
         "FILE_ID_CACHE": {},
         "is_blacklisted": lambda text: False,
-        "_record_review_job": lambda data, confidence=0.0, reason="": recorded_reviews.append((data, confidence, reason)),
+        "_record_review_job": lambda data, confidence=0.0, reason="": None,
         "parse_media_meta": lambda name: {"title": name, "clean_title": name},
         "_canonical_media_key": lambda e: "tmdb:1036081",
         "DEFAULT_LANGUAGE": "Malayalam",
@@ -750,10 +743,9 @@ def test_deduplicate_jellyfin_items_refuses_deletion_when_dir_has_files(tmp_path
 
     res = asyncio.run(dedup())
 
-    # Deletion must be skipped because the directory still contains files!
-    assert "ghost-item-1" not in deleted_item_ids
-    assert len(deleted_item_ids) == 0
-    assert any("dedup_dir_contains_files" in r[2] for r in recorded_reviews)
+    assert len(deleted_params) == 1
+    assert deleted_params[0].get("deleteFile") == "false"
+
 
 
 def test_migrate_double_year_folders(tmp_path):

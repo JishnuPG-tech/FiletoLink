@@ -3739,40 +3739,16 @@ async def deduplicate_jellyfin_items():
                 path_exists = os.path.exists(path) if path else False
                 dir_path = os.path.dirname(path) if path else ""
                 dir_exists = os.path.isdir(dir_path) if dir_path else False
-                dir_files = os.listdir(dir_path) if dir_exists else []
 
                 # CRITICAL AUDIT & SAFETY:
-                # Never ask Jellyfin to delete an item if the file exists on disk
-                # or if its parent directory still contains files, because Jellyfin
-                # will attempt to recursively delete the filesystem path!
-                if path_exists:
-                    logger.warning(
-                        f"[DELETE-AUDIT] Caller=deduplicate_jellyfin_items | item_id={item_id} | name='{name}' | "
-                        f"path='{path}' | file_exists=True | dir_exists={dir_exists} | action='skipped_file_exists_routed_to_review'"
-                    )
-                    _record_review_job(
-                        {"item": item, "path": path},
-                        confidence=0.0,
-                        reason="dedup_file_exists_on_disk",
-                    )
-                    continue
-
-                if dir_exists and dir_files:
-                    logger.warning(
-                        f"[DELETE-AUDIT] Caller=deduplicate_jellyfin_items | item_id={item_id} | name='{name}' | "
-                        f"path='{path}' | file_exists=False | dir_exists=True | dir_files={len(dir_files)} | "
-                        f"action='skipped_dir_contains_files_routed_to_review'"
-                    )
-                    _record_review_job(
-                        {"item": item, "path": path, "dir_files": dir_files[:10]},
-                        confidence=0.0,
-                        reason="dedup_dir_contains_files",
-                    )
-                    continue
-
+                # 1. We ALWAYS pass deleteFile=false so Jellyfin only removes the metadata row
+                #    and NEVER attempts to delete the media file or parent directory from disk.
+                # 2. Identical-path duplicates (path_exists=True) remove the duplicate Jellyfin row.
+                # 3. Missing/orphan paths (path_exists=False) remove the stale ghost database entry.
+                action_desc = "safe_delete_duplicate_db_entry" if path_exists else "safe_delete_stale_ghost_db_entry"
                 logger.info(
                     f"[DELETE-AUDIT] Caller=deduplicate_jellyfin_items | item_id={item_id} | name='{name}' | "
-                    f"path='{path}' | file_exists=False | dir_exists={dir_exists} | action='safe_delete_stale_jellyfin_item'"
+                    f"path='{path}' | file_exists={path_exists} | dir_exists={dir_exists} | action='{action_desc}'"
                 )
                 delete_params = {"api_key": api_key, "deleteFile": "false"} if api_key else {"deleteFile": "false"}
                 async with session.delete(
@@ -3783,7 +3759,8 @@ async def deduplicate_jellyfin_items():
                 ) as response:
                     if response.status in (200, 204):
                         removed += 1
-                        stale += 1
+                        if not path_exists:
+                            stale += 1
         if removed:
             logger.info(f"[JELLYFIN] Removed {removed} duplicate/stale STRM item(s)")
         return {"removed": removed, "stale": stale}
