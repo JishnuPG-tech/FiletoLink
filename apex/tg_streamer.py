@@ -422,47 +422,41 @@ def load_cache():
             cache_updated = True
             logger.info(f"[CACHE-HEAL] Corrected What If...? metadata and artwork for '{raw_name}' -> S{s_num:02d}E{e_num:02d}")
 
-        # 2g. Purge or heal any "Summer I Turned Pretty" entry in cache
-        if "summer i turned pretty" in raw_lower or "the summer i turned pretty" in title_l or "summer i turned pretty" in title_l or data.get("tmdb_id") == 194766:
-            if "derry" in raw_lower:
-                s_match = re.search(r"(?i)[sS](\d{1,2})[eE](\d{1,2})", raw_name)
-                s_num = int(s_match.group(1)) if s_match else int(data.get("season") or 1)
-                e_num = int(s_match.group(2)) if s_match else int(data.get("episode") or 1)
-                data["title"] = "It: Welcome to Derry"
-                data["clean_title"] = "It: Welcome to Derry"
-                data["show_name"] = "It: Welcome to Derry"
-                data["is_tv"] = True
-                data["year"] = 2025
-                data["season"] = s_num
-                data["episode"] = e_num
-                data["imdb_id"] = "tt19244304"
-                data["tmdb_id"] = 200875
-                data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BZWE0ZWM1MjUtNmYzYS00NzU3LTkxYmQtNmI3NTc0ZTY1NmVlXkEyXkFqcGc@._V1_.jpg"
-                data["backdrop_url"] = "https://images.metahub.space/background/medium/tt19244304/img"
-                show_root = tv_show_root(SHOWS_DIR, data.get("language") or "English", "It: Welcome to Derry", 2025)
-                data["show_root"] = show_root
-                data["target_dir"] = os.path.join(show_root, f"Season {s_num:02d}")
-                data["strm_base"] = f"It: Welcome to Derry S{s_num:02d}E{e_num:02d}"
-                old_strm = data.get("strm_path")
-                new_strm = os.path.join(data["target_dir"], f"{data['strm_base']}.strm")
-                data["strm_path"] = new_strm
-                if old_strm and old_strm != new_strm and os.path.exists(old_strm):
-                    try:
-                        os.makedirs(data["target_dir"], exist_ok=True)
-                        shutil.move(old_strm, new_strm)
-                        old_p = os.path.dirname(old_strm)
-                        if "summer" in old_p.lower():
-                            shutil.rmtree(os.path.dirname(old_p) if "season" in old_p.lower() else old_p, ignore_errors=True)
-                    except Exception:
-                        pass
-                data["_force_art_refresh"] = True
-                cache_updated = True
-                logger.info(f"[CACHE-HEAL] Healed Derry from Summer I Turned Pretty collision -> '{new_strm}'")
-            else:
-                logger.info(f"[CACHE-PURGE] Purging rogue Summer I Turned Pretty entry: {key}")
-                FILE_ID_CACHE.pop(key, None)
-                cache_updated = True
-                continue
+        # 2g. Heal Derry if accidentally misidentified in cache
+        if "derry" in raw_lower and ("summer i turned pretty" in raw_lower or "the summer i turned pretty" in title_l or data.get("tmdb_id") == 194766):
+            s_match = re.search(r"(?i)[sS](\d{1,2})[eE](\d{1,2})", raw_name)
+            s_num = int(s_match.group(1)) if s_match else int(data.get("season") or 1)
+            e_num = int(s_match.group(2)) if s_match else int(data.get("episode") or 1)
+            data["title"] = "It: Welcome to Derry"
+            data["clean_title"] = "It: Welcome to Derry"
+            data["show_name"] = "It: Welcome to Derry"
+            data["is_tv"] = True
+            data["year"] = 2025
+            data["season"] = s_num
+            data["episode"] = e_num
+            data["imdb_id"] = "tt19244304"
+            data["tmdb_id"] = 200875
+            data["poster_url"] = "https://m.media-amazon.com/images/M/MV5BZWE0ZWM1MjUtNmYzYS00NzU3LTkxYmQtNmI3NTc0ZTY1NmVlXkEyXkFqcGc@._V1_.jpg"
+            data["backdrop_url"] = "https://images.metahub.space/background/medium/tt19244304/img"
+            show_root = tv_show_root(SHOWS_DIR, data.get("language") or "English", "It: Welcome to Derry", 2025)
+            data["show_root"] = show_root
+            data["target_dir"] = os.path.join(show_root, f"Season {s_num:02d}")
+            data["strm_base"] = f"It: Welcome to Derry S{s_num:02d}E{e_num:02d}"
+            old_strm = data.get("strm_path")
+            new_strm = os.path.join(data["target_dir"], f"{data['strm_base']}.strm")
+            data["strm_path"] = new_strm
+            if old_strm and old_strm != new_strm and os.path.exists(old_strm):
+                try:
+                    os.makedirs(data["target_dir"], exist_ok=True)
+                    shutil.move(old_strm, new_strm)
+                    old_p = os.path.dirname(old_strm)
+                    if os.path.isdir(old_p) and not any(f.endswith(".strm") for f in os.listdir(old_p)):
+                        shutil.rmtree(old_p, ignore_errors=True)
+                except Exception:
+                    pass
+            data["_force_art_refresh"] = True
+            cache_updated = True
+            logger.info(f"[CACHE-HEAL] Healed Derry from Summer I Turned Pretty collision -> '{new_strm}'")
 
         # 3. Clean release-size noise from title, clean_title, strm_base
         cur_title = data.get("title") or ""
@@ -3512,13 +3506,7 @@ async def deduplicate_jellyfin_items():
                 item_name = str(item.get("Name") or "").strip().lower()
                 provider_ids = item.get("ProviderIds") or {}
 
-                is_rogue = (
-                    is_blacklisted(item_name)
-                    or any(r in item_name for r in ("wwe", "money in the bank", "summer i turned pretty", "the summer i turned pretty", "what if (2024)"))
-                    or any(r in path.lower() for r in ("wwe", "money in the bank", "summer i turned pretty", "summer_i_turned_pretty", "what if (2024)"))
-                    or provider_ids.get("Tmdb") in ("194766", 194766)
-                    or provider_ids.get("Imdb") in ("tt27122945",)
-                )
+                is_rogue = is_blacklisted(item_name) or is_blacklisted(path)
 
                 # 1. Series deduplication
                 if itype == "Series":
@@ -5400,13 +5388,15 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
             if (
                 norm_old
                 and norm_old != norm_new
-                and os.path.exists(norm_old)
+                and os.path.isdir(norm_old)
                 and norm_old not in (os.path.normpath(MOVIES_DIR), os.path.normpath(SHOWS_DIR))
                 and os.path.dirname(norm_old) not in (os.path.normpath(MOVIES_DIR), os.path.normpath(SHOWS_DIR))
             ):
                 try:
-                    shutil.rmtree(norm_old, ignore_errors=True)
-                    logger.info(f"[IMDB-REINDEX] Cleaned obsolete folder: {norm_old}")
+                    remaining_media = [f for f in os.listdir(norm_old) if f.lower().endswith((".strm", ".mp4", ".mkv", ".avi"))]
+                    if not remaining_media:
+                        shutil.rmtree(norm_old, ignore_errors=True)
+                        logger.info(f"[IMDB-REINDEX] Cleaned obsolete empty folder: {norm_old}")
                 except Exception:
                     pass
 
@@ -5592,24 +5582,7 @@ async def _reconcile_and_upgrade_library():
                             logger.info(f"[PURGE] Removed blacklisted directory: {dn}")
                         except OSError:
                             pass
-                    if "patriot" in dn.lower() and "2000" in dn:
-                        try:
-                            shutil.rmtree(os.path.join(dirpath, dn), ignore_errors=True)
-                            logger.info(f"[PURGE] Removed misplaced Patriot 2000 directory: {dn}")
-                        except OSError:
-                            pass
-                    if ("rose" in dn.lower() and "cane" in dn.lower()) or "ms.rose" in dn.lower() or "ms rose" in dn.lower():
-                        try:
-                            shutil.rmtree(os.path.join(dirpath, dn), ignore_errors=True)
-                            logger.info(f"[PURGE] Removed unwanted Ms.Rose & Mr.Cane directory: {dn}")
-                        except OSError:
-                            pass
-                    if "kattalan" in dn.lower() and "telugu" in dirpath.lower():
-                        try:
-                            shutil.rmtree(os.path.join(dirpath, dn), ignore_errors=True)
-                            logger.info(f"[PURGE] Removed misplaced Kattalan Telugu directory: {dn}")
-                        except OSError:
-                            pass
+
                     # Remove abandoned movie directories that have no media (.strm) files left
                     full_dn = os.path.join(dirpath, dn)
                     if root == MOVIES_DIR and os.path.isdir(full_dn):
@@ -5749,33 +5722,29 @@ async def _reconcile_and_upgrade_library():
             entry["search_candidates"] = _search_candidates(raw_cand)
 
             if suspicious:
-                logger.info(f"[RECONCILE] Purging mismatched foreign metadata for '{entry.get('title')}'")
+                logger.info(f"[RECONCILE] Quarantining mismatched/suspicious metadata for '{entry.get('title')}'")
                 entry.pop("tmdb_id", None)
                 entry.pop("tmdb_title", None)
                 entry.pop("tmdb_year", None)
                 data.pop("tmdb_id", None)
                 data.pop("tmdb_title", None)
                 data.pop("tmdb_year", None)
-                if target_dir and os.path.exists(target_dir):
-                    td_base = os.path.basename(target_dir).lower()
-                    if "queer" in td_base or "siege" in td_base or "1976" in td_base:
-                        try:
-                            shutil.rmtree(target_dir, ignore_errors=True)
-                            logger.info(f"[RECONCILE] Removed mismatched folder '{td_base}'")
-                        except Exception:
-                            pass
-                for wrong_file in ("movie.nfo", "poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg", "logo.png", "clearlogo.png"):
-                    wf = os.path.join(target_dir, wrong_file)
-                    if os.path.exists(wf):
-                        try:
-                            os.remove(wf)
-                        except OSError:
-                            pass
+                # Clear bad metadata sidecars non-destructively, preserving all .strm media files
+                if target_dir and os.path.isdir(target_dir):
+                    for wrong_file in ("movie.nfo", "poster.jpg", "folder.jpg", "backdrop.jpg", "fanart.jpg", "landscape.jpg", "thumb.jpg", "logo.png", "clearlogo.png"):
+                        wf = os.path.join(target_dir, wrong_file)
+                        if os.path.exists(wf):
+                            try:
+                                os.remove(wf)
+                            except OSError:
+                                pass
                 if os.path.exists(nfo_file):
                     try:
                         os.remove(nfo_file)
                     except OSError:
                         pass
+                # Quarantine in review queue: preserves media asset while awaiting manual verification
+                _record_review_job(entry, confidence=0.0, reason=f"reconcile_suspicious_metadata:{entry.get('title')}")
                 to_enrich.append(entry)
             elif needs_hd:
                 to_enrich.append(entry)

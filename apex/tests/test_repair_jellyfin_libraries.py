@@ -436,4 +436,87 @@ def test_legitimate_media_preserved_during_repair(tmp_path):
         assert db_items[item_id] == name
 
 
+def test_orphan_cleanup_safeguards_unmanaged_and_virtual_paths(tmp_path):
+    """Ensure orphan cleanup strictly targets managed media paths that are missing,
+    and NEVER purges virtual views, plugin streams, or unmanaged paths."""
+    db_file = tmp_path / "jellyfin.db"
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE BaseItems (
+            Id TEXT PRIMARY KEY,
+            Path TEXT,
+            Name TEXT,
+            type TEXT,
+            Data TEXT,
+            DateModified TEXT
+        )
+    """)
+
+    managed_media = tmp_path / "media" / "Movies" / "Existent (2025)"
+    managed_media.mkdir(parents=True)
+    valid_file = managed_media / "Existent (2025).strm"
+    valid_file.write_text("http://stream/1")
+
+    missing_managed = str(tmp_path / "media" / "Movies" / "Missing (2025)" / "Missing (2025).strm")
+
+    test_items = [
+        ("id-valid", str(valid_file), "Existent Movie", "MediaBrowser.Controller.Entities.Movies.Movie"),
+        ("id-missing", missing_managed, "Missing Movie", "MediaBrowser.Controller.Entities.Movies.Movie"),
+        ("id-virtual-col", "/data/jellyfin/data/collections/Movies", "Movies", "MediaBrowser.Controller.Entities.CollectionFolder"),
+        ("id-http-stream", "http://external.stream/movie.m3u8", "External Stream", "MediaBrowser.Controller.Entities.Movies.Movie"),
+        ("id-plugin-stream", "plugin://plugin.video.youtube/play/?video_id=xyz", "Plugin Stream", "MediaBrowser.Controller.Entities.Movies.Movie"),
+        ("id-unmanaged-file", "/etc/jellyfin/system.xml", "System Config", "MediaBrowser.Controller.Entities.Movies.Movie"),
+    ]
+
+    for item_id, path, name, itype in test_items:
+        cur.execute(
+            "INSERT INTO BaseItems VALUES (?, ?, ?, ?, ?, ?)",
+            (item_id, path, name, itype, "{}", "2026-10-28T00:00:00Z")
+        )
+    conn.commit()
+    conn.close()
+
+    # Run repair database
+    repair_database(str(db_file))
+
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("SELECT Id, Path FROM BaseItems")
+    remaining_ids = {row[0] for row in cur.fetchall()}
+    conn.close()
+
+    # The missing managed media item must be pruned
+    assert "id-missing" not in remaining_ids
+
+    # All virtual, external, plugin, unmanaged, and existing media items MUST be preserved
+    for item_id in ("id-valid", "id-virtual-col", "id-http-stream", "id-plugin-stream", "id-unmanaged-file"):
+        assert item_id in remaining_ids, f"Item {item_id} was unexpectedly purged!"
+
+
+def test_cleanup_empty_media_folders_preserves_legitimate_metadata_cache(tmp_path):
+    """Ensure metadata cache folders for titles like Summer I Turned Pretty or What If (2024)
+    are preserved when they contain valid cache files."""
+    meta_root = tmp_path / "metadata" / "library"
+    summer_cache = meta_root / "The Summer I Turned Pretty (2022)"
+    whatif_cache = meta_root / "What If (2024)"
+    empty_cache = meta_root / "Empty Abandoned"
+    summer_cache.mkdir(parents=True)
+    whatif_cache.mkdir(parents=True)
+    empty_cache.mkdir(parents=True)
+
+    (summer_cache / "poster.jpg").write_bytes(b"summer art")
+    (whatif_cache / "backdrop.jpg").write_bytes(b"whatif art")
+
+    # Mock TARGET_DATABASES and run cleanup
+    cleanup_empty_media_folders(roots=[str(tmp_path / "media")])
+
+    # Summer I Turned Pretty and What If metadata caches MUST be preserved
+    assert summer_cache.exists()
+    assert (summer_cache / "poster.jpg").exists()
+    assert whatif_cache.exists()
+    assert (whatif_cache / "backdrop.jpg").exists()
+
+
+
 

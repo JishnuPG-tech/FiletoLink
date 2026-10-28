@@ -139,16 +139,40 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
         if purged > 0:
             print(f"[REPAIR] Purged {purged} invalid structural item rows from {db_path}.")
 
-        # Clean up orphaned rows whose media files do not exist on disk (prevents duplicate ghost items)
+        # Clean up orphaned rows whose media files do not exist on disk (prevents duplicate ghost items).
+        # Safeguard: strictly verify that path is a managed media file path (within library roots with media extensions)
+        # to ensure external pointers, virtual views, and unmanaged paths are never pruned.
+        managed_roots = [
+            "/data/jellyfin/media",
+            "/opt/jellyfin-local/media",
+            "/data/movies",
+            "/data/tvshows",
+        ]
+        db_parent = os.path.dirname(os.path.abspath(db_path))
+        test_media = os.path.join(db_parent, "media")
+        if os.path.isdir(test_media):
+            managed_roots.append(test_media)
+
+        norm_managed_roots = tuple(os.path.normpath(r).lower() + os.sep for r in managed_roots)
+        media_exts = (".strm", ".mp4", ".mkv", ".avi", ".ts", ".mov", ".wmv", ".m4v", ".webm")
+
         cur.execute(
             "SELECT Id, Path, Name, type FROM BaseItems "
-            "WHERE Path IS NOT NULL AND Path NOT LIKE 'http://%' AND Path NOT LIKE 'https://%' "
-            "AND (type LIKE '%Movie%' OR type LIKE '%Episode%' OR type LIKE '%Series%' OR type LIKE '%Season%')"
+            "WHERE Path IS NOT NULL AND Path NOT LIKE 'http://%' AND Path NOT LIKE 'https://%' AND Path NOT LIKE 'plugin://%' "
+            "AND (type LIKE '%Movie%' OR type LIKE '%Episode%')"
         )
         orphaned = []
         for row_id, item_path, item_name, itype in cur.fetchall():
-            if item_path and (item_path.startswith("/") or os.path.isabs(item_path)) and not os.path.exists(item_path):
+            if not item_path or not (item_path.startswith("/") or os.path.isabs(item_path)):
+                continue
+            norm_item = os.path.normpath(item_path).lower()
+            if not any(norm_item.startswith(r) for r in norm_managed_roots):
+                continue
+            if not norm_item.endswith(media_exts):
+                continue
+            if not os.path.exists(item_path):
                 orphaned.append(row_id)
+
         if orphaned:
             cur.executemany("DELETE FROM BaseItems WHERE Id = ?", [(oid,) for oid in orphaned])
             print(f"[REPAIR] Removed {len(orphaned)} orphaned item row(s) whose files no longer exist on disk.")
@@ -294,17 +318,17 @@ def cleanup_empty_media_folders(roots=None):
                 except Exception:
                     pass
 
-    # Purge corrupt metadata library cache entries
+    # Clean up empty metadata library cache entries
     meta_roots = ["/opt/jellyfin-local/data/metadata/library", "/data/jellyfin/data/metadata/library"]
     for mroot in meta_roots:
         if not os.path.exists(mroot):
             continue
-        for dirpath, _, _ in list(os.walk(mroot)):
-            dir_l = os.path.basename(dirpath).lower()
-            if "summer i turned pretty" in dir_l or "the summer i turned pretty" in dir_l or "what if (2024)" in dir_l:
+        for dirpath, dirnames, filenames in os.walk(mroot, topdown=False):
+            if dirpath == mroot:
+                continue
+            if not dirnames and not filenames:
                 try:
-                    shutil.rmtree(dirpath, ignore_errors=True)
-                    print(f"[REPAIR] Purged stale metadata cache folder: {dirpath}")
+                    os.rmdir(dirpath)
                 except Exception:
                     pass
 
