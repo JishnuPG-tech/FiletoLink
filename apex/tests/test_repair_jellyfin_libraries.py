@@ -9,6 +9,7 @@ from repair_jellyfin_libraries import (
     cleanup_empty_media_folders,
     heal_subtitle_files,
     heal_mismatched_media,
+    heal_channel_and_db_names,
     repair_user_subtitle_preferences,
     repair_user_policy_preferences,
     repair_system_xml,
@@ -611,6 +612,65 @@ def test_cleanup_empty_media_folders_never_deletes_non_empty_unrecognized_format
     assert (folder_with_txt / "notes.txt").exists()
     assert folder_with_xml.exists()
     assert (folder_with_xml / "data.xml").exists()
+
+
+def test_heal_channel_names_and_database(tmp_path):
+    movies_root = tmp_path / "Movies"
+    movies_root.mkdir()
+
+    # Create folder and strm with WMR and double-year
+    folder = movies_root / "WMR Iron Man (2008) (2008)"
+    folder.mkdir()
+    strm = folder / "WMR Iron Man (2008) (2008).strm"
+    strm.write_text("http://stream/1")
+    nfo = folder / "movie.nfo"
+    nfo.write_text("<movie><title>@WMR Iron Man (2008)</title><originaltitle>@WMR Iron Man</originaltitle></movie>")
+
+    db_file = tmp_path / "jellyfin.db"
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE BaseItems (
+            Id TEXT PRIMARY KEY,
+            Path TEXT,
+            Name TEXT,
+            CleanName TEXT,
+            type TEXT
+        )
+    """)
+    cur.execute("INSERT INTO BaseItems VALUES (?, ?, ?, ?, ?)", (
+        "item-ironman", str(strm), "@WM...", "@WM...", "MediaBrowser.Controller.Entities.Movies.Movie"
+    ))
+    conn.commit()
+    conn.close()
+
+    heal_mismatched_media(roots=[str(movies_root)], databases=[str(db_file)])
+    heal_channel_and_db_names(databases=[str(db_file)])
+
+    # Directory was renamed
+    healed_folder = movies_root / "Iron Man (2008)"
+    assert healed_folder.exists()
+    assert not folder.exists()
+    assert (healed_folder / "Iron Man (2008).strm").exists()
+
+    # NFO was healed
+    healed_nfo_text = (healed_folder / "movie.nfo").read_text()
+    assert "<title>Iron Man</title>" in healed_nfo_text
+    assert "@" not in healed_nfo_text
+    assert "WMR" not in healed_nfo_text
+
+    # Database name was healed
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("SELECT Name, CleanName, Path FROM BaseItems WHERE Id = ?", ("item-ironman",))
+    row = cur.fetchone()
+    conn.close()
+
+    assert row is not None
+    assert row[0] == "Iron Man"
+    assert "@" not in row[0]
+    assert "WMR" not in row[0]
+
 
 
 

@@ -236,7 +236,11 @@ def _strip_noise(text: str) -> str:
     t = _URL_NOISE_RE.sub(" ", t)
     t = _WATERMARK_PAREN_RE.sub(" ", t)
     t = re.sub(r"\[[^\]]*\]", " ", t)
-    t = re.sub(r"@[\w.\-]+", " ", t)
+    # Strip channel handles (@Handle, @WM_Movies, etc.) without consuming adjacent title words
+    t = re.sub(r"(?i)@(?:[a-z0-9]+)(?:[._-](?:movies|cinema|films|channel|linkz|official|hub|club|media|drive|hd|store|flim))?[._\s-]+", " ", t)
+    t = re.sub(r"@[a-z0-9_]+", " ", t, flags=re.IGNORECASE)
+    # Strip standalone known release / channel prefixes like WMR, WM, MM Linkz, 1TamilMV
+    t = re.sub(r"(?i)\b(?:wmr|wm|mm\s*linkz|tamilmv|tamilblasters|1tamilmv)\b", " ", t)
     t = _MEDIA_EXT_RE.sub(" ", t)
     # "+" and "&" are release/present separators too ("Dd+5.1 H" -> "Dd 5 1 H",
     # "Birds of Prey & Fantabulous" -> "Birds of Prey  Fantabulous"). A dash is a
@@ -378,6 +382,7 @@ def _clean_search_title(text: str) -> str:
     """A title ready to send to the TMDB search API (no year/release tags)."""
     text = _SIZE_RE.sub(" ", text)
     text = _strip_noise(_drop_dotted_group_tail(text))
+    text = re.sub(r"(?i)\b(?:wmr|wm|mm\s*linkz|tamilmv|tamilblasters|1tamilmv)\b", " ", text)
     text = YEAR_RE.sub(" ", text)
     text = re.sub(r"\(\s*\)", " ", text)
     # Strip leading "Episode NN -" or "Ep NN -" prefix (e.g. "Episode 3 - Green Lantern")
@@ -539,9 +544,10 @@ def parse_media_meta(filename_or_caption: Optional[str]) -> Dict:
     if tv:
         show_raw, season, episode = tv
         clean_show = _clean_search_title(show_raw)
+        clean_show = re.sub(r"(?i)^(?:@\S+\s*|(?:wmr|wm|mm\s*linkz)\s+)", "", clean_show).strip()
         if not clean_show:
             clean_show = "Unknown_Show"
-        show_title = safe_folder(_clean_search_title(show_raw).title() or clean_show)
+        show_title = safe_folder(clean_show.title() or clean_show)
         title = f"{show_title} - S{int(season):02d}E{int(episode):02d}"
         return {
             "is_tv": True,
@@ -557,6 +563,7 @@ def parse_media_meta(filename_or_caption: Optional[str]) -> Dict:
         }
 
     movie_title = _clean_search_title(raw)
+    movie_title = re.sub(r"(?i)^(?:@\S+\s*|(?:wmr|wm|mm\s*linkz)\s+)", "", movie_title).strip()
     if not movie_title:
         # Numeric-only/recovered titles: "2018.2018.Malayalam.1080p" is the
         # Malayalam film "2018", not a bare year; TMDB knows it by that name.
@@ -791,6 +798,10 @@ def build_movie_nfo(data: Dict) -> str:
     country_line = "  <country>%s</country>\n" % xml_escape(country) if country else ""
     imdb_id = xml_escape(str(data.get("imdb_id") or ""))
     imdb_unique = f'  <uniqueid type="imdb" default="true">{imdb_id}</uniqueid>\n' if imdb_id else ""
+    raw_title = g("title")
+    clean_nfo_title = re.sub(r"(?i)^(?:@\S+\s*|(?:wmr|wm|mm\s*linkz)\s+)", "", raw_title).strip() or raw_title
+    raw_orig = g("original_title") or raw_title
+    clean_orig_title = re.sub(r"(?i)^(?:@\S+\s*|(?:wmr|wm|mm\s*linkz)\s+)", "", raw_orig).strip() or clean_nfo_title
     return """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <movie>
   <title>%(title)s</title>
@@ -813,8 +824,8 @@ def build_movie_nfo(data: Dict) -> str:
   </art>
 </movie>
 """ % {
-        "title": xml_escape(g("title")),
-        "original_title": xml_escape(g("original_title")),
+        "title": xml_escape(clean_nfo_title),
+        "original_title": xml_escape(clean_orig_title),
         "year": xml_escape(g("release_date"))[:4],
         "premiered": xml_escape(g("release_date")),
         "releasedate": xml_escape(g("release_date")),
@@ -840,7 +851,9 @@ def build_tvshow_nfo(data: Dict) -> str:
     imdb_unique = f'  <uniqueid type="imdb" default="true">{imdb_id}</uniqueid>\n' if imdb_id else ""
     tmdb_unique = f'  <uniqueid type="tmdb">{tmdb_id}</uniqueid>\n' if tmdb_id else ""
     title_val = g("title") or g("name") or g("original_name") or g("original_title") or "Unknown"
-    orig_title_val = g("original_name") or g("original_title") or title_val
+    clean_tv_title = re.sub(r"(?i)^(?:@\S+\s*|(?:wmr|wm|mm\s*linkz)\s+)", "", title_val).strip() or title_val
+    orig_title_val = g("original_name") or g("original_title") or clean_tv_title
+    clean_tv_orig = re.sub(r"(?i)^(?:@\S+\s*|(?:wmr|wm|mm\s*linkz)\s+)", "", orig_title_val).strip() or clean_tv_title
     premiered_val = g("first_air_date") or g("premiered") or g("release_date") or ""
     year_val = str(data.get("year") or "") or premiered_val[:4]
     plot_val = g("overview") or g("plot") or ""

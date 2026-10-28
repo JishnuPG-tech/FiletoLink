@@ -401,8 +401,66 @@ def heal_subtitle_files(roots=None):
         print(f"[REPAIR] Purged {purged} corrupt/broken subtitle files across media directories.")
 
 
+CHANNEL_PREFIX_RE = re.compile(
+    r"(?i)^(?:@(?:[a-z0-9]+)(?:[._-](?:movies|cinema|films|channel|linkz|official|hub|club|media|drive|hd|store|flim))?[._\s-]*|@[a-z0-9_]+\s*|(?:wmr|wm|mm\s*linkz|tamilmv|tamilblasters|1tamilmv)\s+)"
+)
+
+
+def _sanitize_media_title(text: str) -> str:
+    """Strip channel prefixes, handles, and clean duplicate years."""
+    if not text:
+        return ""
+    s = text.strip()
+    while True:
+        m = CHANNEL_PREFIX_RE.match(s)
+        if not m:
+            break
+        s = s[m.end():].strip()
+    s = re.sub(r"(?i)\b(?:wmr|wm|mm\s*linkz|tamilmv|tamilblasters|1tamilmv)\b[._\s-]*", "", s).strip()
+    s = re.sub(r"^[^\w]+", "", s).strip()
+    # Normalize duplicate years like "Title (2008) (2008)" -> "Title (2008)"
+    years = re.findall(r"\((\d{4})\)", s)
+    if len(years) >= 2 and len(set(years)) == 1:
+        y = years[0]
+        s = re.sub(r"\s*\(\d{4}\)", "", s).strip()
+        s = f"{s} ({y})"
+    return s.strip()
+
+
+def _heal_nfo_file(nfo_path: str):
+    """Clean corrupted/channel-prefixed <title> and <originaltitle> in NFO files."""
+    if not os.path.isfile(nfo_path):
+        return
+    try:
+        with open(nfo_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+        changed = False
+        tm = re.search(r"<title>(.*?)</title>", content)
+        if tm:
+            t_val = tm.group(1)
+            clean_t = _sanitize_media_title(t_val)
+            clean_t = re.sub(r"\s*\(\d{4}\)$", "", clean_t).strip()
+            if clean_t and clean_t != t_val:
+                content = content.replace(f"<title>{t_val}</title>", f"<title>{clean_t}</title>")
+                changed = True
+        om = re.search(r"<originaltitle>(.*?)</originaltitle>", content)
+        if om:
+            o_val = om.group(1)
+            clean_o = _sanitize_media_title(o_val)
+            clean_o = re.sub(r"\s*\(\d{4}\)$", "", clean_o).strip()
+            if clean_o and clean_o != o_val:
+                content = content.replace(f"<originaltitle>{o_val}</originaltitle>", f"<originaltitle>{clean_o}</originaltitle>")
+                changed = True
+        if changed:
+            with open(nfo_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            print(f"[REPAIR] Healed titles in NFO: {nfo_path}")
+    except Exception as e:
+        print(f"[REPAIR] Note healing NFO {nfo_path}: {e}")
+
+
 def heal_mismatched_media(roots=None, databases=None):
-    """Clean folder/file release-size noise non-destructively and update DB paths."""
+    """Clean folder/file release-size noise and channel prefixes non-destructively and update DB paths."""
     search_roots = roots or [
         "/data/jellyfin/media/Movies",
         "/data/jellyfin/media/TV Shows",
@@ -422,44 +480,49 @@ def heal_mismatched_media(roots=None, databases=None):
             if not dirname or dirpath == root_dir:
                 continue
 
-            # 1. Rename directories containing release-size noise: "Iron Man 3 780Mb (2013)" -> "Iron Man 3 (2013)"
-            if size_re.search(dirname):
-                clean_name = size_re.sub("", dirname)
-                clean_name = re.sub(r"\s+", " ", clean_name).strip(" -_.")
-                if clean_name and clean_name != dirname:
-                    parent_dir = os.path.dirname(dirpath)
-                    new_dirpath = os.path.join(parent_dir, clean_name)
-                    if not os.path.exists(new_dirpath):
+            # 1. Rename directories containing release-size or channel prefix noise
+            clean_name = dirname
+            if size_re.search(clean_name):
+                clean_name = size_re.sub("", clean_name)
+            clean_name = _sanitize_media_title(clean_name)
+            clean_name = re.sub(r"\s+", " ", clean_name).strip(" -_.")
+            if clean_name and clean_name != dirname:
+                parent_dir = os.path.dirname(dirpath)
+                new_dirpath = os.path.join(parent_dir, clean_name)
+                if not os.path.exists(new_dirpath):
+                    try:
+                        os.rename(dirpath, new_dirpath)
+                        print(f"[REPAIR] Cleaned folder name: '{dirpath}' -> '{new_dirpath}'")
+                        for db_p in db_list:
+                            if os.path.exists(db_p):
+                                try:
+                                    conn = sqlite3.connect(db_p, timeout=5)
+                                    cur = conn.cursor()
+                                    cur.execute("SELECT Id, Path FROM BaseItems WHERE Path LIKE ?", (dirpath + "%",))
+                                    for row_id, p in cur.fetchall():
+                                        updated_p = new_dirpath + p[len(dirpath):]
+                                        conn.execute("UPDATE BaseItems SET Path = ? WHERE Id = ?", (updated_p, row_id))
+                                    conn.commit()
+                                    conn.close()
+                                except Exception:
+                                    pass
+                        dirpath = new_dirpath
+                        dirname = clean_name
                         try:
-                            os.rename(dirpath, new_dirpath)
-                            print(f"[REPAIR] Cleaned folder name: '{dirpath}' -> '{new_dirpath}'")
-                            for db_p in db_list:
-                                if os.path.exists(db_p):
-                                    try:
-                                        conn = sqlite3.connect(db_p, timeout=5)
-                                        cur = conn.cursor()
-                                        cur.execute("SELECT Id, Path FROM BaseItems WHERE Path LIKE ?", (dirpath + "%",))
-                                        for row_id, p in cur.fetchall():
-                                            updated_p = new_dirpath + p[len(dirpath):]
-                                            conn.execute("UPDATE BaseItems SET Path = ? WHERE Id = ?", (updated_p, row_id))
-                                        conn.commit()
-                                        conn.close()
-                                    except Exception:
-                                        pass
-                            dirpath = new_dirpath
-                            dirname = clean_name
-                            try:
-                                filenames = os.listdir(new_dirpath)
-                            except Exception:
-                                pass
-                        except Exception as ren_err:
-                            print(f"[REPAIR] Note renaming folder {dirpath}: {ren_err}")
+                            filenames = os.listdir(new_dirpath)
+                        except Exception:
+                            pass
+                    except Exception as ren_err:
+                        print(f"[REPAIR] Note renaming folder {dirpath}: {ren_err}")
 
-            # 2. Rename .strm files inside directory that contain release-size noise
+            # 2. Rename .strm files inside directory and heal NFOs
             for fn in list(filenames):
-                if fn.endswith(".strm") and size_re.search(fn):
+                if fn.endswith(".strm"):
                     base_no_ext, ext = os.path.splitext(fn)
-                    clean_strm_base = size_re.sub("", base_no_ext)
+                    clean_strm_base = base_no_ext
+                    if size_re.search(clean_strm_base):
+                        clean_strm_base = size_re.sub("", clean_strm_base)
+                    clean_strm_base = _sanitize_media_title(clean_strm_base)
                     clean_strm_base = re.sub(r"\s+", " ", clean_strm_base).strip(" -_.")
                     if clean_strm_base and clean_strm_base != base_no_ext:
                         old_strm = os.path.join(dirpath, fn)
@@ -479,6 +542,66 @@ def heal_mismatched_media(roots=None, databases=None):
                                             pass
                             except Exception as strm_err:
                                 print(f"[REPAIR] Note renaming strm {old_strm}: {strm_err}")
+                elif fn.lower() in ("movie.nfo", "tvshow.nfo"):
+                    _heal_nfo_file(os.path.join(dirpath, fn))
+
+
+def heal_channel_and_db_names(databases=None):
+    """Directly sanitize BaseItems.Name and CleanName in Jellyfin databases."""
+    db_list = databases or TARGET_DATABASES
+    for db_p in db_list:
+        if not os.path.exists(db_p):
+            continue
+        try:
+            conn = sqlite3.connect(db_p, timeout=10)
+            conn.isolation_level = None
+            cur = conn.cursor()
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='BaseItems'")
+            if not cur.fetchone():
+                conn.close()
+                continue
+
+            cur.execute(
+                "SELECT Id, Name, Path, type FROM BaseItems "
+                "WHERE (type LIKE '%Movie%' OR type LIKE '%Episode%' OR type LIKE '%Series%')"
+            )
+            rows = cur.fetchall()
+            updated = 0
+            for row_id, name, path, itype in rows:
+                if not name:
+                    continue
+                name_str = str(name).strip()
+                needs_clean = (
+                    name_str.startswith("@")
+                    or name_str.lower().startswith("wmr")
+                    or name_str.lower().startswith("wm ")
+                    or name_str.lower().startswith("mm linkz")
+                    or bool(re.search(r"\(\d{4}\)\s*\(\d{4}\)", name_str))
+                )
+                if needs_clean:
+                    candidate = name_str
+                    if "..." in name_str and path:
+                        parts = [p for p in path.replace("\\", "/").split("/") if p]
+                        for part in reversed(parts):
+                            p_clean = os.path.splitext(part)[0]
+                            if not p_clean.lower().endswith((".strm", ".mkv", ".mp4", ".avi")):
+                                candidate = p_clean
+                                break
+                    clean_name = _sanitize_media_title(candidate)
+                    clean_name = re.sub(r"\s*\(\d{4}\)$", "", clean_name).strip()
+                    if clean_name and clean_name != name_str:
+                        cur.execute("UPDATE BaseItems SET Name = ? WHERE Id = ?", (clean_name, row_id))
+                        try:
+                            cur.execute("UPDATE BaseItems SET CleanName = ? WHERE Id = ?", (clean_name, row_id))
+                        except Exception:
+                            pass
+                        updated += 1
+                        print(f"[REPAIR] Healed BaseItems.Name: '{name_str}' -> '{clean_name}' (Id={row_id})")
+            conn.close()
+            if updated:
+                print(f"[REPAIR] Healed {updated} BaseItems name(s) in {db_p}")
+        except Exception as e:
+            print(f"[REPAIR] Error healing BaseItems names in {db_p}: {e}")
 
 
 def repair_user_subtitle_preferences(configs=None):
@@ -648,6 +771,7 @@ def main():
     cleanup_empty_media_folders()
     heal_subtitle_files()
     heal_mismatched_media()
+    heal_channel_and_db_names()
     repair_user_subtitle_preferences()
     repair_user_policy_preferences()
     repair_system_xml()

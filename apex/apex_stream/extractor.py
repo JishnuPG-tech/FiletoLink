@@ -37,9 +37,21 @@ _QUALITY_BOUNDARY_RE = re.compile(
 
 # Outer envelope spam (channels, domains, watermarks)
 _ENVELOPE_RE = re.compile(
-    r"(?i)(?:^|[\s_\.\-\[])(?:@[a-z0-9_]+|www\.[a-z0-9\-]+(?:\.[a-z0-9\-]+)+|"
+    r"(?i)(?:^|[\s_\.\-\[])(?:@(?:[a-z0-9]+)(?:[._-](?:movies|cinema|films|channel|linkz|official|hub|club|media|drive|hd|store|flim))?|"
+    r"www\.[a-z0-9\-]+(?:\.[a-z0-9\-]+)+|"
     r"[a-z0-9\-]+\.(?:com|org|net|vip|xyz|top|site|club|online|store|link))(?=[\]\s_\.\-]|$)"
 )
+
+
+def _clean_channel_title(text: str) -> str:
+    if not text:
+        return ""
+    t = re.sub(r"(?i)^@(?:[a-z0-9]+)(?:[._-](?:movies|cinema|films|channel|linkz|official|hub|club|media|drive|hd|store|flim))?[._\s-]*", "", text)
+    t = re.sub(r"^@[a-z0-9_]+\s*", "", t, flags=re.IGNORECASE)
+    t = re.sub(r"(?i)\b(?:wmr|wm|mm\s*linkz|tamilmv|tamilblasters|1tamilmv)\b", " ", t)
+    t = re.sub(r"^[^\w]+", "", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
 
 
 def _anchor_parse(filename: str) -> Dict[str, Any]:
@@ -49,7 +61,9 @@ def _anchor_parse(filename: str) -> Dict[str, Any]:
 
     # 1. Clean outer extensions and channel handles
     clean = re.sub(r"(?i)\.(?:mkv|mp4|avi|mov|webm|strm|ts|m2ts)\s*$", "", filename.strip())
+    clean = re.sub(r"(?i)@(?:[a-z0-9]+)(?:[._-](?:movies|cinema|films|channel|linkz|official|hub|club|media|drive|hd|store|flim))?[._\s-]+", " ", clean)
     clean = _ENVELOPE_RE.sub(" ", clean)
+    clean = re.sub(r"(?i)\b(?:wmr|wm|mm\s*linkz|tamilmv|tamilblasters|1tamilmv)\b", " ", clean)
     clean = re.sub(r"^\[[^\]]+\]", "", clean).strip(" -._")
 
     # 2. Check for TV episode anchors
@@ -93,8 +107,10 @@ def _anchor_parse(filename: str) -> Dict[str, Any]:
 
     # 5. Clean punctuation to spaces
     title_clean = re.sub(r"[._\+]+", " ", title_raw)
+    title_clean = _clean_channel_title(title_clean)
     title_clean = re.sub(r"\s+", " ", title_clean).strip(" -._:,()[]{}")
     title_clean = re.sub(r"\s*\(\d{4}\)$", "", title_clean).strip()
+    title_clean = _clean_channel_title(title_clean)
 
     if not title_clean:
         title_clean = "Unknown_Media"
@@ -117,14 +133,14 @@ def extract_media_info(filename: str) -> Dict[str, Any]:
     if HAS_GUESSIT and _guessit_fn:
         try:
             g = _guessit_fn(filename)
-            g_title = g.get("title")
-            if g_title and len(str(g_title).strip()) >= 2:
+            g_title = _clean_channel_title(str(g.get("title") or ""))
+            if g_title and len(g_title) >= 2:
                 is_tv = g.get("type") == "episode" or "episode" in g or "season" in g
                 season = int(g["season"]) if "season" in g else (1 if is_tv else None)
                 episode = int(g["episode"]) if "episode" in g else (1 if is_tv else None)
                 year = int(g["year"]) if "year" in g else None
                 return {
-                    "title": str(g_title).strip(),
+                    "title": g_title,
                     "is_tv": is_tv,
                     "season": season,
                     "episode": episode,

@@ -124,11 +124,25 @@ def tmdb_language_code(language_name: str) -> str:
     return _TMDB_LANG_CODE.get(language_name or "", "")
 
 
+def _clean_channel_prefix(text: str) -> str:
+    if not text:
+        return ""
+    s = str(text).strip()
+    s = re.sub(r"(?i)^@(?:[a-z0-9]+)(?:[._-](?:movies|cinema|films|channel|linkz|official|hub|club|media|drive|hd|store|flim))?[._\s-]*", "", s)
+    s = re.sub(r"^@[a-z0-9_]+\s*", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"(?i)\b(?:wmr|wm|mm\s*linkz|tamilmv|tamilblasters|1tamilmv)\b", " ", s)
+    s = re.sub(r"^[^\w]+", "", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
 def safe_folder(name: str) -> str:
     """Folders/Jellyfin-safe version of a title or language name."""
     if not name:
         return "Unknown"
-    cleaned = re.sub(r"[^\w .'(),\-!]+", "", name, flags=re.UNICODE).strip()
+    cleaned_name = _clean_channel_prefix(name) or name
+    cleaned = re.sub(r"[^\w .'(),\-!]+", "", cleaned_name, flags=re.UNICODE).strip()
+    cleaned = _clean_channel_prefix(cleaned) or cleaned
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" .") if cleaned else "Unknown"
     return cleaned[:120] or "Unknown"
 
@@ -147,6 +161,7 @@ def folder_name(title: Optional[str], year: Optional[int] = None) -> str:
             except (ValueError, TypeError):
                 pass
         name = name[:m.start()].strip()
+    name = _clean_channel_prefix(name) or name
     if year:
         name = f"{name} ({year})"
     return name
@@ -229,7 +244,8 @@ def strm_base(entry: Dict) -> str:
         episode = int(entry.get("episode") or 1)
         return safe_folder(f"{clean_show} - S{season:02d}E{episode:02d}")
     title = entry.get("clean_title") or entry.get("title") or "Unknown"
-    return folder_name(title, entry.get("year"))
+    clean_title = _clean_channel_prefix(title) or title
+    return folder_name(clean_title, entry.get("year"))
 
 
 def strm_dir(movies_dir: str, shows_dir: str, entry: Dict) -> str:

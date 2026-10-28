@@ -1537,6 +1537,14 @@ async def _fetch_imdb_suggestion(query: str, year: Optional[int] = None, media_t
     """Query official IMDb suggestion API with composite disambiguation scoring."""
     if not query:
         return None
+    # Strip channel prefixes before searching IMDb
+    q_clean = re.sub(r"(?i)^@(?:[a-z0-9]+)(?:[._-](?:movies|cinema|films|channel|linkz|official|hub|club|media|drive|hd|store|flim))?[._\s-]*", "", query)
+    q_clean = re.sub(r"^@[a-z0-9_]+\s*", "", q_clean, flags=re.IGNORECASE)
+    q_clean = re.sub(r"(?i)\b(?:wmr|wm|mm\s*linkz|tamilmv|tamilblasters|1tamilmv)\b", " ", q_clean)
+    q_clean = re.sub(r"^[^\w]+", "", q_clean)
+    q_clean = re.sub(r"\s+", " ", q_clean).strip(" -._")
+    if q_clean:
+        query = q_clean
     clean = re.sub(r"[^a-zA-Z0-9]+", "_", query).strip("_").lower()
     if not clean:
         return None
@@ -3089,7 +3097,13 @@ def _meta_to_entry(msg_id, chat_id, file_id, file_size, file_name):
     ext = extract_media_info(file_name)
 
     is_tv = bool(ext.get("is_tv") or meta.get("is_tv"))
-    clean_title = ext.get("title") or meta.get("clean_title") or meta.get("title")
+    clean_title = ext.get("title") or meta.get("clean_title") or meta.get("title") or ""
+    if clean_title:
+        clean_title = re.sub(r"(?i)^@(?:[a-z0-9]+)(?:[._-](?:movies|cinema|films|channel|linkz|official|hub|club|media|drive|hd|store|flim))?[._\s-]*", "", clean_title)
+        clean_title = re.sub(r"^@[a-z0-9_]+\s*", "", clean_title, flags=re.IGNORECASE)
+        clean_title = re.sub(r"(?i)\b(?:wmr|wm|mm\s*linkz|tamilmv|tamilblasters|1tamilmv)\b", " ", clean_title)
+        clean_title = re.sub(r"^[^\w]+", "", clean_title)
+        clean_title = re.sub(r"\s+", " ", clean_title).strip(" -._")
     year = ext.get("year") or meta.get("year")
     season = ext.get("season") or meta.get("season")
     episode = ext.get("episode") or meta.get("episode")
@@ -3106,6 +3120,11 @@ def _meta_to_entry(msg_id, chat_id, file_id, file_size, file_name):
         title = f"{clean_title} ({year})" if year else clean_title
 
     candidates = _search_candidates(file_name)
+    candidates = [
+        re.sub(r"(?i)^(?:@\S+\s*|(?:wmr|wm|mm\s*linkz)\s+)", "", c).strip(" -._")
+        for c in candidates
+    ]
+    candidates = [c for c in candidates if c]
     if clean_title and clean_title not in candidates:
         candidates.insert(0, clean_title)
 
@@ -5619,6 +5638,12 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
             is_tv = bool(ext.get("is_tv") or data.get("is_tv") or parsed.get("is_tv"))
             mtype = "tv" if is_tv else "movie"
             title = ext.get("title") or parsed.get("clean_title") or data.get("clean_title") or data.get("title") or ""
+            if title:
+                title = re.sub(r"(?i)^@(?:[a-z0-9]+)(?:[._-](?:movies|cinema|films|channel|linkz|official|hub|club|media|drive|hd|store|flim))?[._\s-]*", "", title)
+                title = re.sub(r"^@[a-z0-9_]+\s*", "", title, flags=re.IGNORECASE)
+                title = re.sub(r"(?i)\b(?:wmr|wm|mm\s*linkz|tamilmv|tamilblasters|1tamilmv)\b", " ", title)
+                title = re.sub(r"^[^\w]+", "", title)
+                title = re.sub(r"\s+", " ", title).strip(" -._")
             year = ext.get("year") or parsed.get("year") or data.get("year")
             season = ext.get("season") or data.get("season") or 1
             episode = ext.get("episode") or data.get("episode") or 1
@@ -5628,9 +5653,20 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
             if not imdb_hit and year:
                 imdb_hit = await _fetch_imdb_suggestion(title, None, mtype)
             if not imdb_hit and parsed.get("title") and parsed["title"] != title:
-                imdb_hit = await _fetch_imdb_suggestion(parsed["title"], year, mtype)
+                p_cand = parsed["title"]
+                p_cand = re.sub(r"(?i)^@(?:[a-z0-9]+)(?:[._-](?:movies|cinema|films|channel|linkz|official|hub|club|media|drive|hd|store|flim))?[._\s-]*", "", p_cand)
+                p_cand = re.sub(r"^@[a-z0-9_]+\s*", "", p_cand, flags=re.IGNORECASE)
+                p_cand = re.sub(r"(?i)\b(?:wmr|wm|mm\s*linkz|tamilmv|tamilblasters|1tamilmv)\b", " ", p_cand)
+                p_cand = re.sub(r"^[^\w]+", "", p_cand).strip(" -._")
+                imdb_hit = await _fetch_imdb_suggestion(p_cand, year, mtype)
 
             official_title = (imdb_hit.get("l") if imdb_hit else None) or title
+            if official_title:
+                official_title = re.sub(r"(?i)^@(?:[a-z0-9]+)(?:[._-](?:movies|cinema|films|channel|linkz|official|hub|club|media|drive|hd|store|flim))?[._\s-]*", "", official_title)
+                official_title = re.sub(r"^@[a-z0-9_]+\s*", "", official_title, flags=re.IGNORECASE)
+                official_title = re.sub(r"(?i)\b(?:wmr|wm|mm\s*linkz|tamilmv|tamilblasters|1tamilmv)\b", " ", official_title)
+                official_title = re.sub(r"^[^\w]+", "", official_title)
+                official_title = re.sub(r"\s+", " ", official_title).strip(" -._")
             official_year = (imdb_hit.get("y") if imdb_hit else None) or year
             imdb_id = (imdb_hit.get("id") if imdb_hit else None) or data.get("imdb_id")
             poster_url = ((imdb_hit.get("i") or {}).get("imageUrl") if imdb_hit else None) or data.get("poster_url")

@@ -29,6 +29,26 @@ class TestParseMediaMeta:
         assert "malayalam" not in meta["search_title"]
         assert "wmr" not in meta["search_title"]
 
+    def test_movie_channel_handles_stripped_top_three(self):
+        # Top 3 items from Jellyfin screenshot
+        meta1 = parse_media_meta("@WM_Movies_Iron_Man_2_2008_1080p.mkv")
+        assert not meta1["clean_title"].startswith("@")
+        assert not meta1["clean_title"].lower().startswith("wm")
+        assert "Iron Man 2" in meta1["clean_title"]
+        assert meta1["year"] == 2008
+
+        meta2 = parse_media_meta("@WMR Resident Evil Apocalypse (2004).mkv")
+        assert not meta2["clean_title"].startswith("@")
+        assert not meta2["clean_title"].lower().startswith("wmr")
+        assert "Resident Evil" in meta2["clean_title"]
+        assert meta2["year"] == 2004
+
+        meta3 = parse_media_meta("@WM.Spider-Man.Homecoming.2017.mkv")
+        assert not meta3["clean_title"].startswith("@")
+        assert not meta3["clean_title"].lower().startswith("wm")
+        assert "Spider" in meta3["clean_title"]
+        assert meta3["year"] == 2017
+
     def test_tv_sxe(self):
         meta = parse_media_meta("Breaking Bad S01E01 720p x264")
         assert meta["is_tv"] is True
@@ -783,4 +803,4 @@ class TestNfoRepair:
         monkeypatch.setattr("aiohttp.ClientSession", FailingClientSession)
         fail_res = await tg_streamer._ai_disambiguate_candidates("Other Movie 2026", candidates)
         assert fail_res is None
-
+
