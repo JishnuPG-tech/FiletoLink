@@ -655,6 +655,7 @@ def test_deduplicate_jellyfin_items_preserves_conflicting_paths(tmp_path):
         ClientSession = MockSession
 
     tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    tag_node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "extract_version_tag")
     node = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "deduplicate_jellyfin_items")
 
     ns = {
@@ -674,10 +675,9 @@ def test_deduplicate_jellyfin_items_preserves_conflicting_paths(tmp_path):
         "_canonical_media_key": lambda e: "tmdb:615453",
         "DEFAULT_LANGUAGE": "English",
         "detect_language": lambda t: "English",
-        "extract_version_tag": lambda p: "Alt",
         "_save_cache_sync": lambda: None,
     }
-    exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
+    exec(compile(ast.Module([tag_node, node], []), "<ast>", "exec"), ns)
     dedup = ns["deduplicate_jellyfin_items"]
 
     res = asyncio.run(dedup())
@@ -932,10 +932,10 @@ def test_movie_identity_distinguishes_sequels(tmp_path):
         "_canonical_media_key": lambda e: "movie:bad-guys",
         "DEFAULT_LANGUAGE": "English",
         "detect_language": lambda t: "English",
-        "extract_version_tag": lambda p: "Alt",
         "_save_cache_sync": lambda: None,
     }
-    exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
+    tag_node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "extract_version_tag")
+    exec(compile(ast.Module([tag_node, node], []), "<ast>", "exec"), ns)
     dedup = ns["deduplicate_jellyfin_items"]
 
     res = asyncio.run(dedup())
