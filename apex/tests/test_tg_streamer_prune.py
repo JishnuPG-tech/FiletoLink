@@ -259,6 +259,7 @@ def test_deduplicate_jellyfin_items_preserves_blacklisted_media(tmp_path):
         "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
         "os": os,
         "re": re,
+        "shutil": shutil,
         "aiohttp": MockAiohttp(items),
         "_jellyfin_auth_header": lambda: {"X-Emby-Token": "test-token"},
         "_read_jellyfin_api_key": lambda: "test-token",
@@ -270,6 +271,9 @@ def test_deduplicate_jellyfin_items_preserves_blacklisted_media(tmp_path):
         "parse_media_meta": lambda name: {"title": name, "clean_title": name},
         "_canonical_media_key": lambda e: "tmdb:9999",
         "DEFAULT_LANGUAGE": "English",
+        "detect_language": lambda t: "English",
+        "extract_version_tag": lambda p: "Alt",
+        "_save_cache_sync": lambda: None,
     }
     exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
     dedup = ns["deduplicate_jellyfin_items"]
@@ -657,6 +661,7 @@ def test_deduplicate_jellyfin_items_preserves_conflicting_paths(tmp_path):
         "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
         "os": os,
         "re": re,
+        "shutil": shutil,
         "aiohttp": MockAiohttp(),
         "_jellyfin_auth_header": lambda: {"X-Emby-Token": "test-token"},
         "_read_jellyfin_api_key": lambda: "test-token",
@@ -668,6 +673,9 @@ def test_deduplicate_jellyfin_items_preserves_conflicting_paths(tmp_path):
         "parse_media_meta": lambda name: {"title": name, "clean_title": name},
         "_canonical_media_key": lambda e: "tmdb:615453",
         "DEFAULT_LANGUAGE": "English",
+        "detect_language": lambda t: "English",
+        "extract_version_tag": lambda p: "Alt",
+        "_save_cache_sync": lambda: None,
     }
     exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
     dedup = ns["deduplicate_jellyfin_items"]
@@ -726,6 +734,7 @@ def test_deduplicate_jellyfin_items_passes_delete_file_false(tmp_path):
         "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
         "os": os,
         "re": re,
+        "shutil": shutil,
         "aiohttp": MockAiohttp(),
         "_jellyfin_auth_header": lambda: {"X-Emby-Token": "test-token"},
         "_read_jellyfin_api_key": lambda: "test-token",
@@ -737,6 +746,9 @@ def test_deduplicate_jellyfin_items_passes_delete_file_false(tmp_path):
         "parse_media_meta": lambda name: {"title": name, "clean_title": name},
         "_canonical_media_key": lambda e: "tmdb:1036081",
         "DEFAULT_LANGUAGE": "Malayalam",
+        "detect_language": lambda t: "Malayalam",
+        "extract_version_tag": lambda p: "Alt",
+        "_save_cache_sync": lambda: None,
     }
     exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
     dedup = ns["deduplicate_jellyfin_items"]
@@ -789,3 +801,228 @@ def test_migrate_double_year_folders(tmp_path):
     assert not double_year_dir.exists()
     assert cache["1:2"]["target_dir"] == str(canonical_dir)
     assert cache["1:2"]["strm_path"] == str(canonical_dir / "Ne Zha (2019).strm")
+
+
+def test_episode_identity_never_merges_different_episodes(tmp_path):
+    shows_dir = tmp_path / "TV Shows"
+    show_dir = shows_dir / "Loki (2021)" / "Season 02"
+    show_dir.mkdir(parents=True)
+    ep1_strm = show_dir / "Loki - S02E01.strm"
+    ep2_strm = show_dir / "Loki - S02E02.strm"
+    ep1_strm.write_text("http://127.0.0.1:8080/stream/1:1/video.mp4")
+    ep2_strm.write_text("http://127.0.0.1:8080/stream/1:2/video.mp4")
+
+    # Both episodes share the same Series TMDB ID in Jellyfin
+    items = [
+        {"Id": "ep-1", "Name": "Ouroboros", "Type": "Episode", "Path": str(ep1_strm), "SeriesName": "Loki", "ParentIndexNumber": 2, "IndexNumber": 1, "ProviderIds": {"Tmdb": "114472"}},
+        {"Id": "ep-2", "Name": "Breaking Brad", "Type": "Episode", "Path": str(ep2_strm), "SeriesName": "Loki", "ParentIndexNumber": 2, "IndexNumber": 2, "ProviderIds": {"Tmdb": "114472"}},
+    ]
+
+    deleted_item_ids = []
+
+    class MockResponse:
+        def __init__(self, status=200, json_data=None):
+            self.status = status
+            self._json = json_data or {}
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def json(self): return self._json
+
+    class MockSession:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        def get(self, url, params=None, headers=None, timeout=None):
+            return MockResponse(200, {"Items": items})
+        def delete(self, url, params=None, headers=None, timeout=None):
+            deleted_item_ids.append(url.rstrip("/").split("/")[-1])
+            return MockResponse(204)
+
+    class MockAiohttp:
+        ClientSession = MockSession
+
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    node = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "deduplicate_jellyfin_items")
+
+    ns = {
+        "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
+        "os": os,
+        "re": re,
+        "shutil": shutil,
+        "aiohttp": MockAiohttp(),
+        "_jellyfin_auth_header": lambda: {"X-Emby-Token": "test-token"},
+        "_read_jellyfin_api_key": lambda: "test-token",
+        "MOVIES_DIR": str(tmp_path / "Movies"),
+        "SHOWS_DIR": str(shows_dir),
+        "FILE_ID_CACHE": {},
+        "is_blacklisted": lambda text: False,
+        "_record_review_job": lambda data, confidence=0.0, reason="": None,
+        "parse_media_meta": lambda name: {"show_name": "Loki", "season": 2, "episode": 1 if "E01" in name else 2, "is_tv": True},
+        "_canonical_media_key": lambda e: "episode:loki",
+        "DEFAULT_LANGUAGE": "English",
+        "detect_language": lambda t: "English",
+        "extract_version_tag": lambda p: "Alt",
+        "_save_cache_sync": lambda: None,
+    }
+    exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
+    dedup = ns["deduplicate_jellyfin_items"]
+
+    res = asyncio.run(dedup())
+
+    # Neither episode should EVER be deleted!
+    assert "ep-1" not in deleted_item_ids
+    assert "ep-2" not in deleted_item_ids
+    assert len(deleted_item_ids) == 0
+
+
+def test_movie_identity_distinguishes_sequels(tmp_path):
+    movies_dir = tmp_path / "Movies"
+    m1_dir = movies_dir / "English" / "The Bad Guys (2022)"
+    m2_dir = movies_dir / "English" / "The Bad Guys 2 (2025)"
+    m1_dir.mkdir(parents=True)
+    m2_dir.mkdir(parents=True)
+    m1_strm = m1_dir / "The Bad Guys (2022).strm"
+    m2_strm = m2_dir / "The Bad Guys 2 (2025).strm"
+    m1_strm.write_text("http://127.0.0.1:8080/stream/1:1/video.mp4")
+    m2_strm.write_text("http://127.0.0.1:8080/stream/1:2/video.mp4")
+
+    items = [
+        {"Id": "bg-1", "Name": "The Bad Guys", "Type": "Movie", "Path": str(m1_strm), "ProductionYear": 2022, "ProviderIds": {"Tmdb": "629542"}},
+        {"Id": "bg-2", "Name": "The Bad Guys 2", "Type": "Movie", "Path": str(m2_strm), "ProductionYear": 2025, "ProviderIds": {"Tmdb": "1182390"}},
+    ]
+
+    deleted_item_ids = []
+
+    class MockResponse:
+        def __init__(self, status=200, json_data=None):
+            self.status = status
+            self._json = json_data or {}
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def json(self): return self._json
+
+    class MockSession:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        def get(self, url, params=None, headers=None, timeout=None):
+            return MockResponse(200, {"Items": items})
+        def delete(self, url, params=None, headers=None, timeout=None):
+            deleted_item_ids.append(url.rstrip("/").split("/")[-1])
+            return MockResponse(204)
+
+    class MockAiohttp:
+        ClientSession = MockSession
+
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    node = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "deduplicate_jellyfin_items")
+
+    ns = {
+        "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
+        "os": os,
+        "re": re,
+        "shutil": shutil,
+        "aiohttp": MockAiohttp(),
+        "_jellyfin_auth_header": lambda: {"X-Emby-Token": "test-token"},
+        "_read_jellyfin_api_key": lambda: "test-token",
+        "MOVIES_DIR": str(movies_dir),
+        "SHOWS_DIR": str(tmp_path / "TV Shows"),
+        "FILE_ID_CACHE": {},
+        "is_blacklisted": lambda text: False,
+        "_record_review_job": lambda data, confidence=0.0, reason="": None,
+        "parse_media_meta": lambda name: {"clean_title": name, "year": 2022 if "2022" in name else 2025},
+        "_canonical_media_key": lambda e: "movie:bad-guys",
+        "DEFAULT_LANGUAGE": "English",
+        "detect_language": lambda t: "English",
+        "extract_version_tag": lambda p: "Alt",
+        "_save_cache_sync": lambda: None,
+    }
+    exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
+    dedup = ns["deduplicate_jellyfin_items"]
+
+    res = asyncio.run(dedup())
+
+    # Neither sequel should be deleted
+    assert "bg-1" not in deleted_item_ids
+    assert "bg-2" not in deleted_item_ids
+    assert len(deleted_item_ids) == 0
+
+
+def test_same_movie_multiple_releases_consolidated_as_alternate_versions(tmp_path):
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    tag_node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "extract_version_tag")
+    dedup_node = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "deduplicate_jellyfin_items")
+
+    movies_dir = tmp_path / "Movies"
+    canon_dir = movies_dir / "English" / "Spider-Man Homecoming (2017)"
+    alt_dir = movies_dir / "English" / "Spiderman Homecoming (2017)"
+    canon_dir.mkdir(parents=True)
+    alt_dir.mkdir(parents=True)
+
+    canon_strm = canon_dir / "Spider-Man Homecoming (2017).strm"
+    alt_strm = alt_dir / "Spider-Man.Homecoming.2017.720p.WEB-DL.strm"
+    canon_strm.write_text("http://127.0.0.1:8080/stream/1:100/video.mp4")
+    alt_strm.write_text("http://127.0.0.1:8080/stream/1:200/video.mp4")
+
+    cache = {
+        "1:100": {"strm_path": str(canon_strm), "target_dir": str(canon_dir)},
+        "1:200": {"strm_path": str(alt_strm), "target_dir": str(alt_dir)},
+    }
+
+    items = [
+        {"Id": "sm-1", "Name": "Spider-Man: Homecoming", "Type": "Movie", "Path": str(canon_strm), "ProviderIds": {"Tmdb": "315635"}},
+        {"Id": "sm-2", "Name": "Spider-Man: Homecoming", "Type": "Movie", "Path": str(alt_strm), "ProviderIds": {"Tmdb": "315635"}},
+    ]
+
+    deleted_item_ids = []
+
+    class MockResponse:
+        def __init__(self, status=200, json_data=None):
+            self.status = status
+            self._json = json_data or {}
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def json(self): return self._json
+
+    class MockSession:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        def get(self, url, params=None, headers=None, timeout=None):
+            return MockResponse(200, {"Items": items})
+        def delete(self, url, params=None, headers=None, timeout=None):
+            deleted_item_ids.append(url.rstrip("/").split("/")[-1])
+            return MockResponse(204)
+
+    class MockAiohttp:
+        ClientSession = MockSession
+
+    ns = {
+        "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
+        "os": os,
+        "re": re,
+        "shutil": shutil,
+        "aiohttp": MockAiohttp(),
+        "_jellyfin_auth_header": lambda: {"X-Emby-Token": "test-token"},
+        "_read_jellyfin_api_key": lambda: "test-token",
+        "MOVIES_DIR": str(movies_dir),
+        "SHOWS_DIR": str(tmp_path / "TV Shows"),
+        "FILE_ID_CACHE": cache,
+        "is_blacklisted": lambda text: False,
+        "_record_review_job": lambda data, confidence=0.0, reason="": None,
+        "parse_media_meta": lambda name: {"clean_title": "Spider-Man Homecoming", "year": 2017},
+        "_canonical_media_key": lambda e: "movie:spiderman",
+        "DEFAULT_LANGUAGE": "English",
+        "detect_language": lambda t: "English",
+        "_save_cache_sync": lambda: None,
+    }
+    exec(compile(ast.Module([tag_node, dedup_node], []), "<ast>", "exec"), ns)
+    dedup = ns["deduplicate_jellyfin_items"]
+
+    res = asyncio.run(dedup())
+
+    # Alternate release must be consolidated into the canonical folder as an alternate version!
+    consolidated_strm = canon_dir / "Spider-Man Homecoming (2017) - 720P WEB-DL.strm"
+    assert canon_strm.exists()
+    assert consolidated_strm.exists()
+    assert not alt_dir.exists()
+    assert cache["1:200"]["target_dir"] == str(canon_dir)
+    assert cache["1:200"]["strm_path"] == str(consolidated_strm)
+    assert len(deleted_item_ids) == 0

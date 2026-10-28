@@ -3556,6 +3556,26 @@ async def refresh_jellyfin_item_by_path(strm_path, alt_paths=None, retries=12, d
     return False
 
 
+def extract_version_tag(path: str) -> str:
+    """Extract resolution and source edition tags from a media filename (e.g. 1080P BLURAY, 720P WEB-DL)."""
+    base = os.path.splitext(os.path.basename(path))[0].lower()
+    tags = []
+    for res in ("2160p", "4k", "1080p", "720p", "480p"):
+        if res in base:
+            tags.append(res.upper())
+            break
+    for source in ("bluray", "web-dl", "webdl", "webrip", "remux", "hdtv"):
+        if source in base:
+            tags.append(source.upper().replace("WEBDL", "WEB-DL"))
+            break
+    if not tags:
+        for codec in ("hevc", "x265", "x264"):
+            if codec in base:
+                tags.append(codec.upper())
+                break
+    return " ".join(tags) if tags else "Alt"
+
+
 async def deduplicate_jellyfin_items():
     """Remove stale/duplicate Jellyfin records for streamer-owned STRM media."""
     headers = _jellyfin_auth_header()
@@ -3651,33 +3671,32 @@ async def deduplicate_jellyfin_items():
                     groups.setdefault("unknown-media", []).append((item, path))
                     continue
 
+                is_show_item = (itype == "Episode") or path.startswith(os.path.normpath(SHOWS_DIR))
+                if is_show_item:
+                    # Episode Identity: MUST be show + season + episode (never merge separate episodes)
+                    base_fn = os.path.splitext(os.path.basename(path))[0]
+                    parsed = parse_media_meta(base_fn or item.get("Name") or "")
+                    s_num = item.get("ParentIndexNumber") or parsed.get("season") or 1
+                    e_num = item.get("IndexNumber") or parsed.get("episode") or 1
+                    show_name = item.get("SeriesName") or parsed.get("show_name") or os.path.basename(os.path.dirname(os.path.dirname(path)))
+                    clean_show = re.sub(r"[^a-z0-9]+", "-", str(show_name or "").lower()).strip("-")
+                    identity = f"episode:{clean_show}:s{int(s_num):02d}e{int(e_num):02d}"
+                    groups.setdefault(identity, []).append((item, path))
+                    continue
+
+                # Movie Identity:
                 year_match = re.search(r"\((\d{4})\)", path)
-                year_suffix = year_match.group(1) if year_match else ""
-                if provider_ids.get("Tmdb"):
-                    identity = f"tmdb:{provider_ids['Tmdb']}"
+                year_val = item.get("ProductionYear") or (int(year_match.group(1)) if year_match else None)
+                parsed = parse_media_meta(os.path.splitext(os.path.basename(path))[0] or item.get("Name") or "")
+                year_val = year_val or parsed.get("year") or "unknown"
+                dir_lang = os.path.basename(os.path.dirname(os.path.dirname(path)))
+                lang = (detect_language(dir_lang) or parsed.get("language") or DEFAULT_LANGUAGE).lower()
+                clean_title = re.sub(r"[^a-z0-9]+", "-", str(parsed.get("clean_title") or item.get("Name") or "").lower()).strip("-")
+                tmdb_id = provider_ids.get("Tmdb")
+                if tmdb_id and str(tmdb_id).isdigit():
+                    identity = f"movie:tmdb:{tmdb_id}:{lang}"
                 else:
-                    parsed = parse_media_meta(
-                        os.path.splitext(os.path.basename(path))[0]
-                        or item.get("Name")
-                        or ""
-                    )
-                    parsed_entry = {
-                        **parsed,
-                        "language": (
-                            os.path.basename(os.path.dirname(os.path.dirname(path)))
-                            or DEFAULT_LANGUAGE
-                        ),
-                    }
-                    identity = _canonical_media_key(parsed_entry)
-                    if identity.endswith(":unknown:" + str(parsed_entry["language"]).lower()):
-                        identity = (
-                            "name:"
-                            + re.sub(
-                                r"[^a-z0-9]+", "-",
-                                str(item.get("Name") or "").lower(),
-                            ).strip("-")
-                            + f":{year_suffix}"
-                        )
+                    identity = f"movie:name:{clean_title}:{year_val}:{lang}"
                 groups.setdefault(identity, []).append((item, path))
 
             duplicates = list(orphan_items)
@@ -3711,8 +3730,17 @@ async def deduplicate_jellyfin_items():
                         )
                     continue
                 existing = [pair for pair in entries if os.path.exists(pair[1])]
-                keep = sorted(existing or entries, key=lambda pair: len(pair[1]))[0]
+                keep = sorted(
+                    existing or entries,
+                    key=lambda pair: (
+                        1 if not re.search(r" - (?:alt|\d{3,4}p)", os.path.basename(pair[1]).lower()) else 0,
+                        len(pair[1]),
+                    ),
+                    reverse=True,
+                )[0]
                 norm_keep = os.path.normpath(keep[1]).lower()
+                keep_dir = os.path.dirname(keep[1])
+
                 for pair in entries:
                     if pair is keep:
                         continue
@@ -3724,7 +3752,45 @@ async def deduplicate_jellyfin_items():
                         # Nonexistent ghost path
                         duplicates.append(pair)
                     else:
-                        # Existing file on a different path: DO NOT DELETE! Route to review.
+                        # Existing file on a different path
+                        pair_dir = os.path.dirname(pair[1])
+                        # If both are in the SAME folder, Jellyfin presents them as alternate versions under one movie card!
+                        if os.path.normpath(pair_dir).lower() == os.path.normpath(keep_dir).lower():
+                            logger.info(
+                                f"[DEDUPLICATE] Retaining alternate version in same directory: {pair[1]}"
+                            )
+                            continue
+
+                        # If they are in different folders, consolidate alternate movie release into canonical folder:
+                        if identity.startswith("movie:"):
+                            version_tag = extract_version_tag(pair[1])
+                            base_keep = os.path.splitext(os.path.basename(keep[1]))[0]
+                            clean_base = re.sub(r" - (?:alt|\d{3,4}p.*)$", "", base_keep, flags=re.IGNORECASE)
+                            target_strm_name = f"{clean_base} - {version_tag}.strm"
+                            target_strm_path = os.path.join(keep_dir, target_strm_name)
+
+                            if not os.path.exists(target_strm_path):
+                                try:
+                                    shutil.move(pair[1], target_strm_path)
+                                    logger.info(
+                                        f"[DEDUPLICATE] Consolidated alternate movie release: '{pair[1]}' -> '{target_strm_path}'"
+                                    )
+                                    # Update cache if applicable
+                                    for cv in FILE_ID_CACHE.values():
+                                        if isinstance(cv, dict) and os.path.normpath(str(cv.get("strm_path") or "")).lower() == norm_pair:
+                                            cv["strm_path"] = target_strm_path
+                                            cv["target_dir"] = keep_dir
+                                            _save_cache_sync()
+                                            break
+                                    try:
+                                        os.rmdir(pair_dir)
+                                    except OSError:
+                                        pass
+                                    continue
+                                except Exception as move_err:
+                                    logger.warning(f"[DEDUPLICATE] Consolidate move notice: {move_err}")
+
+                        # If cannot consolidate cleanly, preserve and route to review queue
                         _record_review_job(
                             {"item": pair[0], "path": pair[1], "keep_path": keep[1]},
                             confidence=0.0,

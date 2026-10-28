@@ -84,18 +84,21 @@ INITIAL_DIRS = [
 
 
 def _is_admin(request: Request) -> bool:
-    secret = (
-        os.environ.get("APEX_OPS_KEY")
-        or os.environ.get("APEX_SECRET_KEY")
-        or os.environ.get("HF_TOKEN")
-    )
-    if not secret:
+    valid_secrets = [
+        s.strip() for s in (
+            os.environ.get("APEX_OPS_KEY"),
+            os.environ.get("APEX_SECRET_KEY"),
+            os.environ.get("HF_TOKEN"),
+        )
+        if s and s.strip()
+    ]
+    if not valid_secrets:
         return False
     auth = request.headers.get("authorization", "")
     if not auth.lower().startswith("bearer "):
         return False
     provided = auth[len("Bearer "):].strip()
-    return hmac.compare_digest(provided, secret)
+    return any(hmac.compare_digest(provided, s) for s in valid_secrets)
 
 
 def _denied():
