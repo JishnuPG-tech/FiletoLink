@@ -242,7 +242,18 @@ def test_deduplicate_jellyfin_items_preserves_blacklisted_media(tmp_path):
         },
     ]
 
-    from tg_streamer import is_blacklisted
+    # Extract is_blacklisted via AST to avoid importing pyrogram
+    patterns_node = next(
+        n for n in tree.body
+        if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "_BLACKLIST_PATTERNS" for t in n.targets)
+    )
+    is_bl_node = next(
+        n for n in tree.body
+        if isinstance(n, ast.FunctionDef) and n.name == "is_blacklisted"
+    )
+    bl_ns = {"re": re, "Optional": Optional}
+    exec(compile(ast.Module([patterns_node, is_bl_node], []), "<ast>", "exec"), bl_ns)
+    is_blacklisted = bl_ns["is_blacklisted"]
 
     ns = {
         "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
