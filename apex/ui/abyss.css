@@ -402,41 +402,26 @@ input[type="radio"]:checked {
 
 /* Jellyfin 12 modern app shell (React / MUI) [BETA] */
 
-/* Jellyfin Alphabet Picker (A-Z Quick Scroller) - 100% Transparent, Top-to-Bottom Edge, Letters Only */
+/* Completely remove alphabet-based search and quick scroller */
 .alphaPicker,
 .alphaPicker-fixed,
 .alphaPicker-fixed-right,
 .alphanumeric-scrollbar,
-div[class*="alphaPicker"] {
-    position: fixed !important;
-    top: 0 !important;
-    bottom: 0 !important;
-    right: 0 !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
+.alphaPickerInner,
+.alphaPickerButton,
+.alphaPickerRow,
+div[class*="alphaPicker"],
+div[class*="alphanumeric"],
+div[class*="alpha-picker"],
+#alpha-scrubber-hud {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
     margin: 0 !important;
-    padding: calc(env(safe-area-inset-top, 0px) + 6px) 2px calc(env(safe-area-inset-bottom, 0px) + 6px) 0 !important;
-    width: 18px !important;
-    min-width: 0 !important;
-    max-width: 20px !important;
-    box-sizing: border-box !important;
-    background: transparent !important;
-    background-color: transparent !important;
-    background-image: none !important;
-    box-shadow: none !important;
-    border: none !important;
-    border-radius: 0 !important;
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-    pointer-events: auto !important;
-    touch-action: none !important;
-    user-select: none !important;
-    -webkit-user-select: none !important;
-    z-index: 1000 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
-    align-items: center !important;
+    padding: 0 !important;
 }
 
 .alphaPicker .alphaPickerInner,
@@ -3547,69 +3532,36 @@ a,
         padding: 16px 12px !important;
     }
 }
-/* Claude-Style Stepped Hamburger Menu Bar (Exact Match: Top long, Middle medium, Bottom short) */
-.mainDrawerButton,
-.headerButtonMenu,
-button[data-drawer="main"],
-.barsMenuButton,
-.skinHeader .headerLeft > button.paper-icon-button-light:first-child,
-.skinHeader .headerLeft > button:first-child {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    position: relative !important;
-}
 
-.mainDrawerButton > span,
-.mainDrawerButton > i,
-.mainDrawerButton > svg,
-.mainDrawerButton .material-icons,
-.mainDrawerButton .MuiSvgIcon-root,
-.headerButtonMenu > span,
-.headerButtonMenu > i,
-.headerButtonMenu > svg,
-.headerButtonMenu .material-icons,
-.barsMenuButton > span,
-.barsMenuButton > i,
-.barsMenuButton > svg,
-button[data-drawer="main"] > span,
-button[data-drawer="main"] > i,
-button[data-drawer="main"] > svg,
-.skinHeader .headerLeft > button.paper-icon-button-light:first-child > span,
-.skinHeader .headerLeft > button.paper-icon-button-light:first-child > i,
-.skinHeader .headerLeft > button.paper-icon-button-light:first-child > svg,
-.skinHeader .headerLeft > button:first-child > span,
-.skinHeader .headerLeft > button:first-child > i,
-.skinHeader .headerLeft > button:first-child > svg {
-    display: none !important;
-    opacity: 0 !important;
-    font-size: 0 !important;
-    width: 0 !important;
-    height: 0 !important;
-    pointer-events: none !important;
-}
-
-.mainDrawerButton::after,
-.headerButtonMenu::after,
-button[data-drawer="main"]::after,
-.barsMenuButton::after,
-.skinHeader .headerLeft > button.paper-icon-button-light:first-child::after,
-.skinHeader .headerLeft > button:first-child::after {
-    content: "" !important;
-    display: block !important;
+/* Claude-Style Stepped Hamburger Menu Bar (Top long 20px, Middle medium 13.5px, Bottom short 7.5px) */
+svg[data-testid="MenuIcon"],
+svg.claude-stepped-menu {
     width: 20px !important;
     height: 15px !important;
+    display: block !important;
+}
+
+/* Hide default horizontal straight path when not replaced */
+svg[data-testid="MenuIcon"]:not(.claude-stepped-menu) path,
+.mainDrawerButton:not(.claude-stepped-menu) .material-icons {
+    display: none !important;
+}
+
+svg[data-testid="MenuIcon"]:not(.claude-stepped-menu),
+.mainDrawerButton:not(.claude-stepped-menu) {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='15' viewBox='0 0 20 15' fill='none'%3E%3Crect x='0' y='0.5' width='20' height='2' rx='1' fill='white'/%3E%3Crect x='0' y='6.5' width='13.5' height='2' rx='1' fill='white'/%3E%3Crect x='0' y='12.5' width='7.5' height='2' rx='1' fill='white'/%3E%3C/svg%3E") !important;
     background-repeat: no-repeat !important;
     background-position: center !important;
     background-size: contain !important;
-    transition: opacity 0.15s ease, transform 0.15s ease !important;
 }
 
-.mainDrawerButton:active::after,
-.headerButtonMenu:active::after,
-button[data-drawer="main"]:active::after,
-.skinHeader .headerLeft > button:first-child:active::after {
-    opacity: 0.7 !important;
-    transform: scale(0.94) !important;
+button:has(svg[data-testid="MenuIcon"]),
+button[aria-label="Menu"],
+button[aria-label="menu"],
+.mainDrawerButton,
+.headerButtonMenu {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
 }

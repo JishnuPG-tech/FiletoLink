@@ -386,125 +386,54 @@
     return installed;
   }
 
-  var scrubberActive = false;
-  var lastScrubbedLetter = "";
-
-  function installClaudeMenuIcon() {
+  function removeAlphaPicker() {
     safe(function () {
-      var buttons = document.querySelectorAll(
-        ".mainDrawerButton, .headerButtonMenu, button[data-drawer='main'], .barsMenuButton, .skinHeader .headerLeft > button:first-child"
+      var pickers = document.querySelectorAll(
+        ".alphaPicker, .alphaPicker-fixed, .alphaPicker-fixed-right, .alphanumeric-scrollbar, div[class*='alphaPicker'], div[class*='alphanumeric'], div[class*='alpha-picker'], #alpha-scrubber-hud"
       );
-      for (var i = 0; i < buttons.length; i++) {
-        var btn = buttons[i];
-        if (btn.classList.contains("claude-menu-installed")) continue;
-        btn.classList.add("claude-menu-installed");
-        var children = btn.children;
-        for (var c = 0; c < children.length; c++) {
-          children[c].style.setProperty("display", "none", "important");
+      for (var i = 0; i < pickers.length; i++) {
+        var el = pickers[i];
+        if (el && el.parentNode) {
+          el.parentNode.removeChild(el);
         }
       }
     });
   }
 
-  function installAlphaPickerScrubber() {
+  function installClaudeMenuIcon() {
     safe(function () {
-      // Remove any leftover hud elements
-      var oldHud = document.getElementById("alpha-scrubber-hud");
-      if (oldHud && oldHud.parentNode) oldHud.parentNode.removeChild(oldHud);
-
-      var pickers = document.querySelectorAll(
-        ".alphaPicker, .alphaPicker-fixed, .alphaPicker-fixed-right, .alphanumeric-scrollbar, div[class*='alphaPicker']"
+      var svgs = document.querySelectorAll(
+        'svg[data-testid="MenuIcon"], button[aria-label="Menu"] svg, button[aria-label="menu"] svg, .mainDrawerButton svg'
       );
-      for (var p = 0; p < pickers.length; p++) {
-        var picker = pickers[p];
+      for (var i = 0; i < svgs.length; i++) {
+        var svg = svgs[i];
+        if (svg.getAttribute("data-claude-menu") === "true") continue;
+        svg.setAttribute("data-claude-menu", "true");
+        svg.classList.add("claude-stepped-menu");
+        svg.setAttribute("viewBox", "0 0 20 15");
+        svg.setAttribute("width", "20");
+        svg.setAttribute("height", "15");
+        svg.style.width = "20px";
+        svg.style.height = "15px";
+        svg.innerHTML =
+          '<rect x="0" y="0.5" width="20" height="2" rx="1" fill="white"/>' +
+          '<rect x="0" y="6.5" width="13.5" height="2" rx="1" fill="white"/>' +
+          '<rect x="0" y="12.5" width="7.5" height="2" rx="1" fill="white"/>';
+      }
 
-        // Hide '#' symbol button if present
-        var allButtons = picker.querySelectorAll("button, .alphaPickerButton, .MuiButtonBase-root");
-        for (var b = 0; b < allButtons.length; b++) {
-          var bEl = allButtons[b];
-          var txt = (bEl.textContent || "").trim();
-          if (txt === "#" || bEl.getAttribute("data-value") === "#" || bEl.getAttribute("data-item") === "#") {
-            bEl.style.setProperty("display", "none", "important");
-            bEl.classList.add("hide-hash");
-          }
-        }
-
-        if (picker._scrubberInstalled) continue;
-        picker._scrubberInstalled = true;
-
-        var getCleanButtons = function () {
-          var raw = picker.querySelectorAll("button, .alphaPickerButton, .MuiButtonBase-root");
-          var list = [];
-          for (var i = 0; i < raw.length; i++) {
-            var el = raw[i];
-            var txt = (el.textContent || "").trim();
-            if (txt === "#" || el.getAttribute("data-value") === "#" || el.getAttribute("data-item") === "#") {
-              el.style.setProperty("display", "none", "important");
-              el.classList.add("hide-hash");
-              continue;
-            }
-            if (el.offsetParent !== null || el.style.display !== "none") {
-              list.push(el);
-            }
-          }
-          return list;
-        };
-
-        var handleTouch = function (e) {
-          if (!e.touches || !e.touches.length) return;
-          var touch = e.touches[0];
-          var rect = picker.getBoundingClientRect();
-          var buttons = getCleanButtons();
-          if (!buttons.length) return;
-
-          var relY = (touch.clientY - rect.top) / rect.height;
-          var index = Math.floor(relY * buttons.length);
-          if (index < 0) index = 0;
-          if (index >= buttons.length) index = buttons.length - 1;
-
-          var targetBtn = buttons[index];
-          if (!targetBtn) return;
-
-          var letter = (targetBtn.textContent || "").trim();
-          if (letter && letter !== lastScrubbedLetter) {
-            lastScrubbedLetter = letter;
-
-            var activeButtons = picker.querySelectorAll(".active-scrub");
-            for (var a = 0; a < activeButtons.length; a++) {
-              activeButtons[a].classList.remove("active-scrub");
-            }
-            targetBtn.classList.add("active-scrub");
-
-            targetBtn.click();
-
-            if (navigator.vibrate) {
-              try { navigator.vibrate(5); } catch (ve) {}
-            }
-          }
-        };
-
-        picker.addEventListener("touchstart", function (e) {
-          scrubberActive = true;
-          handleTouch(e);
-        }, { passive: true });
-
-        picker.addEventListener("touchmove", function (e) {
-          if (!scrubberActive) return;
-          if (e.cancelable) e.preventDefault();
-          handleTouch(e);
-        }, { passive: false });
-
-        var endHandler = function () {
-          scrubberActive = false;
-          var activeButtons = picker.querySelectorAll(".active-scrub");
-          for (var a = 0; a < activeButtons.length; a++) {
-            activeButtons[a].classList.remove("active-scrub");
-          }
-          lastScrubbedLetter = "";
-        };
-
-        picker.addEventListener("touchend", endHandler, { passive: true });
-        picker.addEventListener("touchcancel", endHandler, { passive: true });
+      var classicBtns = document.querySelectorAll(
+        ".mainDrawerButton:not(:has(svg)), .headerButtonMenu:not(:has(svg))"
+      );
+      for (var j = 0; j < classicBtns.length; j++) {
+        var btn = classicBtns[j];
+        if (btn.getAttribute("data-claude-menu") === "true") continue;
+        btn.setAttribute("data-claude-menu", "true");
+        btn.innerHTML =
+          '<svg class="claude-stepped-menu" viewBox="0 0 20 15" width="20" height="15">' +
+          '<rect x="0" y="0.5" width="20" height="2" rx="1" fill="white"/>' +
+          '<rect x="0" y="6.5" width="13.5" height="2" rx="1" fill="white"/>' +
+          '<rect x="0" y="12.5" width="7.5" height="2" rx="1" fill="white"/>' +
+          '</svg>';
       }
     });
   }
@@ -610,7 +539,7 @@
       var run = function () {
         installScheduled = false;
         installSpotlight();
-        installAlphaPickerScrubber();
+        removeAlphaPicker();
         installClaudeMenuIcon();
         replaceServerNameText();
       };
@@ -650,7 +579,7 @@
     setInterval(function () {
       syncSettingsTheme();
       scheduleInstall();
-      installAlphaPickerScrubber();
+      removeAlphaPicker();
         installClaudeMenuIcon();
       replaceServerNameText();
       if (currentSync) safe(currentSync);
