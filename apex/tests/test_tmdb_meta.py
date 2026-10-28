@@ -476,6 +476,7 @@ class TestNfoBuilders:
         }
         nfo = build_movie_nfo(data)
         assert "<movie>" in nfo
+        assert "<lockdata>true</lockdata>" in nfo
         assert "Spider-Man: Homecoming" in nfo
         assert "<uniqueid type=\"tmdb\">315635</uniqueid>" in nfo
         assert "<genre>Action</genre>" in nfo
@@ -493,6 +494,7 @@ class TestNfoBuilders:
         }
         nfo = build_tvshow_nfo(data)
         assert "<tvshow>" in nfo
+        assert "<lockdata>true</lockdata>" in nfo
         assert "<uniqueid type=\"tmdb\">1396</uniqueid>" in nfo
         assert "<genre>Drama</genre>" in nfo
 
@@ -507,6 +509,7 @@ class TestNfoBuilders:
         }
         nfo = build_episode_nfo(data)
         assert "<episodedetails>" in nfo
+        assert "<lockdata>true</lockdata>" in nfo
         assert "<season>1</season>" in nfo
         assert "<episode>1</episode>" in nfo
         assert "<uniqueid type=\"tmdb\">621961</uniqueid>" in nfo

@@ -803,6 +803,7 @@ def build_movie_nfo(data: Dict) -> str:
   <runtime>%(runtime)s</runtime>
   <plot>%(plot)s</plot>
   <tagline>%(tagline)s</tagline>
+  <lockdata>true</lockdata>
   <imdbid>%(imdbid)s</imdbid>
   <tmdbid>%(tmdbid)s</tmdbid>
   <uniqueid type="tmdb">%(tmdbid)s</uniqueid>
@@ -853,6 +854,7 @@ def build_tvshow_nfo(data: Dict) -> str:
   <votes>%(votes)s</votes>
   <runtime>%(runtime)s</runtime>
   <plot>%(plot)s</plot>
+  <lockdata>true</lockdata>
   <imdbid>%(imdbid)s</imdbid>
   <tmdbid>%(tmdbid)s</tmdbid>
 %(tmdb_unique)s%(imdb_unique)s  %(genres)s  <art>
@@ -888,6 +890,7 @@ def build_episode_nfo(data: Dict) -> str:
   <aired>%(aired)s</aired>
   <rating>%(rating)s</rating>
   <runtime>%(runtime)s</runtime>
+  <lockdata>true</lockdata>
   <uniqueid type="tmdb">%(tmdbid)s</uniqueid>
 </episodedetails>
 """ % {

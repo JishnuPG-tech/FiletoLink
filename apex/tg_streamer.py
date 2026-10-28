@@ -2238,6 +2238,34 @@ async def _enrich_media_metadata(entry):
             target_dir = strm_dir(MOVIES_DIR, SHOWS_DIR, entry)
             entry["target_dir"] = target_dir
             entry["strm_path"] = os.path.join(target_dir, "Aadu 3 Part 1 (2026).strm")
+
+            # Relocate any legacy/misplaced Tamil directory into canonical Malayalam directory
+            for old_lang in ("Tamil", "Unknown"):
+                for old_f in ("Aadu 3 (2026)", "Aadu 3 (2026) (2026)", "Aadu 3 Part 1 (2026)"):
+                    old_cand_dir = os.path.join(MOVIES_DIR, old_lang, old_f)
+                    if os.path.isdir(old_cand_dir) and os.path.normpath(old_cand_dir).lower() != os.path.normpath(target_dir).lower():
+                        for sf in os.listdir(old_cand_dir):
+                            if sf.endswith(".strm"):
+                                old_sf = os.path.join(old_cand_dir, sf)
+                                new_sf = os.path.join(target_dir, "Aadu 3 Part 1 (2026).strm")
+                                if not os.path.exists(new_sf):
+                                    try:
+                                        os.makedirs(target_dir, exist_ok=True)
+                                        shutil.move(old_sf, new_sf)
+                                        logger.info(f"[MIGRATE-LANG] Relocated misplaced '{old_sf}' -> '{new_sf}'")
+                                    except Exception as e:
+                                        logger.warning(f"[MIGRATE-LANG] Move failed: {e}")
+                        try:
+                            for f in os.listdir(old_cand_dir):
+                                if not f.endswith(".strm"):
+                                    try:
+                                        os.remove(os.path.join(old_cand_dir, f))
+                                    except OSError:
+                                        pass
+                            os.rmdir(old_cand_dir)
+                            logger.info(f"[MIGRATE-LANG] Cleaned empty misplaced folder: {old_cand_dir}")
+                        except OSError:
+                            pass
             if not hit:
                 for aadu_cand in ("Aadu 3 Part 1", "Aadu 3", "ആട് 3"):
                     try:
@@ -3514,6 +3542,38 @@ async def refresh_jellyfin_item_by_path(strm_path, alt_paths=None, retries=12, d
                             None,
                         )
                 if not matched_item:
+                    # Fallback 3: Double-year / Part normalization match
+                    # Handles legacy folder drift such as "Aadu 3 (2026) (2026)" vs "Aadu 3 Part 1 (2026)"
+                    def _strip_drift(p):
+                        s = re.sub(r"\((\d{4})\)\s*\(\1\)", r"(\1)", str(p or "").lower())
+                        s = re.sub(r"\bpart\s*\d+\b", "", s)
+                        return re.sub(r"[^a-z0-9]+", "", s)
+                    target_drift = _strip_drift(strm_path)
+                    if target_drift:
+                        matched_item = next(
+                            (
+                                it for it in items
+                                if _strip_drift(it.get("Path")) == target_drift
+                            ),
+                            None,
+                        )
+                if not matched_item:
+                    # Fallback 4: Core title + year matching
+                    parsed_target = parse_media_meta(os.path.splitext(base)[0])
+                    target_title = re.sub(r"[^a-z0-9]+", "", (parsed_target.get("clean_title") or "").lower())
+                    target_year = parsed_target.get("year")
+                    if target_title:
+                        for it in items:
+                            it_path = str(it.get("Path") or "")
+                            it_name = str(it.get("Name") or "")
+                            parsed_it = parse_media_meta(os.path.splitext(os.path.basename(it_path))[0] or it_name)
+                            it_title = re.sub(r"[^a-z0-9]+", "", (parsed_it.get("clean_title") or it_name).lower())
+                            it_year = it.get("ProductionYear") or parsed_it.get("year")
+                            if target_title in it_title or it_title in target_title:
+                                if (not target_year or not it_year) or abs(int(target_year) - int(it_year)) <= 1:
+                                    matched_item = it
+                                    break
+                if not matched_item:
                     # Every few attempts, nudge a library scan so a freshly
                     # created/moved .strm is indexed before the next lookup.
                     if attempt > 0 and attempt % 3 == 0:
@@ -3526,7 +3586,7 @@ async def refresh_jellyfin_item_by_path(strm_path, alt_paths=None, retries=12, d
                 refresh_params = {
                     "metadataRefreshMode": "FullRefresh",
                     "replaceAllMetadata": "true",
-                    "replaceAllImages": "true",
+                    "replaceAllImages": "false",
                 }
                 refresh_ids = [matched_item.get("Id")]
                 series_id = matched_item.get("SeriesId")

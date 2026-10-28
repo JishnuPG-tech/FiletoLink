@@ -1026,3 +1026,81 @@ def test_same_movie_multiple_releases_consolidated_as_alternate_versions(tmp_pat
     assert cache["1:200"]["target_dir"] == str(canon_dir)
     assert cache["1:200"]["strm_path"] == str(consolidated_strm)
     assert len(deleted_item_ids) == 0
+
+
+def test_refresh_jellyfin_item_handles_double_year_and_preserves_artwork(tmp_path):
+    """Verify that refresh_jellyfin_item_by_path:
+    1. Resolves Jellyfin items even when path drifted with legacy double-year (e.g. 'Aadu 3 (2026) (2026)').
+    2. Sends replaceAllImages='false' so authentic local posters/backdrops are NEVER replaced.
+    3. Handles mismatch between 'Aadu 3 Part 1 (2026)' and 'Aadu 3 (2026)'.
+    """
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    node = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "refresh_jellyfin_item_by_path")
+
+    # Target path that Apex wants to refresh
+    target_path = "/data/jellyfin/media/Movies/Malayalam/Aadu 3 Part 1 (2026)/Aadu 3 Part 1 (2026).strm"
+
+    # Legacy Jellyfin item registered with double-year under Tamil
+    jellyfin_items = [
+        {
+            "Id": "aadu-item-123",
+            "Name": "Karuppu Aadu",
+            "Type": "Movie",
+            "Path": "/data/jellyfin/media/Movies/Tamil/Aadu 3 (2026) (2026)/Aadu 3 (2026) (2026).strm",
+            "ProductionYear": 2020,
+        }
+    ]
+
+    captured_post_calls = []
+
+    class MockResponse:
+        def __init__(self, status=200, json_data=None):
+            self.status = status
+            self._json = json_data or {}
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def json(self): return self._json
+
+    class MockSession:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        def get(self, url, params=None, headers=None, timeout=None):
+            return MockResponse(200, {"Items": jellyfin_items})
+        def post(self, url, params=None, headers=None, timeout=None):
+            captured_post_calls.append({"url": url, "params": params})
+            return MockResponse(204)
+
+    class MockAiohttp:
+        class TCPConnector:
+            def __init__(self, *a, **k): pass
+        ClientSession = MockSession
+
+    import socket
+    ns = {
+        "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
+        "os": os,
+        "re": re,
+        "socket": socket,
+        "aiohttp": MockAiohttp(),
+        "asyncio": asyncio,
+        "_jellyfin_auth_header": lambda: {"X-Emby-Token": "test-token"},
+        "_read_jellyfin_api_key": lambda: "test-token",
+        "request_jellyfin_scan": lambda: None,
+        "parse_media_meta": lambda name: {
+            "clean_title": "Aadu 3" if "aadu" in name.lower() else name,
+            "year": 2026 if "2026" in name else 2020,
+        },
+    }
+    exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
+    refresh_func = ns["refresh_jellyfin_item_by_path"]
+
+    ok = asyncio.run(refresh_func(target_path, retries=1))
+
+    assert ok is True
+    assert len(captured_post_calls) >= 1
+    post_call = captured_post_calls[0]
+    assert "aadu-item-123" in post_call["url"]
+    assert post_call["params"].get("metadataRefreshMode") == "FullRefresh"
+    assert post_call["params"].get("replaceAllMetadata") == "true"
+    # CRITICAL: Artwork must be preserved intact!
+    assert post_call["params"].get("replaceAllImages") == "false"
