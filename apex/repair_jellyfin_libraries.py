@@ -142,12 +142,12 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
         # Clean up orphaned rows whose media files do not exist on disk (prevents duplicate ghost items)
         cur.execute(
             "SELECT Id, Path, Name, type FROM BaseItems "
-            "WHERE (Path LIKE '/data/jellyfin/media/%' OR Path LIKE '/opt/jellyfin-local/%' OR Path LIKE '/data/movies/%' OR Path LIKE '/data/tvshows/%') "
+            "WHERE Path IS NOT NULL AND Path NOT LIKE 'http://%' AND Path NOT LIKE 'https://%' "
             "AND (type LIKE '%Movie%' OR type LIKE '%Episode%' OR type LIKE '%Series%' OR type LIKE '%Season%')"
         )
         orphaned = []
         for row_id, item_path, item_name, itype in cur.fetchall():
-            if item_path and not os.path.exists(item_path):
+            if item_path and (item_path.startswith("/") or os.path.isabs(item_path)) and not os.path.exists(item_path):
                 orphaned.append(row_id)
         if orphaned:
             cur.executemany("DELETE FROM BaseItems WHERE Id = ?", [(oid,) for oid in orphaned])
@@ -426,6 +426,19 @@ def heal_mismatched_media(roots=None, databases=None):
                         try:
                             os.rename(dirpath, new_dirpath)
                             print(f"[REPAIR] Cleaned folder name: '{dirpath}' -> '{new_dirpath}'")
+                            for db_p in db_list:
+                                if os.path.exists(db_p):
+                                    try:
+                                        conn = sqlite3.connect(db_p, timeout=5)
+                                        cur = conn.cursor()
+                                        cur.execute("SELECT Id, Path FROM BaseItems WHERE Path LIKE ?", (dirpath + "%",))
+                                        for row_id, p in cur.fetchall():
+                                            updated_p = new_dirpath + p[len(dirpath):]
+                                            conn.execute("UPDATE BaseItems SET Path = ? WHERE Id = ?", (updated_p, row_id))
+                                        conn.commit()
+                                        conn.close()
+                                    except Exception:
+                                        pass
                             dirpath = new_dirpath
                             dirname = clean_name
                             try:
