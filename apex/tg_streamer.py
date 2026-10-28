@@ -5324,8 +5324,12 @@ async def reindex_all_with_imdb(force_all: bool = True) -> int:
                                 with open(fp, "r", encoding="utf-8", errors="ignore") as _sf:
                                     _c = _sf.read(256)
                                 if "/stream/" in _c or "127.0.0.1" in _c:
-                                    os.remove(fp)
-                                    logger.info(f"[ROGUE-PURGE] Removed untracked .strm file: {fp}")
+                                    logger.warning(f"[REINDEX] Preserving untracked .strm file and routing to review queue: {fp}")
+                                    _record_review_job(
+                                        {"strm_path": fp, "file_name": fn, "content_sample": _c[:128]},
+                                        confidence=0.0,
+                                        reason=f"untracked_strm_file:{fn}"
+                                    )
                             except Exception:
                                 pass
                 norm_dp = os.path.normpath(dp)

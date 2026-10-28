@@ -296,64 +296,110 @@ def test_deduplicate_jellyfin_items_preserves_blacklisted_media(tmp_path):
     assert ("legit-dup-1" in deleted_item_ids) ^ ("legit-dup-2" in deleted_item_ids)
 
 
-def test_untracked_directory_cleanup_preserves_unrecognized_formats(tmp_path):
-    """Verify that untracked directories with unrecognized formats survive and are routed to review."""
+def test_reindex_all_with_imdb_preserves_untracked_strm_and_directories(tmp_path):
+    """Execute the real reindex_all_with_imdb function and verify that both untracked .strm files
+    and directories with unrecognized formats are preserved and sent to review.
+    """
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    node = next(
+        n for n in tree.body
+        if isinstance(n, ast.AsyncFunctionDef) and n.name == "reindex_all_with_imdb"
+    )
+
     movies_dir = tmp_path / "Movies"
     shows_dir = tmp_path / "TV Shows"
-    movies_dir.mkdir()
-    shows_dir.mkdir()
+    movies_dir.mkdir(parents=True)
+    shows_dir.mkdir(parents=True)
 
-    # 1. Untracked directory containing an unrecognized format or valuable file (e.g. .bin, .dat, .mp4)
-    untracked_unknown = movies_dir / "English" / "Unknown Format Title"
-    untracked_unknown.mkdir(parents=True)
-    bin_file = untracked_unknown / "payload.bin"
-    bin_file.write_bytes(b"binary media payload")
+    # 1. Tracked media folder & strm
+    tracked_folder = movies_dir / "English" / "Tracked Title (2025)"
+    tracked_folder.mkdir(parents=True)
+    tracked_strm = tracked_folder / "Tracked Title (2025).strm"
+    tracked_strm.write_text("http://127.0.0.1:8080/stream/1:100/video.mp4")
 
-    # 2. Untracked directory with ONLY sidecar files (.nfo)
+    # 2. Untracked directory containing an unrecognized binary file (.bin)
+    untracked_unknown_dir = movies_dir / "English" / "Unknown Format Title"
+    untracked_unknown_dir.mkdir(parents=True)
+    bin_file = untracked_unknown_dir / "payload.bin"
+    bin_file.write_bytes(b"valuable media payload")
+
+    # 3. Untracked .strm file in another directory
+    untracked_strm_dir = movies_dir / "English" / "Untracked Stream Title"
+    untracked_strm_dir.mkdir(parents=True)
+    untracked_strm = untracked_strm_dir / "untracked.strm"
+    untracked_strm.write_text("http://127.0.0.1:8080/stream/1:999/video.mp4")
+
+    # 4. Untracked directory with ONLY abandoned sidecar files (.nfo)
     sidecar_only = movies_dir / "English" / "Abandoned Sidecars"
     sidecar_only.mkdir(parents=True)
     (sidecar_only / "movie.nfo").write_text("<movie></movie>")
 
     recorded_reviews = []
 
-    # Run the exact non-destructive directory cleanup logic implemented in reindex_all_with_imdb
-    valid_dirs = {str(movies_dir / "English" / "Tracked Movie").lower()}
+    class MockJob:
+        payload = {
+            "strm_path": str(tracked_strm),
+            "target_dir": str(tracked_folder),
+        }
 
-    for root in (str(movies_dir), str(shows_dir)):
-        for dp, dns, fns in os.walk(root, topdown=False):
-            norm_dp = os.path.normpath(dp)
-            if norm_dp in (os.path.normpath(str(movies_dir)), os.path.normpath(str(shows_dir))):
-                continue
-            parent = os.path.dirname(norm_dp)
-            if os.path.normpath(parent) in (os.path.normpath(str(movies_dir)), os.path.normpath(str(shows_dir))):
-                continue
-            remaining = os.listdir(dp)
-            if not remaining:
-                try:
-                    os.rmdir(dp)
-                except OSError:
-                    pass
-            else:
-                sidecar_exts = (".nfo", ".xml", ".txt")
-                sidecars = [f for f in remaining if f.lower().endswith(sidecar_exts)]
-                if len(sidecars) == len(remaining):
-                    for sf in sidecars:
-                        try:
-                            os.remove(os.path.join(dp, sf))
-                        except OSError:
-                            pass
-                    try:
-                        os.rmdir(dp)
-                    except OSError:
-                        pass
-                elif valid_dirs and norm_dp.lower() not in valid_dirs and not any(f.lower().endswith('.strm') for f in remaining):
-                    recorded_reviews.append({"directory": dp, "files": remaining[:10]})
+    class MockRecord:
+        source_chat_id = -100
+        source_message_id = 100
 
-    # Directory with unrecognized file MUST survive!
-    assert untracked_unknown.exists()
+    class MockCatalog:
+        def list_records(self, include_deleted=False):
+            return [MockRecord()]
+
+        def find_job(self, chat_id, msg_id):
+            return MockJob()
+
+    class MockSession:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+
+    class MockAiohttp:
+        class TCPConnector:
+            def __init__(self, *args, **kwargs):
+                pass
+        def ClientSession(self, *args, **kwargs):
+            return MockSession()
+
+    import socket
+    ns = {
+        "logger": type("_Sink", (), {"info": lambda *a, **k: None, "warning": lambda *a, **k: None})(),
+        "os": os,
+        "socket": socket,
+        "aiohttp": MockAiohttp(),
+        "MOVIES_DIR": str(movies_dir),
+        "SHOWS_DIR": str(shows_dir),
+        "FILE_ID_CACHE": {},
+        "MEDIA_CATALOG": MockCatalog(),
+        "_record_review_job": lambda data, confidence=0.0, reason="": recorded_reviews.append((data, confidence, reason)),
+    }
+    exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
+    reindex_func = ns["reindex_all_with_imdb"]
+
+    # Execute the actual reindex_all_with_imdb function
+    res = asyncio.run(reindex_func(force_all=False))
+
+    # Untracked directory containing unrecognized file MUST survive!
+    assert untracked_unknown_dir.exists()
     assert bin_file.exists()
-    assert len(recorded_reviews) == 1
-    assert recorded_reviews[0]["directory"] == str(untracked_unknown)
+
+    # Untracked .strm file and its directory MUST survive!
+    assert untracked_strm_dir.exists()
+    assert untracked_strm.exists()
+
+    # Tracked media must remain untouched
+    assert tracked_folder.exists()
+    assert tracked_strm.exists()
 
     # Sidecar-only directory MUST be safely cleaned
     assert not sidecar_only.exists()
+
+    # Review queue must have recorded both the untracked directory and the untracked strm
+    reasons = [r[2] for r in recorded_reviews]
+    assert any("untracked_directory:Unknown Format Title" in r for r in reasons)
+    assert any("untracked_strm_file:untracked.strm" in r for r in reasons)
