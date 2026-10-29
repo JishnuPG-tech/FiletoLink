@@ -193,6 +193,13 @@
 
 			function getBaseUrl() {
 				try {
+					const topApi = (window.top && window.top.ApiClient) || (window.parent && window.parent.ApiClient);
+					if (topApi && typeof topApi.serverAddress === 'function') {
+						const addr = topApi.serverAddress();
+						if (addr) return normalizeAddress(addr);
+					}
+				} catch (e) {}
+				try {
 					const loc = window.top.location;
 					const match = loc.pathname.match(/^(.*?)\/web\b/);
 					return normalizeAddress(`${loc.protocol}//${loc.host}${match ? match[1] : ''}`);
@@ -206,6 +213,14 @@
 			}
 
 			function getAuth(baseUrl) {
+				try {
+					const topApi = (window.top && window.top.ApiClient) || (window.parent && window.parent.ApiClient);
+					if (topApi && typeof topApi.accessToken === 'function' && typeof topApi.getCurrentUserId === 'function') {
+						const t = topApi.accessToken();
+						const u = topApi.getCurrentUserId();
+						if (t && u) return { token: t, userId: u };
+					}
+				} catch (e) {}
 				try {
 					let rawCreds = null;
 					try {
@@ -377,10 +392,18 @@
 				} catch { /* Updates are optional when GitHub is unavailable. */ }
 			}
 
-			const base = getBaseUrl();
-			const { token, userId } = getAuth(base);
-			if (!base || !token || !userId) { $('empty').style.display = 'flex'; return; }
-			const headers = authHeaders(token);
+			let base = getBaseUrl();
+			let { token, userId } = getAuth(base);
+			let headers = token ? authHeaders(token) : {};
+
+			function syncAuth() {
+				base = getBaseUrl();
+				const auth = getAuth(base);
+				token = auth.token;
+				userId = auth.userId;
+				if (token) headers = authHeaders(token);
+				return Boolean(base && token && userId);
+			}
 
 			async function fetchJson(url, signal) {
 				const response = await fetch(url, { headers, signal });
@@ -977,8 +1000,21 @@
 				if (tvMode && tvActive) leaveWidget('down');
 			}
 
+			let authRetryCount = 0;
 			async function resume() {
 				if (disposed) return;
+				if (!base || !token || !userId) {
+					if (!syncAuth()) {
+						if (authRetryCount < 15) {
+							authRetryCount++;
+							setTimeout(resume, 350);
+							return;
+						}
+						$('empty').style.display = 'flex';
+						return;
+					}
+				}
+				$('empty').style.display = 'none';
 				const wasPaused = paused;
 				paused = false;
 				if (!items.length || Date.now() - lastRefresh > REFRESH_INTERVAL) await refreshItems();
@@ -1037,8 +1073,8 @@
 				}
 			});
 
-			checkForUpdate(base, token, userId);
 			if (!document.hidden) resume();
+			if (base && token && userId) checkForUpdate(base, token, userId);
 		})();
 	</script>
 </body>

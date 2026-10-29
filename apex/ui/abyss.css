@@ -1008,21 +1008,48 @@ html.abyss-spotlight-visible[data-theme="dark"] .MuiAppBar-root+div[aria-hidden=
     background-color: #141414;
 }
 
-.defaultCardBackground3 {
-    background-color: #212121;
-}
-
-.defaultCardBackground4 {
-    background-color: #333333;
-}
-
+.defaultCardBackground1,
+.defaultCardBackground2,
+.defaultCardBackground3,
+.defaultCardBackground4,
 .defaultCardBackground5 {
-    background-color: #666666;
+    background: linear-gradient(135deg, #161622 0%, #0d0d16 60%, #08080d 100%) !important;
+    background-color: #0d0d16 !important;
 }
 
-/* Hide card text in My Media section */
-.homeSectionsContainer .verticalSection:has([data-type="CollectionFolder"]) .cardText {
-    display: none !important;
+/* My Media / Library Channel Cards */
+.card[data-type="CollectionFolder"],
+[data-category="views"] .card,
+.apex-library-card {
+    border-radius: 14px !important;
+    background: linear-gradient(135deg, #181824 0%, #0d0d14 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    overflow: hidden !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6) !important;
+}
+
+.card[data-type="CollectionFolder"] .cardScalable::after,
+.apex-library-card .cardScalable::after {
+    content: '' !important;
+    position: absolute !important;
+    inset: 0 !important;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.45) 50%, rgba(0, 0, 0, 0.1) 100%) !important;
+    pointer-events: none !important;
+    z-index: 2 !important;
+}
+
+.homeSectionsContainer .verticalSection:has([data-type="CollectionFolder"]) .cardText,
+.card[data-type="CollectionFolder"] .cardText,
+.card[data-type="CollectionFolder"] .cardText-first,
+.apex-library-card .cardText,
+.apex-library-card .cardText-first {
+    display: block !important;
+    color: #F5F5F5 !important;
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9) !important;
+    position: relative !important;
+    z-index: 3 !important;
 }
 
 .homeSectionsContainer {

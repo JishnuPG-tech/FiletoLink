@@ -84,14 +84,13 @@
     style.textContent =
       "#indexPage.abyss-spotlight-active { padding: 0 !important; }" +
       "#homeTab.abyss-spotlight-active { padding: 0 !important; margin: 0 !important; }" +
-      "." + FRAME_CLASS + " { width:100%;display:block;border:0;margin:0;padding:0;height:70vh;min-height:420px;max-height:680px; }" +
+      "." + FRAME_CLASS + " { width:100%;display:block;border:0;margin:0;padding:0;height:58vh;min-height:420px;max-height:640px; }" +
       "." + FRAME_CLASS + ":focus { outline: none; }" +
-      "@media (min-width:1400px) { ." + FRAME_CLASS + " { height:72vh;max-height:760px; } }" +
-      "@media (min-width:1920px) { ." + FRAME_CLASS + " { height:68vh;max-height:860px; } }" +
-      "@media (max-width:1024px) and (orientation:portrait) { ." + FRAME_CLASS + " { height:54vh;min-height:360px;max-height:500px; } }" +
-      "@media (max-width:1024px) and (orientation:landscape) and (hover:none) and (pointer:coarse) { ." + FRAME_CLASS + " { height:100vh;min-height:280px;max-height:420px; } }" +
-      "@media (max-width:768px) and (orientation:portrait) { ." + FRAME_CLASS + " { height:48vh;min-height:380px;max-height:450px; } }" +
-      "@media (max-width:900px) and (orientation:landscape) and (max-height:500px) { ." + FRAME_CLASS + " { height:100vh;min-height:200px; } }";
+      "@media (min-width:1400px) { ." + FRAME_CLASS + " { height:60vh;max-height:720px; } }" +
+      "@media (min-width:1920px) { ." + FRAME_CLASS + " { height:56vh;max-height:800px; } }" +
+      "@media (max-width:1024px) and (orientation:portrait) { ." + FRAME_CLASS + " { height:50vh;min-height:360px;max-height:480px; } }" +
+      "@media (max-width:768px) and (orientation:portrait) { ." + FRAME_CLASS + " { height:46vh;min-height:330px;max-height:430px; } }" +
+      "@media (orientation:landscape) and (max-height:540px) { ." + FRAME_CLASS + " { height:86vh;min-height:300px;max-height:460px; } }";
     document.head.appendChild(style);
   }
 
@@ -267,8 +266,8 @@
     if (document.hidden) return false;
     if (indexPage.classList.contains("hide") || indexPage.hidden) return false;
     var style = window.getComputedStyle(homeTab);
-    if (style.display === "none" || style.visibility === "hidden") return false;
-    return homeTab.offsetParent !== null || homeTab.getClientRects().length > 0;
+    if (style.display === "none") return false;
+    return homeTab.offsetParent !== null || homeTab.getClientRects().length > 0 || !homeTab.classList.contains("hide");
   }
 
   function connectLifecycle(indexPage, homeTab, favoritesTab, iframe) {
@@ -477,6 +476,92 @@
         }
       }
     });
+  }
+
+  function applyBrandedLibraryFallback(container, title) {
+    if (!container) return;
+    container.style.background = "linear-gradient(135deg, #1a1a26 0%, #0d0d14 50%, #050508 100%)";
+  }
+
+  function enhanceLibraryCards() {
+    safe(function () {
+      var libraryCards = document.querySelectorAll(
+        '.card[data-type="CollectionFolder"], [data-category="views"] .card, .homeSectionsContainer .verticalSection:first-of-type .card'
+      );
+      if (!libraryCards || !libraryCards.length) return;
+
+      var baseUrl = "";
+      try {
+        baseUrl = (window.ApiClient && typeof window.ApiClient.serverAddress === "function" && window.ApiClient.serverAddress()) || window.location.origin;
+      } catch (e) {
+        baseUrl = window.location.origin;
+      }
+
+      var token = "";
+      var userId = "";
+      try {
+        if (window.ApiClient) {
+          token = (typeof window.ApiClient.accessToken === "function") ? window.ApiClient.accessToken() : "";
+          userId = (typeof window.ApiClient.getCurrentUserId === "function") ? window.ApiClient.getCurrentUserId() : "";
+        }
+      } catch (e) {}
+
+      for (var i = 0; i < libraryCards.length; i++) {
+        (function (card) {
+          if (!card.hasAttribute("tabindex")) card.setAttribute("tabindex", "0");
+          card.classList.add("apex-library-card");
+
+          var imgContainer = card.querySelector(".cardImageContainer") || card.querySelector(".cardScalable");
+          if (!imgContainer) return;
+
+          if (card.getAttribute("data-apex-bg-applied") === "true") return;
+
+          var itemId = card.getAttribute("data-id") || (card.dataset && card.dataset.id);
+          var cardName = card.querySelector(".cardText, .cardText-first, .cardLargeText");
+          var libraryTitle = cardName ? cardName.textContent.trim() : "Library";
+
+          if (itemId && userId && token && baseUrl) {
+            var queryUrl = baseUrl + "/Users/" + userId + "/Items?ParentId=" + itemId +
+              "&Limit=1&Recursive=true&SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=Movie,Series,Episode&Fields=BackdropImageTags,ParentBackdropImageTags&ImageTypes=Backdrop";
+
+            fetch(queryUrl, {
+              headers: {
+                "Authorization": 'MediaBrowser Client="Jellyfin Web", Device="Apex UI", DeviceId="apex-web", Version="1.0", Token="' + token + '"'
+              }
+            })
+              .then(function (res) { return res.ok ? res.json() : null; })
+              .then(function (data) {
+                if (data && data.Items && data.Items.length > 0) {
+                  var item = data.Items[0];
+                  var tag = (item.BackdropImageTags && item.BackdropImageTags[0]) ||
+                            (item.ParentBackdropImageTags && item.ParentBackdropImageTags[0]);
+                  var bId = item.Id;
+                  if (tag) {
+                    var imgUrl = baseUrl + "/Items/" + bId + "/Images/Backdrop/0?maxWidth=1280&quality=90&tag=" + tag;
+                    imgContainer.style.backgroundImage = 'url("' + imgUrl + '")';
+                    imgContainer.style.backgroundSize = "cover";
+                    imgContainer.style.backgroundPosition = "center center";
+                    imgContainer.style.backgroundRepeat = "no-repeat";
+                    card.setAttribute("data-apex-bg-applied", "true");
+                    return;
+                  }
+                }
+                applyBrandedLibraryFallback(imgContainer, libraryTitle);
+                card.setAttribute("data-apex-bg-applied", "true");
+              })
+              .catch(function () {
+                applyBrandedLibraryFallback(imgContainer, libraryTitle);
+                card.setAttribute("data-apex-bg-applied", "true");
+              });
+          } else {
+            applyBrandedLibraryFallback(imgContainer, libraryTitle);
+            card.setAttribute("data-apex-bg-applied", "true");
+          }
+        })(libraryCards[i]);
+      }
+    });
+  }
+
   var dpadInstalled = false;
   function installSpatialDpadNavigation() {
     safe(function () {
@@ -711,6 +796,7 @@
         installApexBranding();
         replaceServerNameText();
         installSpatialDpadNavigation();
+        enhanceLibraryCards();
       };
 
       if (typeof requestAnimationFrame === "function") {
@@ -725,6 +811,7 @@
     installApexBranding();
     replaceServerNameText();
     installSpatialDpadNavigation();
+    enhanceLibraryCards();
     window.addEventListener("hashchange", syncSettingsTheme);
     if (typeof MutationObserver === "function") {
       safe(function () {
@@ -755,6 +842,7 @@
       installApexBranding();
       replaceServerNameText();
       installSpatialDpadNavigation();
+      enhanceLibraryCards();
       if (currentSync) safe(currentSync);
     }, 2000);
 
