@@ -765,11 +765,24 @@ function findHomeTab() {
       if (tvTopbar) {
         var isVideo = !!document.querySelector(".videoPlayerContainer:not(.hide), #videoOsdPage:not(.hide), video");
         var hash = window.location.hash || "";
-        var isHiddenRoute = hash.indexOf("dashboard") !== -1 || hash.indexOf("settings") !== -1;
-        if (isVideo || isHiddenRoute) {
+        var isHiddenRoute = hash.indexOf("dashboard") !== -1 ||
+                            hash.indexOf("settings") !== -1 ||
+                            hash.indexOf("login") !== -1 ||
+                            hash.indexOf("selectserver") !== -1 ||
+                            hash.indexOf("forgotpassword") !== -1;
+
+        var isAuthPage = !!document.querySelector("#loginPage:not(.hide), .loginPage:not(.hide), #selectServerPage:not(.hide), #forgotPasswordPage:not(.hide), .manualLoginForm, form[data-action='login'], input[type='password']");
+        var isSplash = !!document.querySelector(".splashLogo:not(.hide), #splashPage:not(.hide), .splashLogo");
+        var hasHomeOrLibrary = !!document.querySelector("#indexPage, .homePage, #homeTab, .pageTabContent, .mainDrawer, .itemsContainer");
+        var isUserLoggedIn = (window.ApiClient && typeof window.ApiClient.isLoggedIn === "function") ? window.ApiClient.isLoggedIn() : (window.ApiClient && !!window.ApiClient.accessToken());
+
+        if (isVideo || isHiddenRoute || isAuthPage || (isSplash && !hasHomeOrLibrary) || (!isUserLoggedIn && !hasHomeOrLibrary)) {
           tvTopbar.style.display = "none";
+          tvTopbar.style.visibility = "hidden";
+          return;
         } else {
           tvTopbar.style.display = "flex";
+          tvTopbar.style.visibility = "visible";
         }
       }
 

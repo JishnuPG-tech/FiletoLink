@@ -599,7 +599,7 @@ body:has(#videoOsdPage:not(.hide)) header.MuiAppBar-root>.MuiToolbar-root>.MuiBo
 }
 
 html[data-theme="dark"] .MuiBox-root .tabContent.pageTabContent.is-active.abyss-spotlight-active .featurediframe.focusable {
-    margin-top: 52px;
+    margin-top: 0 !important;
 }
 
 html[data-theme="dark"] header.MuiAppBar-root {
@@ -3729,10 +3729,11 @@ body, html, .backgroundContainer {
 .skinHeader,
 .skinHeader.focuscontainer-x,
 .skinHeader-withBackground {
-    background: rgba(0, 0, 0, 0.72) !important;
-    backdrop-filter: blur(24px) !important;
-    -webkit-backdrop-filter: blur(24px) !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: none !important;
+    border-bottom: none !important;
     box-shadow: none !important;
 }
 
@@ -3902,14 +3903,18 @@ header.MuiAppBar-root > .MuiToolbar-root > .MuiStack-root:first-of-type:has(butt
     opacity: 0 !important;
 }
 
-/* 2. HEADER CONTAINER & BAR */
+/* 2. HEADER CONTAINER & BAR - Fully transparent, zero blur over spotlight */
 .skinHeader,
 .skinHeader.focuscontainer-x,
 .skinHeader-withBackground,
+.skinHeader-withBackground::before,
 header.MuiAppBar-root {
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.5) 75%, transparent 100%) !important;
-    backdrop-filter: blur(20px) !important;
-    -webkit-backdrop-filter: blur(20px) !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: none !important;
     border-bottom: none !important;
     box-shadow: none !important;
     height: 56px !important;
@@ -3920,6 +3925,12 @@ header.MuiAppBar-root {
     left: 0 !important;
     right: 0 !important;
     z-index: 1000 !important;
+    pointer-events: none !important;
+}
+
+.skinHeader *,
+header.MuiAppBar-root * {
+    pointer-events: auto;
 }
 
 .headerTop,
@@ -4412,20 +4423,71 @@ div[data-category="nextup"] .cardScalable,
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4) !important;
 }
 
-/* Mobile Portrait Mode */
+/* Mobile Portrait Mode: Compact tabs to prevent TV Shows & Search collision */
 @media (max-width: 600px) and (orientation: portrait) {
     #apex-tv-topbar {
-        height: 52px !important;
-        padding: 0 8px !important;
+        height: 48px !important;
+        padding: 0 4px !important;
+        background: transparent !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
     }
     #apex-tv-topbar .apex-tv-tabs {
-        gap: 6px !important;
+        gap: 4px !important;
     }
     .apex-tv-tab,
     .apex-nav-item {
-        font-size: 13px !important;
-        padding: 5px 10px !important;
+        font-size: 12px !important;
+        padding: 4px 7px !important;
+        letter-spacing: -0.01em !important;
     }
+    /* Right side controls: Search & Profile pinned safely to the right */
+    .headerRight,
+    header.MuiAppBar-root > .MuiToolbar-root > .MuiBox-root:last-of-type,
+    header.MuiAppBar-root > .MuiToolbar-root > .MuiStack-root:last-of-type {
+        position: absolute !important;
+        right: 8px !important;
+        top: 0 !important;
+        bottom: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 2px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .headerSearchButton,
+    button[data-action="search"],
+    .headerUserButtonRound,
+    .headerButton-user {
+        margin: 0 1px !important;
+        padding: 4px !important;
+        min-width: 32px !important;
+        width: 32px !important;
+        height: 32px !important;
+    }
+}
+
+/* Never display topbar on splash screen, login screen, server selection, or wizard */
+#loginPage ~ #apex-tv-topbar,
+body:has(#loginPage:not(.hide)) #apex-tv-topbar,
+body:has(.loginPage:not(.hide)) #apex-tv-topbar,
+body:has(#selectServerPage:not(.hide)) #apex-tv-topbar,
+body:has(#forgotPasswordPage:not(.hide)) #apex-tv-topbar,
+body:has(.manualLoginForm) #apex-tv-topbar,
+body:has(.splashLogo:not(.hide):not(:empty)) #apex-tv-topbar,
+body.is-logged-out #apex-tv-topbar {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Clean header on login and splash */
+#loginPage .skinHeader,
+.loginPage .skinHeader,
+#selectServerPage .skinHeader,
+.selectServerPage .skinHeader {
+    display: none !important;
 }
 
 /* Landscape Mode & Desktop/TV */
