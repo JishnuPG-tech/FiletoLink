@@ -332,7 +332,22 @@
 
   var currentSync = null;
 
-  function findHomeTab() {
+    function findVisibleById(id) {
+    var candidates = document.querySelectorAll('[id="' + id + '"]');
+    for (var i = 0; i < candidates.length; i++) {
+      var el = candidates[i];
+      if (
+        el.isConnected &&
+        !el.classList.contains("hide") &&
+        !el.hidden
+      ) {
+        return el;
+      }
+    }
+    return candidates.length ? candidates[candidates.length - 1] : null;
+  }
+
+function findHomeTab() {
     var homeTab = document.querySelector("#homeTab");
     if (homeTab && homeTab.isConnected) return homeTab;
 
@@ -467,7 +482,7 @@
       var logoSvgUrl = (window.location.pathname.indexOf("/web") !== -1) ? "ui/apex-logo.svg" : "/jellyfin/web/ui/apex-logo.svg";
 
       // 1. Favicon sync
-      var links = document.querySelectorAll("a[href*=\x22" + targetId + "\x22], [data-id=\x22" + targetId + "\x22]");
+      var links = document.querySelectorAll("link[rel*='icon']");
       for (var i = 0; i < links.length; i++) {
         if (links[i].getAttribute("data-apex-logo") !== "true") {
           links[i].setAttribute("data-apex-logo", "true");
@@ -659,7 +674,7 @@
 
     var targetId = name === "Movies" ? libIds.movies : libIds.tvshows;
     if (targetId) {
-      var links = document.querySelectorAll("a[href*=\x22" + targetId + "\x22], [data-id=\x22" + targetId + "\x22]");
+      var links = document.querySelectorAll('a[href*="' + targetId + '"], [data-id="' + targetId + '"]');
       if (links.length && links[0].click) {
         links[0].click();
         return;
@@ -677,7 +692,7 @@
 
   function updateActiveNavTab() {
     var hash = window.location.hash || "";
-      var links = document.querySelectorAll("a[href*=\x22" + targetId + "\x22], [data-id=\x22" + targetId + "\x22]");
+    var links = document.querySelectorAll(".apex-tv-tab, .apex-nav-item");
     for (var i = 0; i < links.length; i++) {
       var item = links[i];
       var navType = item.getAttribute("data-nav");
@@ -807,6 +822,7 @@
     });
   }
 
+  var topNavGuardianTimer = null;
   function startTopNavGuardian() {
     if (topNavGuardianTimer) clearInterval(topNavGuardianTimer);
     topNavGuardianTimer = setInterval(ensureTopNavigation, 400);
