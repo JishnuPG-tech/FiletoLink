@@ -129,6 +129,21 @@ async def route_catch_all(path: str, request: Request):
             sub_p = f"/web{sub_p}"
         return await proxy_http_request(f"http://127.0.0.1:{JELLYFIN_PORT}{sub_p}", request, default_prefix="/jellyfin", extra_headers={"X-Forwarded-Prefix": "/jellyfin"})
     
+    # Direct Telegram video streaming endpoints:
+    if req_path.startswith("/stream/") or req_path.startswith("/stream_file"):
+        logger.info(f"[ROUTER] {req_path} (Direct Stream) -> Telegram ({TG_PORT})")
+        return await proxy_http_request(f"http://127.0.0.1:{TG_PORT}{raw_path}", request, default_prefix="")
+
+    # Root Jellyfin media streaming endpoints:
+    if req_path.startswith("/videos/") or req_path.startswith("/audio/"):
+        logger.info(f"[ROUTER] {req_path} (Jellyfin Media Stream) -> Jellyfin ({JELLYFIN_PORT})")
+        return await proxy_http_request(
+            f"http://127.0.0.1:{JELLYFIN_PORT}{raw_path}",
+            request,
+            default_prefix="/jellyfin",
+            extra_headers={"X-Forwarded-Prefix": "/jellyfin"},
+        )
+
     if req_path in ("/session-login", "/session-login/"):
         return await proxy_http_request(f"http://127.0.0.1:{TG_PORT}/session-login", request, default_prefix="")
 
@@ -176,6 +191,9 @@ async def route_catch_all(path: str, request: Request):
         "/playbackreporting",
         "/reports",
         "/ui/",
+        "/videos/",
+        "/audio/",
+        "/sessions/",
     )
     referer = request.headers.get("referer", "").lower()
     is_jellyfin_call = any(req_path.startswith(p) for p in JELLYFIN_PLUGIN_PREFIXES) or (

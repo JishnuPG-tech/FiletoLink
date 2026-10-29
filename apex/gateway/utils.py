@@ -321,16 +321,33 @@ async def proxy_http_request(
         except Exception:
             pass
 
-    # Direct Play Optimization: Force DirectPlay & DirectStream in PlaybackInfo responses
-    # for .strm items so modern browsers and devices stream natively without HLS CPU transcoding
+    # Media Playback Optimization & URL Normalization
     if "application/json" in content_type and "playbackinfo" in request.url.path.lower() and content:
         try:
             import json
             pb_data = json.loads(content.decode("utf-8"))
             for m_src in pb_data.get("MediaSources") or []:
                 if isinstance(m_src, dict):
-                    m_src["SupportsDirectPlay"] = True
-                    m_src["SupportsDirectStream"] = True
+                    # 1. Rewrite internal localhost / 127.0.0.1 stream URLs to public reachable paths
+                    path_val = m_src.get("Path") or ""
+                    if "127.0.0.1:" in path_val or "localhost:" in path_val:
+                        stream_path = ""
+                        for p in (":8082", f":{TG_PORT}", ":8080"):
+                            if p in path_val:
+                                stream_path = path_val.split(p)[-1]
+                                break
+                        if not stream_path and "/stream" in path_val:
+                            stream_path = path_val[path_val.find("/stream"):]
+                        if stream_path:
+                            public_stream = f"/tg-stream{stream_path}" if not stream_path.startswith("/tg-stream") else stream_path
+                            m_src["Path"] = public_stream
+                            m_src["DirectStreamUrl"] = public_stream
+
+                    # 2. Ensure TranscodingUrl is reachable via /jellyfin prefix
+                    tc_url = m_src.get("TranscodingUrl") or ""
+                    if tc_url and tc_url.startswith("/videos/"):
+                        m_src["TranscodingUrl"] = f"/jellyfin{tc_url}"
+
             content = json.dumps(pb_data).encode("utf-8")
         except Exception:
             pass
