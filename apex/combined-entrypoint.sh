@@ -247,7 +247,7 @@ PY
     printf '%s\n' "$JELLYFIN_SERVER_ID" > "$SERVER_ID_FILE"
 fi
 
-if [ -f "$SYSTEM_XML" ]; then
+mkdir -p "$LOCAL_ROOT/config" "/data/jellyfin/config"
     python3 - "$SYSTEM_XML" "$JELLYFIN_SERVER_ID" <<'PY'
 import re
 import sys
@@ -284,7 +284,7 @@ path.write_text(text, encoding="utf-8")
 PY
     cp -f "$SYSTEM_XML" "/data/jellyfin/config/system.xml" 2>/dev/null || true
     echo "[JELLYFIN] Configured server name as Apex in $SYSTEM_XML"
-fi
+
 
 # Ensure custom CSS in branding.xml does not force theme into admin pages
 for bcfg in "$LOCAL_ROOT/config/branding.xml" "/data/jellyfin/config/branding.xml"; do

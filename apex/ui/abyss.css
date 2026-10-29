@@ -3597,28 +3597,47 @@ button[aria-label="menu"],
    Apex Official Delta Logo Branding (Pure OLED Pitch Black + Solid White)
    ========================================================================== */
 .imgLogoIcon,
-.adminDrawerLogo img {
-    content: url('/ui/apex-logo.svg') !important;
-    max-height: 36px !important;
-    object-fit: contain !important;
-}
-
+.adminDrawerLogo img,
+.headerLogo img,
+.pageTitleWithDefaultLogo,
 .pageTitleWithLogo {
-    background-image: url('/ui/apex-logo.svg') !important;
+    content: url('apex-logo.svg') !important;
+    background-image: url('apex-logo.svg') !important;
     background-size: contain !important;
     background-repeat: no-repeat !important;
     background-position: left center !important;
-    min-height: 36px !important;
+    max-height: 36px !important;
+    max-width: 36px !important;
+    object-fit: contain !important;
 }
 
 .splashLogo,
 #splashScreen .splashLogo {
-    background-image: url('/ui/apex-logo.svg') !important;
+    background-image: url('apex-logo.svg') !important;
     background-size: contain !important;
     background-repeat: no-repeat !important;
     background-position: center !important;
     width: 120px !important;
     height: 120px !important;
+}
+
+/* Modern Drawer Server Brand Card */
+.mainDrawer .navMenuOption.lnkMediaFolder.btnSelectServer,
+.mainDrawer .navMenuOption.btnSelectServer,
+.mainDrawer .adminDrawerLogo,
+.mainDrawer .navMenuHeader {
+    background: rgba(22, 22, 32, 0.7) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 14px !important;
+    margin: 10px 14px 14px !important;
+    padding: 10px 14px !important;
+}
+
+/* Never show raw container hostname or server URL in the UI */
+.mainDrawer .serverUrl,
+.mainDrawer .serverAddress,
+.manualServerAddress {
+    display: none !important;
 }
 
 /* ==========================================================================

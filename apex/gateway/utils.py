@@ -298,6 +298,20 @@ async def proxy_http_request(
         except Exception:
             pass
 
+    # Ensure clean ServerName everywhere: never expose container hostname or server URL in system info
+    if "application/json" in content_type and any(k in request.url.path.lower() for k in ("system/info", "system/configuration")) and content:
+        try:
+            import json
+            info_data = json.loads(content.decode("utf-8"))
+            if isinstance(info_data, dict):
+                if "ServerName" in info_data:
+                    info_data["ServerName"] = "Apex"
+                if "Name" in info_data and any(x in str(info_data.get("Name", "")).lower() for x in ("r-jishnupg", "hf.space", "http")):
+                    info_data["Name"] = "Apex"
+            content = json.dumps(info_data).encode("utf-8")
+        except Exception:
+            pass
+
     # Direct Play Optimization: Force DirectPlay & DirectStream in PlaybackInfo responses
     # for .strm items so modern browsers and devices stream natively without HLS CPU transcoding
     if "application/json" in content_type and "playbackinfo" in request.url.path.lower() and content:

@@ -764,6 +764,19 @@ def repair_system_xml(configs=None):
                     "  <IsStartupWizardCompleted>true</IsStartupWizardCompleted>\n</SystemConfiguration>"
                 )
                 changed = True
+            import re
+            if "<ServerName>" in content:
+                if not re.search(r"<ServerName>Apex</ServerName>", content):
+                    content = re.sub(r"<ServerName>[^<]*</ServerName>", "<ServerName>Apex</ServerName>", content)
+                    changed = True
+            elif "</SystemConfiguration>" in content:
+                content = content.replace(
+                    "</SystemConfiguration>",
+                    "  <ServerName>Apex</ServerName>
+</SystemConfiguration>"
+                )
+                changed = True
+
             if changed:
                 with open(cfg, "w", encoding="utf-8") as f:
                     f.write(content)
