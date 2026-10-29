@@ -414,22 +414,22 @@ body {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 0 !important;
+	padding: 4px 10px !important;
 	margin: 0 !important;
-	background: transparent !important;
-	border: none !important;
-	box-shadow: none !important;
-	backdrop-filter: none !important;
-	-webkit-backdrop-filter: none !important;
-	gap: 7px;
+	background: rgba(0, 0, 0, 0.32) !important;
+	border-radius: 20px !important;
+	backdrop-filter: blur(12px) !important;
+	-webkit-backdrop-filter: blur(12px) !important;
+	border: 1px solid rgba(255, 255, 255, 0.1) !important;
+	gap: 6px;
 	pointer-events: auto;
 }
 
 .dot {
 	border: none;
-	background: rgba(255, 255, 255, 0.35);
-	width: 5px;
-	height: 5px;
+	background: rgba(255, 255, 255, 0.3);
+	width: 6px;
+	height: 6px;
 	border-radius: 50%;
 	cursor: pointer;
 	padding: 0;
@@ -437,21 +437,21 @@ body {
 	appearance: none;
 	-webkit-appearance: none;
 	-webkit-tap-highlight-color: transparent;
-	transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+	transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 	flex-shrink: 0;
 }
 
 .dot:hover {
-	background: rgba(255, 255, 255, 0.75);
+	background: rgba(255, 255, 255, 0.8);
 }
 
 .dot-active {
-	width: 18px !important;
-	height: 5px !important;
+	width: 16px !important;
+	height: 6px !important;
 	border-radius: 3px !important;
 	background: #FFFFFF !important;
 	opacity: 1 !important;
-	box-shadow: 0 0 8px rgba(255, 255, 255, 0.4) !important;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
 }
 
 .dot-near {

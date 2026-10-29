@@ -402,8 +402,13 @@
       );
       for (var i = 0; i < pickers.length; i++) {
         var el = pickers[i];
-        if (el && el.parentNode) {
-          el.parentNode.removeChild(el);
+        if (el) {
+          el.style.display = "none";
+          el.style.visibility = "hidden";
+          el.style.pointerEvents = "none";
+          el.style.width = "0";
+          el.style.height = "0";
+          el.style.opacity = "0";
         }
       }
     });
@@ -584,12 +589,12 @@
     });
   }
 
-            var enhanceTimeout = null;
+  var enhanceTimeout = null;
   function debouncedEnhanceLibraryCards() {
     if (enhanceTimeout) clearTimeout(enhanceTimeout);
     enhanceTimeout = setTimeout(function () {
-      debouncedEnhanceLibraryCards();
-    }, 600);
+      enhanceLibraryCards();
+    }, 400);
   }
 
   var libIds = { movies: null, tvshows: null };
@@ -676,7 +681,7 @@
 
   function updateActiveNavTab() {
     var hash = window.location.hash || "";
-    var links = document.querySelectorAll(".apex-nav-item");
+    var links = document.querySelectorAll(".apex-tv-tab, .apex-nav-item");
     for (var i = 0; i < links.length; i++) {
       var item = links[i];
       var navType = item.getAttribute("data-nav");
@@ -707,36 +712,17 @@
 
   function ensureTopNavigation() {
     safe(function () {
-      var bar = findActiveToolbar();
-      if (!bar) return;
-
       discoverLibraries();
 
-      // 1. Hide Hamburger, Cast, SyncPlay, and stray drawer buttons completely
-      var unwanted = document.querySelectorAll(
-        'button[aria-label="Menu"], button[aria-label="menu"], ' +
-        'button:has(svg[data-testid="MenuIcon"]), svg[data-testid="MenuIcon"], .claude-stepped-menu, ' +
-        '.mainDrawerButton, .headerButtonMenu, .headerSyncplayButton, .btnSyncPlay, ' +
-        '.headerCastButton, .btnCast, button[data-action="cast"], button[data-action="syncplay"], ' +
-        'button[title*="SyncPlay" i], button[aria-label*="SyncPlay" i], button[title*="Cast" i], button[aria-label*="Cast" i], ' +
-        '.headerLeft, .headerTabs.sectionTabs'
-      );
-      for (var u = 0; u < unwanted.length; u++) {
-        unwanted[u].style.display = "none";
-        unwanted[u].style.visibility = "hidden";
-        unwanted[u].style.pointerEvents = "none";
-      }
+      // 1. Mount or verify #apex-tv-topbar directly on document.body (immune to React wiping)
+      var tvTopbar = document.getElementById("apex-tv-topbar");
+      if (!tvTopbar && document.body) {
+        tvTopbar = document.createElement("div");
+        tvTopbar.id = "apex-tv-topbar";
+        tvTopbar.className = "apex-tv-topbar";
 
-      // 2. Mount or verify apex-top-nav inside the active toolbar
-      var existingNav = bar.querySelector(".apex-top-nav");
-      if (!existingNav) {
-        var strays = document.querySelectorAll(".apex-top-nav");
-        for (var s = 0; s < strays.length; s++) {
-          if (strays[s].parentNode) strays[s].parentNode.removeChild(strays[s]);
-        }
-
-        var navContainer = document.createElement("div");
-        navContainer.className = "apex-top-nav";
+        var tabsContainer = document.createElement("div");
+        tabsContainer.className = "apex-tv-tabs";
 
         var categories = [
           { label: "Home", name: "Home" },
@@ -747,54 +733,73 @@
         categories.forEach(function (cat) {
           var btn = document.createElement("button");
           btn.type = "button";
-          btn.className = "apex-nav-item";
+          btn.className = "apex-tv-tab";
           btn.textContent = cat.label;
           btn.setAttribute("data-nav", cat.name);
           btn.addEventListener("click", function (e) {
             e.preventDefault();
             e.stopPropagation();
-            var all = document.querySelectorAll(".apex-nav-item");
+            var all = document.querySelectorAll(".apex-tv-tab, .apex-nav-item");
             for (var a = 0; a < all.length; a++) all[a].classList.remove("active");
             btn.classList.add("active");
             navigateCategory(cat.name);
           });
-          navContainer.appendChild(btn);
+          tabsContainer.appendChild(btn);
         });
 
-        bar.insertBefore(navContainer, bar.firstChild);
+        tvTopbar.appendChild(tabsContainer);
+        document.body.appendChild(tvTopbar);
+      }
+
+      // 2. Hide Hamburger, Cast, SyncPlay, and stray drawer buttons completely
+      var unwanted = document.querySelectorAll(
+        'button[aria-label="Menu"], button[aria-label="menu"], ' +
+        'button:has(svg[data-testid="MenuIcon"]), svg[data-testid="MenuIcon"], .claude-stepped-menu, ' +
+        '.mainDrawerButton, .headerButtonMenu, .headerSyncplayButton, .btnSyncPlay, ' +
+        '.headerCastButton, .btnCast, button[data-action="cast"], button[data-action="syncplay"], ' +
+        'button[title*="SyncPlay" i], button[aria-label*="SyncPlay" i], button[title*="Cast" i], button[aria-label*="Cast" i], ' +
+        'button:has(svg[data-testid="CastIcon"]), button:has(svg[data-testid="GroupIcon"]), button:has(svg[data-testid="PeopleIcon"]), ' +
+        '.headerLeft, .headerTabs.sectionTabs'
+      );
+      for (var u = 0; u < unwanted.length; u++) {
+        unwanted[u].style.display = "none";
+        unwanted[u].style.visibility = "hidden";
+        unwanted[u].style.pointerEvents = "none";
       }
 
       updateActiveNavTab();
 
       // 3. Ensure Search Pill in landscape & desktop
-      var headerRight = bar.querySelector(".headerRight, .MuiBox-root:last-of-type, .MuiStack-root:last-of-type") || bar;
-      if (headerRight && !bar.querySelector(".apex-search-pill")) {
-        var searchPill = document.createElement("button");
-        searchPill.type = "button";
-        searchPill.className = "apex-search-pill";
-        searchPill.setAttribute("aria-label", "Search");
-        searchPill.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><span>Search</span>';
-        searchPill.addEventListener("click", function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          var nativeSearch = document.querySelector('.headerSearchButton, [data-action="search"], button[title*="Search" i]');
-          if (nativeSearch && nativeSearch.click) {
-            nativeSearch.click();
+      var bar = findActiveToolbar();
+      if (bar) {
+        var headerRight = bar.querySelector(".headerRight, .MuiBox-root:last-of-type, .MuiStack-root:last-of-type") || bar;
+        if (headerRight && !bar.querySelector(".apex-search-pill")) {
+          var searchPill = document.createElement("button");
+          searchPill.type = "button";
+          searchPill.className = "apex-search-pill";
+          searchPill.setAttribute("aria-label", "Search");
+          searchPill.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><span>Search</span>';
+          searchPill.addEventListener("click", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var nativeSearch = document.querySelector('.headerSearchButton, [data-action="search"], button[title*="Search" i]');
+            if (nativeSearch && nativeSearch.click) {
+              nativeSearch.click();
+            } else {
+              window.location.hash = "#/search";
+            }
+          });
+          var userBtn = headerRight.querySelector(".headerUserButtonRound, .headerButton-user, button[aria-label*='user' i], button[aria-label*='profile' i]");
+          if (userBtn) {
+            headerRight.insertBefore(searchPill, userBtn);
           } else {
-            window.location.hash = "#/search";
+            headerRight.insertBefore(searchPill, headerRight.firstChild);
           }
-        });
-        var userBtn = headerRight.querySelector(".headerUserButtonRound, .headerButton-user, button[aria-label*='user' i], button[aria-label*='profile' i]");
-        if (userBtn) {
-          headerRight.insertBefore(searchPill, userBtn);
-        } else {
-          headerRight.insertBefore(searchPill, headerRight.firstChild);
         }
       }
     });
   }
 
-  var topNavGuardianTimer = null;
   function startTopNavGuardian() {
     if (topNavGuardianTimer) clearInterval(topNavGuardianTimer);
     topNavGuardianTimer = setInterval(ensureTopNavigation, 400);
@@ -1085,8 +1090,13 @@
           themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
         }
         if (document.body) {
+          var observerTimeout = null;
           var observer = new MutationObserver(function () {
-            scheduleInstall();
+            if (observerTimeout) return;
+            observerTimeout = setTimeout(function () {
+              observerTimeout = null;
+              scheduleInstall();
+            }, 250);
           });
           observer.observe(document.body, { childList: true, subtree: true });
         }
