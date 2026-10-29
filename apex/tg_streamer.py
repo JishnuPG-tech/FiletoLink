@@ -5373,53 +5373,10 @@ async def subtitles_sync(request):
 
 
 async def _prune_orphan_strms(movies_dir, shows_dir, keep):
-    """Delete .strm files that point at our streamer but aren't in `keep`.
-
-    During a folder-layout migration Jellyfin indexes both the stale flat .strm
-    and the new per-title folder .strm for the same Telegram file -> duplicates.
-    Only files whose contents reference our own streamer are touched, so
-    unrelated .strm files are never removed.
-    """
-    removed = 0
-    for root_dir in (movies_dir, shows_dir):
-        if not os.path.isdir(root_dir):
-            continue
-        for root, _, files in os.walk(root_dir):
-            for f in files:
-                if not f.lower().endswith(".strm"):
-                    continue
-                path = os.path.normpath(os.path.join(root, f))
-                if path in keep:
-                    continue
-                try:
-                    with open(path, "r", encoding="utf-8", errors="ignore") as fh:
-                        content = fh.read(256)
-                except OSError:
-                    continue
-                stream_port = os.environ.get(
-                    "TG_LISTEN_PORT", os.environ.get("PORT", "8080")
-                )
-                is_our_stream = (
-                    "/stream/" in content
-                    or f"127.0.0.1:{stream_port}" in content
-                    or f":{stream_port}/" in content
-                )
-                if not is_our_stream:
-                    continue
-                try:
-                    os.remove(path)
-                    removed += 1
-                    logger.info(f"[RESTORE] Pruned orphaned .strm: {path}")
-                    parent_dir = os.path.dirname(path)
-                    if os.path.isdir(parent_dir) and not os.listdir(parent_dir):
-                        try:
-                            os.rmdir(parent_dir)
-                            logger.info(f"[RESTORE] Cleaned empty parent folder: {parent_dir}")
-                        except OSError:
-                            pass
-                except OSError as e:
-                    logger.warning(f"[RESTORE] Could not prune {path}: {e}")
-    return removed
+    """Safely preserve all .strm files. Deletion is permanently disabled to ensure
+    seamless media playback across all library naming variants."""
+    logger.info("[RESTORE] Automatic .strm pruning is safely disabled to safeguard media playback.")
+    return 0
 
 
 async def restore_cached_strm_files():

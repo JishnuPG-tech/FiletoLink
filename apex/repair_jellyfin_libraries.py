@@ -531,9 +531,15 @@ def heal_mismatched_media(roots=None, databases=None):
                                             conn.close()
                                         except Exception:
                                             pass
-                            elif f.endswith(".strm") or f.lower() in ("movie.nfo", "tvshow.nfo"):
+                            elif f.endswith(".strm"):
                                 try:
-                                    os.remove(src_f)
+                                    if not os.path.exists(dst_f):
+                                        shutil.copy2(src_f, dst_f)
+                                    elif not os.path.exists(src_f):
+                                        try:
+                                            os.link(dst_f, src_f)
+                                        except OSError:
+                                            shutil.copy2(dst_f, src_f)
                                 except Exception:
                                     pass
                         try:
@@ -558,8 +564,11 @@ def heal_mismatched_media(roots=None, databases=None):
                         new_strm = os.path.join(dirpath, f"{clean_strm_base}{ext}")
                         if not os.path.exists(new_strm):
                             try:
-                                os.rename(old_strm, new_strm)
-                                print(f"[REPAIR] Cleaned strm file: '{fn}' -> '{clean_strm_base}{ext}'")
+                                try:
+                                    os.link(old_strm, new_strm)
+                                except OSError:
+                                    shutil.copy2(old_strm, new_strm)
+                                print(f"[REPAIR] Created clean alias strm: '{fn}' -> '{clean_strm_base}{ext}'")
                                 for db_p in db_list:
                                     if os.path.exists(db_p):
                                         try:
@@ -570,7 +579,7 @@ def heal_mismatched_media(roots=None, databases=None):
                                         except Exception:
                                             pass
                             except Exception as strm_err:
-                                print(f"[REPAIR] Note renaming strm {old_strm}: {strm_err}")
+                                print(f"[REPAIR] Note creating strm alias {old_strm}: {strm_err}")
                 elif fn.lower() in ("movie.nfo", "tvshow.nfo"):
                     _heal_nfo_file(os.path.join(dirpath, fn))
 
@@ -784,6 +793,63 @@ def repair_system_xml(configs=None):
             print(f"[REPAIR] Note repairing {cfg}: {e}")
 
 
+
+def heal_missing_db_strm_paths(databases=None):
+    """Ensures every single .strm path recorded in Jellyfin BaseItems actually exists on disk.
+    If a file is missing due to prior pruning or dot/dash naming differences, reconstructs
+    or hardlinks it immediately from matching media on disk."""
+    db_list = databases or TARGET_DATABASES
+    for db_p in db_list:
+        if not os.path.exists(db_p):
+            continue
+        try:
+            conn = sqlite3.connect(db_p, timeout=10)
+            cur = conn.cursor()
+            cur.execute("SELECT Id, Path, Name FROM BaseItems WHERE Path LIKE '%.strm'")
+            rows = cur.fetchall()
+            repaired = 0
+            for row_id, path, name in rows:
+                if not path or os.path.exists(path):
+                    continue
+                parent_dir = os.path.dirname(path)
+                file_name = os.path.basename(path)
+                found_src = None
+
+                # 1. Search in the same parent directory for any .strm
+                if os.path.isdir(parent_dir):
+                    candidates = [os.path.join(parent_dir, f) for f in os.listdir(parent_dir) if f.lower().endswith(".strm")]
+                    if candidates:
+                        found_src = candidates[0]
+
+                # 2. If parent_dir doesn't exist, search grandparent directory for a matching folder
+                if not found_src:
+                    grandparent = os.path.dirname(parent_dir)
+                    parent_name = os.path.basename(parent_dir)
+                    if os.path.isdir(grandparent):
+                        norm_parent = re.sub(r"[^a-zA-Z0-9]", "", parent_name).lower()
+                        for sib in os.listdir(grandparent):
+                            sib_path = os.path.join(grandparent, sib)
+                            if os.path.isdir(sib_path):
+                                if re.sub(r"[^a-zA-Z0-9]", "", sib).lower() == norm_parent:
+                                    cands = [os.path.join(sib_path, f) for f in os.listdir(sib_path) if f.lower().endswith(".strm")]
+                                    if cands:
+                                        found_src = cands[0]
+                                        break
+
+                if found_src and os.path.exists(found_src):
+                    os.makedirs(parent_dir, exist_ok=True)
+                    try:
+                        os.link(found_src, path)
+                    except OSError:
+                        shutil.copy2(found_src, path)
+                    repaired += 1
+                    print(f"[REPAIR] Healed missing DB STRM: '{path}' <- '{found_src}'")
+            conn.close()
+            if repaired:
+                print(f"[REPAIR] Successfully healed {repaired} missing STRM file(s) for DB {db_p}")
+        except Exception as e:
+            print(f"[REPAIR] Note healing missing DB STRMs: {e}")
+
 def main():
     env_force = os.environ.get("RESET_JELLYFIN_PASSWORD", "").strip().lower() in ("1", "true", "yes")
     manual_trigger = any(os.path.exists(p) for p in MANUAL_RESET_TRIGGERS)
@@ -813,6 +879,7 @@ def main():
     heal_subtitle_files()
     heal_mismatched_media()
     heal_channel_and_db_names()
+    heal_missing_db_strm_paths()
     repair_user_subtitle_preferences()
     repair_user_policy_preferences()
     repair_system_xml()

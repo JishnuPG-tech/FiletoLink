@@ -4306,8 +4306,8 @@ div[data-category="nextup"] .cardScalable,
     align-items: center !important;
     padding-left: 16px !important;
     padding-right: 16px !important;
-    z-index: 10001 !important;
-    pointer-events: none !important;
+    z-index: 99999 !important;
+    pointer-events: auto !important;
 }
 
 #apex-tv-topbar .apex-tv-tabs {
@@ -4387,12 +4387,9 @@ div[data-category="nextup"] .cardScalable,
     }
 }
 
-/* Hide topbar when video player or settings are active */
-body:has(#videoOsdPage:not(.hide)) #apex-tv-topbar,
-body:has(.videoOsd:not(.hide)) #apex-tv-topbar,
-body:has(.nowPlayingPage:not(.hide)) #apex-tv-topbar,
-body:has(#dashboardPage:not(.hide)) #apex-tv-topbar,
-body.jellyfin-settings-page #apex-tv-topbar {
+/* Hide topbar only during active fullscreen video playback or settings */
+body.videoPlayerContainerVisible #apex-tv-topbar,
+body.hide-apex-topbar #apex-tv-topbar {
     display: none !important;
     opacity: 0 !important;
     pointer-events: none !important;
@@ -4452,4 +4449,115 @@ body.jellyfin-settings-page #apex-tv-topbar {
         margin: 0 0 10px 0 !important;
         box-sizing: border-box !important;
     }
+}
+
+
+/* ========================================================
+   DETAIL PAGE: POSTER THUMBNAIL & METADATA SPACING FIX
+   Prevents poster from overlapping title/metadata text
+   ======================================================== */
+#itemDetailPage .detailRibbon,
+.layout-mobile #itemDetailPage .detailRibbon,
+.layout-desktop #itemDetailPage .detailRibbon,
+.layout-tv #itemDetailPage .detailRibbon,
+.detailRibbon {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    gap: 18px !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    margin-top: 0 !important;
+    box-sizing: border-box !important;
+}
+
+#itemDetailPage .detailImageContainer,
+.detailImageContainer {
+    position: relative !important;
+    flex-shrink: 0 !important;
+    width: 140px !important;
+    max-width: 140px !important;
+    margin: 0 !important;
+    z-index: 2 !important;
+}
+
+#itemDetailPage .detailImageContainer .card,
+.layout-mobile #itemDetailPage .detailImageContainer .card,
+.layout-desktop #itemDetailPage .detailImageContainer .card,
+.layout-tv #itemDetailPage .detailImageContainer .card,
+.detailImageContainer .card {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    margin: 0 !important;
+    width: 140px !important;
+    max-width: 140px !important;
+    border-radius: 12px !important;
+}
+
+#itemDetailPage .detailPagePrimaryContent,
+.layout-mobile #itemDetailPage .detailPagePrimaryContent,
+.layout-desktop #itemDetailPage .detailPagePrimaryContent,
+.layout-tv #itemDetailPage .detailPagePrimaryContent,
+.detailPagePrimaryContent {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    padding-left: 0 !important;
+    margin-left: 0 !important;
+}
+
+#itemDetailPage .itemName,
+.itemName {
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
+/* Universal Abyss Spotlight Hero Banner Iframe */
+iframe.featurediframe {
+    width: 100% !important;
+    display: block !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 380px !important;
+    height: 52vh !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+@media (orientation: landscape) {
+    iframe.featurediframe {
+        height: 70vh !important;
+        min-height: 340px !important;
+    }
+}
+
+/* Suppress Cast, SyncPlay, Menu/Hamburger buttons */
+button[aria-label="Menu"],
+button[aria-label="menu"],
+button:has(svg[data-testid="MenuIcon"]),
+.claude-stepped-menu,
+.mainDrawerButton,
+.headerButtonMenu,
+.headerSyncplayButton,
+.btnSyncPlay,
+.headerCastButton,
+.btnCast,
+button[data-action="cast"],
+button[data-action="syncplay"],
+button[title*="SyncPlay" i],
+button[aria-label*="SyncPlay" i],
+button[title*="Cast" i],
+button[aria-label*="Cast" i],
+button:has(svg[data-testid="CastIcon"]),
+button:has(svg[data-testid="GroupIcon"]),
+button:has(svg[data-testid="PeopleIcon"]),
+.headerLeft,
+.headerTabs.sectionTabs {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
 }

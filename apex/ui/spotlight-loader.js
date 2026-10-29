@@ -262,12 +262,16 @@
   });
 
   function isRouteVisible(indexPage, homeTab) {
-    if (!indexPage || !indexPage.isConnected || !homeTab || !homeTab.isConnected) return false;
+    if (!homeTab || !homeTab.isConnected) return false;
     if (document.hidden) return false;
-    if (indexPage.classList.contains("hide") || indexPage.hidden) return false;
-    var style = window.getComputedStyle(homeTab);
-    if (style.display === "none") return false;
-    return homeTab.offsetParent !== null || homeTab.getClientRects().length > 0 || !homeTab.classList.contains("hide");
+    var hash = window.location.hash || "";
+    if (hash && hash !== "#/" && hash !== "#" && hash.indexOf("/home") === -1) {
+      if (hash.indexOf("details") !== -1 || hash.indexOf("search") !== -1 || hash.indexOf("settings") !== -1 || hash.indexOf("dashboard") !== -1 || hash.indexOf("video") !== -1) {
+        return false;
+      }
+    }
+    if (indexPage && (indexPage.classList.contains("hide") || indexPage.hidden)) return false;
+    return true;
   }
 
   function connectLifecycle(indexPage, homeTab, favoritesTab, iframe) {
@@ -328,60 +332,78 @@
 
   var currentSync = null;
 
-  function findVisibleById(id) {
-    var candidates = document.querySelectorAll('[id="' + id + '"]');
-    for (var i = 0; i < candidates.length; i++) {
-      var el = candidates[i];
-      if (
-        el.isConnected &&
-        !el.classList.contains("hide") &&
-        !el.hidden
-      ) {
-        return el;
-      }
+  function findHomeTab() {
+    var homeTab = document.querySelector("#homeTab");
+    if (homeTab && homeTab.isConnected) return homeTab;
+
+    var indexPage = document.querySelector("#indexPage");
+    if (indexPage && indexPage.isConnected) {
+      var tab = indexPage.querySelector("#homeTab, .pageTabContent.is-active, .tabContent.is-active");
+      if (tab) return tab;
+      var sec = indexPage.querySelector(".sections, .homeSectionsContainer");
+      if (sec && sec.parentElement) return sec.parentElement;
+      return indexPage;
     }
-    return candidates.length ? candidates[candidates.length - 1] : null;
+
+    var activeTab = document.querySelector(".pageTabContent.is-active, div[data-role='page']:not(.hide) .homeSectionsContainer");
+    if (activeTab) return activeTab.closest(".pageTabContent, div[data-role='page']") || activeTab;
+
+    return null;
   }
 
   function installSpotlight() {
     var installed = false;
     safe(function () {
-      var indexPage = findVisibleById("indexPage");
-      if (!indexPage) {
+      var hash = window.location.hash || "";
+      if (hash.indexOf("dashboard") !== -1 || hash.indexOf("settings") !== -1 || hash.indexOf("video") !== -1) {
         clearSpotlightLifecycle();
         return;
       }
-      var homeTab = indexPage.querySelector("#homeTab");
+
+      var homeTab = findHomeTab();
       if (!homeTab) {
-        clearSpotlightLifecycle();
         return;
       }
-      var favoritesTab = indexPage.querySelector("#favoritesTab");
+
+      var indexPage = homeTab.closest("#indexPage, div[data-role='page'], .page") || homeTab;
+      var favoritesTab = document.querySelector("#favoritesTab");
 
       installFrameStyle();
       installBackdropOverlay();
 
       var iframe = homeTab.querySelector ? homeTab.querySelector("." + FRAME_CLASS) : null;
       if (!iframe) {
+        iframe = document.querySelector("." + FRAME_CLASS);
+      }
+
+      if (!iframe) {
         iframe = document.createElement("iframe");
         iframe.className = FRAME_CLASS + " focusable";
         iframe.setAttribute("tabindex", "0");
         iframe.src = spotlightUrl;
         iframe.title = "Abyss Spotlight";
+        iframe.style.width = "100%";
+        iframe.style.display = "block";
+        iframe.style.border = "none";
         iframe.addEventListener("blur", function () { spotlightFocused = false; });
-        var sections = homeTab.querySelector ? homeTab.querySelector(".sections") : null;
+        var sections = homeTab.querySelector ? homeTab.querySelector(".sections, .homeSectionsContainer") : null;
+        homeTab.insertBefore(iframe, sections || homeTab.firstChild);
+      } else if (iframe.parentElement !== homeTab) {
+        var sections = homeTab.querySelector ? homeTab.querySelector(".sections, .homeSectionsContainer") : null;
         homeTab.insertBefore(iframe, sections || homeTab.firstChild);
       }
 
-      safe(function () {
-        if (indexPage.classList) indexPage.classList.add("abyss-spotlight-active");
-        if (homeTab.classList) homeTab.classList.add("abyss-spotlight-active");
-      });
+      iframe.style.display = "block";
+      iframe.style.visibility = "visible";
+      iframe.style.opacity = "1";
+      document.documentElement.classList.add("abyss-spotlight-visible");
+
+      if (indexPage && indexPage.classList) indexPage.classList.add("abyss-spotlight-active");
+      if (homeTab.classList) homeTab.classList.add("abyss-spotlight-active");
 
       if (
         indexPage !== currentIndexPage ||
         homeTab !== currentHomeTab ||
-        favoritesTab !== currentFavoritesTab ||
         iframe !== currentIframe
       ) {
         currentIndexPage = indexPage;
@@ -445,7 +467,7 @@
       var logoSvgUrl = (window.location.pathname.indexOf("/web") !== -1) ? "ui/apex-logo.svg" : "/jellyfin/web/ui/apex-logo.svg";
 
       // 1. Favicon sync
-      var links = document.querySelectorAll("link[rel*='icon']");
+      var links = document.querySelectorAll("a[href*=\x22" + targetId + "\x22], [data-id=\x22" + targetId + "\x22]");
       for (var i = 0; i < links.length; i++) {
         if (links[i].getAttribute("data-apex-logo") !== "true") {
           links[i].setAttribute("data-apex-logo", "true");
@@ -597,7 +619,7 @@
     }, 400);
   }
 
-  var libIds = { movies: null, tvshows: null };
+  var libIds = { movies: "f137a2dd21bbc1b99aa5c0f6bf02a805", tvshows: "767bffe4f11c93ef34b805451a696a4e" };
   var librariesDiscovered = false;
 
   function discoverLibraries() {
@@ -635,53 +657,27 @@
       return;
     }
 
-    if (name === "Movies") {
-      var cards = document.querySelectorAll('.card[data-type="CollectionFolder"], [data-category="views"] .card');
-      for (var i = 0; i < cards.length; i++) {
-        if ((cards[i].textContent || "").toLowerCase().indexOf("movie") !== -1) {
-          cards[i].click();
-          return;
-        }
-      }
-      if (libIds.movies) {
-        var url = "/details?id=" + libIds.movies;
-        if (window.Emby && window.Emby.Page && typeof window.Emby.Page.show === "function") {
-          window.Emby.Page.show(url);
-          return;
-        }
-        window.location.hash = "#" + url;
+    var targetId = name === "Movies" ? libIds.movies : libIds.tvshows;
+    if (targetId) {
+      var links = document.querySelectorAll("a[href*=\x22" + targetId + "\x22], [data-id=\x22" + targetId + "\x22]");
+      if (links.length && links[0].click) {
+        links[0].click();
         return;
       }
-      window.location.hash = "#/movies";
-      return;
-    }
-
-    if (name === "TV Shows") {
-      var tvCards = document.querySelectorAll('.card[data-type="CollectionFolder"], [data-category="views"] .card');
-      for (var t = 0; t < tvCards.length; t++) {
-        var text = (tvCards[t].textContent || "").toLowerCase();
-        if (text.indexOf("tv") !== -1 || text.indexOf("show") !== -1 || text.indexOf("series") !== -1) {
-          tvCards[t].click();
-          return;
-        }
-      }
-      if (libIds.tvshows) {
-        var url = "/details?id=" + libIds.tvshows;
-        if (window.Emby && window.Emby.Page && typeof window.Emby.Page.show === "function") {
-          window.Emby.Page.show(url);
-          return;
-        }
-        window.location.hash = "#" + url;
+      var targetUrl = "/details?id=" + targetId;
+      if (window.Emby && window.Emby.Page && typeof window.Emby.Page.show === "function") {
+        window.Emby.Page.show(targetUrl);
         return;
       }
-      window.location.hash = "#/shows";
+      window.location.hash = "#" + targetUrl;
       return;
     }
+    window.location.hash = name === "Movies" ? "#/movies" : "#/shows";
   }
 
   function updateActiveNavTab() {
     var hash = window.location.hash || "";
-    var links = document.querySelectorAll(".apex-tv-tab, .apex-nav-item");
+      var links = document.querySelectorAll("a[href*=\x22" + targetId + "\x22], [data-id=\x22" + targetId + "\x22]");
     for (var i = 0; i < links.length; i++) {
       var item = links[i];
       var navType = item.getAttribute("data-nav");
@@ -749,6 +745,17 @@
 
         tvTopbar.appendChild(tabsContainer);
         document.body.appendChild(tvTopbar);
+      }
+
+      if (tvTopbar) {
+        var isVideo = !!document.querySelector(".videoPlayerContainer:not(.hide), #videoOsdPage:not(.hide), video");
+        var hash = window.location.hash || "";
+        var isHiddenRoute = hash.indexOf("dashboard") !== -1 || hash.indexOf("settings") !== -1;
+        if (isVideo || isHiddenRoute) {
+          tvTopbar.style.display = "none";
+        } else {
+          tvTopbar.style.display = "flex";
+        }
       }
 
       // 2. Hide Hamburger, Cast, SyncPlay, and stray drawer buttons completely
