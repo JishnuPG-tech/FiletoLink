@@ -3848,9 +3848,63 @@ div[data-category="nextup"] .card,
 .apex-top-nav {
     display: inline-flex !important;
     align-items: center !important;
-    gap: 24px !important;
-    margin-left: 18px !important;
+    gap: 20px !important;
+    margin-left: 16px !important;
     z-index: 100 !important;
+    flex-shrink: 0 !important;
+}
+
+.apex-nav-item {
+    color: rgba(255, 255, 255, 0.65) !important;
+    font-size: 14.5px !important;
+    font-weight: 500 !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 6px 12px !important;
+    border-radius: 12px !important;
+    transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease !important;
+    outline: none !important;
+    white-space: nowrap !important;
+}
+
+.apex-nav-item:hover {
+    color: #FFFFFF !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.apex-nav-item.active {
+    color: #FFFFFF !important;
+    font-weight: 700 !important;
+    background: rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 0 14px rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Hide top nav items strictly on narrow vertical mobile portrait (drawer takes precedence) */
+@media (max-width: 600px) and (orientation: portrait) {
+    .apex-top-nav {
+        display: none !important;
+    }
+}
+
+/* Show top nav items on ALL landscape screens and desktop/laptop */
+@media (orientation: landscape), (min-width: 601px) {
+    .apex-top-nav {
+        display: inline-flex !important;
+    }
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+    .apex-top-nav {
+        display: inline-flex !important;
+        gap: 12px !important;
+        margin-left: 10px !important;
+    }
+    .apex-nav-item {
+        font-size: 12px !important;
+        padding: 4px 8px !important;
+    }
 }
 
 .apex-nav-item {
@@ -3897,5 +3951,65 @@ div[data-category="nextup"] .card,
     .apex-nav-item {
         font-size: 12px !important;
         padding: 4px 8px !important;
+    }
+}
+
+/* Exact Android TV Card Dimensions & Aspect Ratios */
+/* 1. Continue Watching & Next Up (16:9 Landscape) */
+.resumeSection .card,
+.nextUpSection .card,
+div[data-category="resume"] .card,
+div[data-category="nextup"] .card {
+    width: 280px !important;
+    max-width: 280px !important;
+    flex: 0 0 280px !important;
+}
+
+.resumeSection .cardScalable,
+.nextUpSection .cardScalable,
+div[data-category="resume"] .cardScalable,
+div[data-category="nextup"] .cardScalable,
+.thumbCard .cardScalable,
+.backdropCard .cardScalable {
+    aspect-ratio: 16 / 9 !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}
+
+@media (max-width: 600px) {
+    .resumeSection .card,
+    .nextUpSection .card,
+    div[data-category="resume"] .card,
+    div[data-category="nextup"] .card {
+        width: 220px !important;
+        max-width: 220px !important;
+        flex: 0 0 220px !important;
+    }
+}
+
+/* 2. Movies & TV Shows (2:3 Vertical Portrait) */
+.portraitCard,
+.card[data-type="Movie"],
+.card[data-type="Series"] {
+    width: 150px !important;
+    max-width: 150px !important;
+    flex: 0 0 150px !important;
+}
+
+.portraitCard .cardScalable,
+.card[data-type="Movie"] .cardScalable,
+.card[data-type="Series"] .cardScalable {
+    aspect-ratio: 2 / 3 !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}
+
+@media (max-width: 600px) {
+    .portraitCard,
+    .card[data-type="Movie"],
+    .card[data-type="Series"] {
+        width: 125px !important;
+        max-width: 125px !important;
+        flex: 0 0 125px !important;
     }
 }

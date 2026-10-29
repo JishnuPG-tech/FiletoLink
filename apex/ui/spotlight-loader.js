@@ -607,11 +607,11 @@
     });
   }
 
-  function installTopNavigation() {
+    function installTopNavigation() {
     safe(function () {
-      var header = document.querySelector(".skinHeader, .skinHeader-withBackground");
+      var header = document.querySelector(".skinHeader, .skinHeader-withBackground, header");
       if (!header) return;
-      if (header.querySelector(".apex-top-nav")) return;
+      if (header.querySelector(".apex-top-nav") || document.querySelector(".apex-top-nav")) return;
 
       var navContainer = document.createElement("div");
       navContainer.className = "apex-top-nav";
@@ -627,19 +627,22 @@
 
       categories.forEach(function (cat) {
         var a = document.createElement("a");
-        a.className = "apex-nav-item" + ((cat.label === "Home" && (!currentHash || currentHash.indexOf("/home") !== -1)) ? " active" : "");
+        var isHome = cat.label === "Home" && (!currentHash || currentHash.indexOf("/home") !== -1 || currentHash === "#/" || currentHash === "#");
+        a.className = "apex-nav-item" + (isHome ? " active" : "");
         a.textContent = cat.label;
         a.href = cat.hash;
+        a.setAttribute("data-nav", cat.label);
         a.addEventListener("click", function (e) {
           e.preventDefault();
-          var allLinks = navContainer.querySelectorAll(".apex-nav-item");
+          var allLinks = document.querySelectorAll(".apex-nav-item");
           for (var i = 0; i < allLinks.length; i++) allLinks[i].classList.remove("active");
           a.classList.add("active");
 
           if (cat.label === "Home") {
             window.location.hash = "#/home";
           } else {
-            var targetCard = document.querySelector('.card[data-type="' + (cat.label === "Movies" ? "Movie" : "Series") + '"], .lnkMediaFolder[title*="' + cat.label + '"]');
+            var isMovie = cat.label === "Movies";
+            var targetCard = document.querySelector('.card[data-type="' + (isMovie ? "Movie" : "Series") + '"], .lnkMediaFolder[title*="' + cat.label + '"], .navMenuOption[title*="' + cat.label + '"]');
             if (targetCard && targetCard.click) {
               targetCard.click();
             } else {
@@ -650,11 +653,12 @@
         navContainer.appendChild(a);
       });
 
-      var headerLeft = header.querySelector(".headerLeft") || header.firstChild;
+      var headerTop = header.querySelector(".headerTop") || header;
+      var headerLeft = headerTop.querySelector(".headerLeft") || headerTop.querySelector(".mainDrawerButton") || headerTop.firstChild;
       if (headerLeft && headerLeft.parentNode) {
         headerLeft.parentNode.insertBefore(navContainer, headerLeft.nextSibling);
       } else {
-        header.insertBefore(navContainer, header.firstChild);
+        headerTop.insertBefore(navContainer, headerTop.firstChild);
       }
     });
   }

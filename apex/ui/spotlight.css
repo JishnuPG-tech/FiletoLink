@@ -132,10 +132,13 @@ body {
 #meta {
 	display: flex;
 	align-items: center;
-	margin-bottom: 12px;
+	margin-bottom: 10px;
+	flex-wrap: nowrap;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
 	animation: fadeUp 0.8s var(--ease) both;
 	animation-delay: 0.5s;
-	flex-wrap: wrap;
 }
 
 @keyframes fadeUp {
@@ -217,7 +220,8 @@ body {
 	align-items: center;
 	gap: 12px;
 	position: relative;
-	z-index: 4;
+	z-index: 6;
+	margin-bottom: 36px !important;
 	animation: fadeUp 0.8s var(--ease) both;
 	animation-delay: 0.75s;
 }
@@ -402,7 +406,7 @@ body {
 
 #carousel-dots {
 	position: absolute;
-	bottom: 18px;
+	bottom: 10px;
 	left: 50%;
 	right: auto;
 	transform: translateX(-50%);
@@ -874,7 +878,7 @@ body {
 
 @media (orientation: landscape) and (max-height: 540px) {
 	#content {
-		padding: 10px 4.5vw 16px !important;
+		padding: 8px 4.5vw 36px !important;
 		justify-content: flex-end !important;
 	}
 
@@ -915,7 +919,9 @@ body {
 
 	#buttons {
 		gap: 8px !important;
-		margin-bottom: 0 !important;
+		margin-bottom: 22px !important;
+		position: relative !important;
+		z-index: 6 !important;
 	}
 
 	.btn {
