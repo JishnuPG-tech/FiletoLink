@@ -267,7 +267,7 @@ async def proxy_http_request(
     content_type = resp.headers.get("content-type", "")
     status_code  = resp.status_code
 
-    is_stream = "text/event-stream" in content_type or "video/" in content_type or "audio/" in content_type or resp.headers.get("transfer-encoding") == "chunked"
+    is_stream = ("text/event-stream" in content_type or "video/" in content_type or "audio/" in content_type or resp.headers.get("transfer-encoding") == "chunked") and "application/json" not in content_type and "text/html" not in content_type
 
     if is_stream:
         async def stream_generator():
@@ -331,7 +331,11 @@ async def proxy_http_request(
         status_code=status_code,
         media_type=content_type or None,
     )
-    normal_resp.raw_headers = raw_headers
+    # Strip stale upstream content-length & transfer-encoding since payload was buffered
+    normal_resp.raw_headers = [
+        (k, v) for k, v in raw_headers
+        if k.lower() not in (b"content-length", b"transfer-encoding")
+    ]
     return normal_resp
 
 
