@@ -607,195 +607,206 @@
     });
   }
 
-        function installTopNavigation() {
-    safe(function () {
-      var header = document.querySelector(".skinHeader, .skinHeader-withBackground, header");
-      if (!header) return;
+            var libIds = { movies: null, tvshows: null };
 
-      var headerTop = header.querySelector(".headerTop") || header;
-      var headerLeft = headerTop.querySelector(".headerLeft") || headerTop.querySelector(".mainDrawerButton") || headerTop.firstChild;
-      var headerRight = headerTop.querySelector(".headerRight") || headerTop.lastChild;
+    function discoverLibraries() {
+      try {
+        if (window.ApiClient && typeof window.ApiClient.getCurrentUserId === "function") {
+          var uid = window.ApiClient.getCurrentUserId();
+          window.ApiClient.getUserViews(uid).then(function (res) {
+            if (res && res.Items) {
+              res.Items.forEach(function (it) {
+                var name = (it.Name || "").toLowerCase();
+                var type = (it.CollectionType || "").toLowerCase();
+                if (type === "movies" || name.indexOf("movie") !== -1) {
+                  libIds.movies = it.Id;
+                }
+                if (type === "tvshows" || name.indexOf("tv") !== -1 || name.indexOf("show") !== -1 || name.indexOf("series") !== -1) {
+                  libIds.tvshows = it.Id;
+                }
+              });
+            }
+          }).catch(function () {});
+        }
+      } catch (e) {}
+    }
 
-      var existingNav = document.querySelector(".apex-top-nav");
-      if (existingNav && (!existingNav.isConnected || !existingNav.closest(".skinHeader"))) {
-        if (existingNav.parentNode) existingNav.parentNode.removeChild(existingNav);
-        existingNav = null;
+    function navigateCategory(name) {
+      if (name === "Home") {
+        if (window.Emby && window.Emby.Page && typeof window.Emby.Page.show === "function") {
+          window.Emby.Page.show("/home");
+        } else {
+          window.location.hash = "#/home";
+        }
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
       }
 
-      if (!existingNav) {
-        var navContainer = document.createElement("div");
-        navContainer.className = "apex-top-nav";
-        var categories = [
-          { label: "Home", hash: "#/home" },
-          { label: "Movies", hash: "#/movies" },
-          { label: "Web Series", hash: "#/shows" },
-          { label: "My Library", hash: "#/library" }
-        ];
-
-        var currentHash = window.location.hash || "";
-
-        function updateActiveTab() {
-          var hash = window.location.hash || "";
-          var links = navContainer.querySelectorAll(".apex-nav-item");
-          for (var i = 0; i < links.length; i++) {
-            var item = links[i];
-            var navType = item.getAttribute("data-nav");
-            var isActive = false;
-            if (navType === "Home" && (!hash || hash.indexOf("/home") !== -1 || hash === "#/" || hash === "#")) {
-              isActive = true;
-            } else if (navType === "Movies" && (hash.indexOf("movie") !== -1 || hash.indexOf("Movie") !== -1)) {
-              isActive = true;
-            } else if (navType === "Web Series" && (hash.indexOf("show") !== -1 || hash.indexOf("series") !== -1 || hash.indexOf("tv") !== -1)) {
-              isActive = true;
-            } else if (navType === "My Library" && hash.indexOf("library") !== -1) {
-              isActive = true;
-            }
-            if (isActive) item.classList.add("active");
-            else item.classList.remove("active");
+      if (name === "Movies") {
+        if (libIds.movies) {
+          var url = "/details?id=" + libIds.movies;
+          if (window.Emby && window.Emby.Page && typeof window.Emby.Page.show === "function") {
+            window.Emby.Page.show(url);
+            return;
           }
-
-          var mobileChips = document.querySelectorAll(".apex-mobile-chip");
-          for (var j = 0; j < mobileChips.length; j++) {
-            var chip = mobileChips[j];
-            var chipNav = chip.getAttribute("data-nav");
-            var isChipActive = false;
-            if (chipNav === "Home" && (!hash || hash.indexOf("/home") !== -1 || hash === "#/" || hash === "#")) isChipActive = true;
-            else if (chipNav === "Movies" && (hash.indexOf("movie") !== -1 || hash.indexOf("Movie") !== -1)) isChipActive = true;
-            else if (chipNav === "Web Series" && (hash.indexOf("show") !== -1 || hash.indexOf("series") !== -1 || hash.indexOf("tv") !== -1)) isChipActive = true;
-            else if (chipNav === "My Library" && hash.indexOf("library") !== -1) isChipActive = true;
-            if (isChipActive) chip.classList.add("active");
-            else chip.classList.remove("active");
+          window.location.hash = "#" + url;
+          return;
+        }
+        var cards = document.querySelectorAll('.card[data-type="CollectionFolder"], [data-category="views"] .card');
+        for (var i = 0; i < cards.length; i++) {
+          if ((cards[i].textContent || "").toLowerCase().indexOf("movie") !== -1) {
+            cards[i].click();
+            return;
           }
         }
+        window.location.hash = "#/movies";
+        return;
+      }
 
-        categories.forEach(function (cat) {
-          var a = document.createElement("a");
-          var isHome = cat.label === "Home" && (!currentHash || currentHash.indexOf("/home") !== -1 || currentHash === "#/" || currentHash === "#");
-          a.className = "apex-nav-item" + (isHome ? " active" : "");
-          a.textContent = cat.label;
-          a.href = cat.hash;
-          a.setAttribute("data-nav", cat.label);
-          a.addEventListener("click", function (e) {
-            e.preventDefault();
-            var allLinks = document.querySelectorAll(".apex-nav-item, .apex-mobile-chip");
-            for (var i = 0; i < allLinks.length; i++) allLinks[i].classList.remove("active");
-            a.classList.add("active");
+      if (name === "TV Shows") {
+        if (libIds.tvshows) {
+          var url = "/details?id=" + libIds.tvshows;
+          if (window.Emby && window.Emby.Page && typeof window.Emby.Page.show === "function") {
+            window.Emby.Page.show(url);
+            return;
+          }
+          window.location.hash = "#" + url;
+          return;
+        }
+        var tvCards = document.querySelectorAll('.card[data-type="CollectionFolder"], [data-category="views"] .card');
+        for (var t = 0; t < tvCards.length; t++) {
+          var text = (tvCards[t].textContent || "").toLowerCase();
+          if (text.indexOf("tv") !== -1 || text.indexOf("show") !== -1 || text.indexOf("series") !== -1) {
+            tvCards[t].click();
+            return;
+          }
+        }
+        window.location.hash = "#/shows";
+        return;
+      }
+    }
 
-            if (cat.label === "Home") {
-              window.location.hash = "#/home";
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            } else if (cat.label === "Movies") {
-              var targetMovie = document.querySelector('.card[data-type="Movie"], .card[data-name*="Movie" i], .lnkMediaFolder[title*="Movie" i], .navMenuOption[title*="Movie" i]');
-              if (targetMovie && targetMovie.click) {
-                targetMovie.click();
-              } else {
-                window.location.hash = "#/movies";
-              }
-            } else if (cat.label === "Web Series") {
-              var targetSeries = document.querySelector('.card[data-type="Series"], .card[data-name*="Series" i], .card[data-name*="Show" i], .lnkMediaFolder[title*="Series" i], .lnkMediaFolder[title*="Show" i], .navMenuOption[title*="Series" i], .navMenuOption[title*="Show" i]');
-              if (targetSeries && targetSeries.click) {
-                targetSeries.click();
-              } else {
-                window.location.hash = "#/shows";
-              }
-            } else {
-              var targetLib = document.querySelector('.lnkMediaFolder[title*="Library" i], .navMenuOption[title*="Library" i]');
-              if (targetLib && targetLib.click) {
-                targetLib.click();
-              } else {
-                window.location.hash = cat.hash;
-              }
-            }
+    function updateActiveNavTab() {
+      var hash = window.location.hash || "";
+      var links = document.querySelectorAll(".apex-nav-item");
+      for (var i = 0; i < links.length; i++) {
+        var item = links[i];
+        var navType = item.getAttribute("data-nav");
+        var isActive = false;
+        if (navType === "Home" && (!hash || hash.indexOf("/home") !== -1 || hash === "#/" || hash === "#")) {
+          isActive = true;
+        } else if (navType === "Movies" && (hash.indexOf("movie") !== -1 || (libIds.movies && hash.indexOf(libIds.movies) !== -1))) {
+          isActive = true;
+        } else if (navType === "TV Shows" && (hash.indexOf("show") !== -1 || hash.indexOf("series") !== -1 || hash.indexOf("tv") !== -1 || (libIds.tvshows && hash.indexOf(libIds.tvshows) !== -1))) {
+          isActive = true;
+        }
+        if (isActive) item.classList.add("active");
+        else item.classList.remove("active");
+      }
+    }
+
+    function ensureTopNavigation() {
+      safe(function () {
+        var header = document.querySelector(".skinHeader, .skinHeader-withBackground, header");
+        if (!header) return;
+
+        discoverLibraries();
+
+        var headerTop = header.querySelector(".headerTop") || header;
+
+        // 1. Remove Cast, SyncPlay, and Drawer button completely
+        var unwanted = headerTop.querySelectorAll(
+          ".mainDrawerButton, .headerButtonMenu, .headerSyncplayButton, .btnSyncPlay, " +
+          ".headerCastButton, .btnCast, button[data-action='cast'], button[data-action='syncplay'], " +
+          "button[title*='SyncPlay' i], button[aria-label*='SyncPlay' i], button[title*='Cast' i], button[aria-label*='Cast' i]"
+        );
+        for (var u = 0; u < unwanted.length; u++) {
+          unwanted[u].style.display = "none";
+          unwanted[u].style.visibility = "hidden";
+          unwanted[u].style.pointerEvents = "none";
+        }
+
+        // 2. Hide .headerLeft completely (top nav replaces it)
+        var headerLeft = headerTop.querySelector(".headerLeft");
+        if (headerLeft) headerLeft.style.display = "none";
+
+        // 3. Mount or verify apex-top-nav
+        var existingNav = headerTop.querySelector(".apex-top-nav");
+        if (!existingNav) {
+          var strays = document.querySelectorAll(".apex-top-nav");
+          for (var s = 0; s < strays.length; s++) {
+            if (strays[s].parentNode) strays[s].parentNode.removeChild(strays[s]);
+          }
+
+          var navContainer = document.createElement("div");
+          navContainer.className = "apex-top-nav";
+
+          var categories = [
+            { label: "Home", name: "Home" },
+            { label: "Movies", name: "Movies" },
+            { label: "TV Shows", name: "TV Shows" }
+          ];
+
+          categories.forEach(function (cat) {
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "apex-nav-item";
+            btn.textContent = cat.label;
+            btn.setAttribute("data-nav", cat.name);
+            btn.addEventListener("click", function (e) {
+              e.preventDefault();
+              e.stopPropagation();
+              var all = document.querySelectorAll(".apex-nav-item");
+              for (var a = 0; a < all.length; a++) all[a].classList.remove("active");
+              btn.classList.add("active");
+              navigateCategory(cat.name);
+            });
+            navContainer.appendChild(btn);
           });
-          navContainer.appendChild(a);
-        });
 
-        window.addEventListener("hashchange", updateActiveTab);
-        updateActiveTab();
-
-        if (headerLeft && headerLeft.parentNode) {
-          headerLeft.parentNode.insertBefore(navContainer, headerLeft.nextSibling);
-        } else {
           headerTop.insertBefore(navContainer, headerTop.firstChild);
         }
-      }
 
-      // Exact Search Pill matching Image 4
-      if (headerRight && !headerRight.querySelector(".apex-search-pill")) {
-        var searchPill = document.createElement("button");
-        searchPill.type = "button";
-        searchPill.className = "apex-search-pill";
-        searchPill.setAttribute("aria-label", "Search");
-        searchPill.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><span>Search</span>';
-        searchPill.addEventListener("click", function (e) {
-          e.preventDefault();
-          var nativeSearch = document.querySelector('.headerSearchButton, [data-action="search"], button[title*="Search" i]');
-          if (nativeSearch && nativeSearch.click) {
-            nativeSearch.click();
-          } else {
-            window.location.hash = "#/search";
-          }
-        });
-        var userBtn = headerRight.querySelector(".headerUserButtonRound, .headerButton-user");
-        if (userBtn) {
-          headerRight.insertBefore(searchPill, userBtn);
-        } else {
-          headerRight.appendChild(searchPill);
-        }
-      }
+        updateActiveNavTab();
 
-      // Install Mobile Chips on Home Page for Portrait Mode
-      var indexPage = document.querySelector("#indexPage");
-      if (indexPage && !indexPage.querySelector(".apex-mobile-chips")) {
-        var chipsBar = document.createElement("div");
-        chipsBar.className = "apex-mobile-chips";
-        var chipCategories = [
-          { label: "Home", hash: "#/home" },
-          { label: "Movies", hash: "#/movies" },
-          { label: "Web Series", hash: "#/shows" },
-          { label: "My Library", hash: "#/library" }
-        ];
-        var curH = window.location.hash || "";
-        chipCategories.forEach(function (cat) {
-          var chip = document.createElement("a");
-          var isH = cat.label === "Home" && (!curH || curH.indexOf("/home") !== -1 || curH === "#/" || curH === "#");
-          chip.className = "apex-mobile-chip" + (isH ? " active" : "");
-          chip.textContent = cat.label;
-          chip.href = cat.hash;
-          chip.setAttribute("data-nav", cat.label);
-          chip.addEventListener("click", function (e) {
+        // 4. Ensure Search Pill in landscape & desktop
+        var headerRight = headerTop.querySelector(".headerRight");
+        if (headerRight && !headerRight.querySelector(".apex-search-pill")) {
+          var searchPill = document.createElement("button");
+          searchPill.type = "button";
+          searchPill.className = "apex-search-pill";
+          searchPill.setAttribute("aria-label", "Search");
+          searchPill.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><span>Search</span>';
+          searchPill.addEventListener("click", function (e) {
             e.preventDefault();
-            var all = document.querySelectorAll(".apex-nav-item, .apex-mobile-chip");
-            for (var k = 0; k < all.length; k++) all[k].classList.remove("active");
-            chip.classList.add("active");
-
-            if (cat.label === "Home") {
-              window.location.hash = "#/home";
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            } else if (cat.label === "Movies") {
-              var tMovie = document.querySelector('.card[data-type="Movie"], .card[data-name*="Movie" i], .lnkMediaFolder[title*="Movie" i]');
-              if (tMovie && tMovie.click) tMovie.click();
-              else window.location.hash = "#/movies";
-            } else if (cat.label === "Web Series") {
-              var tSeries = document.querySelector('.card[data-type="Series"], .card[data-name*="Series" i], .card[data-name*="Show" i], .lnkMediaFolder[title*="Series" i]');
-              if (tSeries && tSeries.click) tSeries.click();
-              else window.location.hash = "#/shows";
+            e.stopPropagation();
+            var nativeSearch = document.querySelector('.headerSearchButton, [data-action="search"], button[title*="Search" i]');
+            if (nativeSearch && nativeSearch.click) {
+              nativeSearch.click();
             } else {
-              window.location.hash = cat.hash;
+              window.location.hash = "#/search";
             }
           });
-          chipsBar.appendChild(chip);
-        });
-
-        var homeTab = indexPage.querySelector(".homeSectionsContainer") || indexPage.firstChild;
-        if (homeTab) {
-          indexPage.insertBefore(chipsBar, homeTab);
-        } else {
-          indexPage.appendChild(chipsBar);
+          var userBtn = headerRight.querySelector(".headerUserButtonRound, .headerButton-user");
+          if (userBtn) {
+            headerRight.insertBefore(searchPill, userBtn);
+          } else {
+            headerRight.insertBefore(searchPill, headerRight.firstChild);
+          }
         }
-      }
-    });
-  }
+      });
+    }
+
+    var topNavGuardianTimer = null;
+    function startTopNavGuardian() {
+      if (topNavGuardianTimer) clearInterval(topNavGuardianTimer);
+      topNavGuardianTimer = setInterval(ensureTopNavigation, 400);
+      window.addEventListener("hashchange", ensureTopNavigation);
+      window.addEventListener("popstate", ensureTopNavigation);
+      window.addEventListener("pageshow", ensureTopNavigation);
+      document.addEventListener("viewshow", ensureTopNavigation);
+    }
+    startTopNavGuardian();
 
   var dpadInstalled = false;
   function installSpatialDpadNavigation() {
@@ -1046,7 +1057,7 @@
         removeAlphaPicker();
         installClaudeMenuIcon();
         installApexBranding();
-      installTopNavigation();
+      ensureTopNavigation();
         replaceServerNameText();
         installSpatialDpadNavigation();
         enhanceLibraryCards();
@@ -1062,7 +1073,7 @@
     syncSettingsTheme();
     ensureDarkTheme();
     installApexBranding();
-      installTopNavigation();
+      ensureTopNavigation();
     replaceServerNameText();
     installSpatialDpadNavigation();
     enhanceLibraryCards();
@@ -1094,7 +1105,7 @@
       removeAlphaPicker();
       installClaudeMenuIcon();
       installApexBranding();
-      installTopNavigation();
+      ensureTopNavigation();
       replaceServerNameText();
       installSpatialDpadNavigation();
       enhanceLibraryCards();
