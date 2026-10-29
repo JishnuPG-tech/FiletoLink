@@ -3846,7 +3846,14 @@ div[data-category="nextup"] .card,
 
 /* Top Floating Category Navigation (Android TV / Disney+ Style) */
 
-/* 1. COMPLETELY HIDE CAST, SYNCPLAY (two people icon), AND HAMBURGER MENU */
+/* Top Floating Category Navigation (Android TV / Disney+ Style) */
+
+/* 1. COMPLETELY HIDE HAMBURGER MENU, CAST, AND SYNCPLAY */
+button[aria-label="Menu"],
+button[aria-label="menu"],
+button:has(svg[data-testid="MenuIcon"]),
+svg[data-testid="MenuIcon"],
+.claude-stepped-menu,
 .mainDrawerButton,
 .headerButtonMenu,
 button[title*="menu" i],
@@ -3865,7 +3872,9 @@ button[aria-label*="Cast" i],
 button:has(svg[data-testid="CastIcon"]),
 button:has(svg[data-testid="GroupIcon"]),
 button:has(svg[data-testid="PeopleIcon"]),
-.headerLeft {
+.headerLeft,
+header.MuiAppBar-root > .MuiToolbar-root > .MuiBox-root:first-of-type:has(button[aria-label="Menu"]),
+header.MuiAppBar-root > .MuiToolbar-root > .MuiStack-root:first-of-type:has(button[aria-label="Menu"]) {
     display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
@@ -3881,13 +3890,15 @@ button:has(svg[data-testid="PeopleIcon"]),
 /* 2. HEADER CONTAINER & BAR */
 .skinHeader,
 .skinHeader.focuscontainer-x,
-.skinHeader-withBackground {
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.45) 75%, transparent 100%) !important;
+.skinHeader-withBackground,
+header.MuiAppBar-root {
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.5) 75%, transparent 100%) !important;
     backdrop-filter: blur(20px) !important;
     -webkit-backdrop-filter: blur(20px) !important;
     border-bottom: none !important;
     box-shadow: none !important;
     height: 56px !important;
+    min-height: 56px !important;
     padding: 0 !important;
     position: fixed !important;
     top: 0 !important;
@@ -3896,12 +3907,15 @@ button:has(svg[data-testid="PeopleIcon"]),
     z-index: 1000 !important;
 }
 
-.headerTop {
+.headerTop,
+header.MuiAppBar-root > .MuiToolbar-root,
+header > .MuiToolbar-root {
     display: flex !important;
     flex-direction: row !important;
     justify-content: space-between !important;
     align-items: center !important;
-    height: 100% !important;
+    height: 56px !important;
+    min-height: 56px !important;
     width: 100% !important;
     padding: 0 16px !important;
     margin: 0 !important;
@@ -3918,6 +3932,7 @@ button:has(svg[data-testid="PeopleIcon"]),
     padding: 0 !important;
     z-index: 100 !important;
     flex-shrink: 0 !important;
+    order: -1 !important;
 }
 
 .apex-nav-item {
@@ -3941,45 +3956,29 @@ button:has(svg[data-testid="PeopleIcon"]),
 .apex-nav-item:focus-visible {
     color: #FFFFFF !important;
     background: rgba(255, 255, 255, 0.12) !important;
-    border-color: rgba(255, 255, 255, 0.18) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
 .apex-nav-item.active {
     color: #FFFFFF !important;
-    font-weight: 700 !important;
-    background: rgba(255, 255, 255, 0.18) !important;
-    border-color: rgba(255, 255, 255, 0.25) !important;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35), 0 0 10px rgba(255, 255, 255, 0.1) !important;
+    background: rgba(255, 255, 255, 0.22) !important;
+    border-color: rgba(255, 255, 255, 0.45) !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4) !important;
 }
 
-/* 4. RIGHT: HEADER RIGHT (Search and Profile) */
-.headerRight {
+/* 4. RIGHT: SEARCH AND PROFILE ONLY */
+.headerRight,
+header.MuiAppBar-root > .MuiToolbar-root > .MuiBox-root:last-of-type,
+header.MuiAppBar-root > .MuiToolbar-root > .MuiStack-root:last-of-type {
     display: flex !important;
     flex-direction: row !important;
     align-items: center !important;
     gap: 10px !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    flex-shrink: 0 !important;
+    margin-left: auto !important;
+    order: 10 !important;
 }
 
-/* Profile Avatar Icon */
-.headerRight .headerUserButtonRound,
-.headerRight .headerButton-user {
-    border-radius: 50% !important;
-    width: 34px !important;
-    height: 34px !important;
-    min-width: 34px !important;
-    border: 1.5px solid rgba(255, 255, 255, 0.35) !important;
-    overflow: hidden !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-
-/* Search button default */
 .headerSearchButton,
 button[data-action="search"] {
     background: transparent !important;
@@ -3997,7 +3996,9 @@ button[data-action="search"] {
 
 /* Landscape Mode & Desktop/TV: EXACT MATCH TO IMAGE 4 */
 @media (min-width: 601px), (orientation: landscape) {
-    .headerTop {
+    .headerTop,
+    header.MuiAppBar-root > .MuiToolbar-root,
+    header > .MuiToolbar-root {
         padding: 0 24px !important;
     }
 
@@ -4042,7 +4043,9 @@ button[data-action="search"] {
 
 /* Mobile Portrait Mode */
 @media (max-width: 600px) and (orientation: portrait) {
-    .headerTop {
+    .headerTop,
+    header.MuiAppBar-root > .MuiToolbar-root,
+    header > .MuiToolbar-root {
         padding: 0 12px !important;
     }
 
@@ -4191,4 +4194,85 @@ div[data-category="nextup"] .cardScalable,
         line-height: 1.2 !important;
         padding: 4px 2px 0 !important;
     }
+}
+
+/* 4. LANDSCAPE MODE & WIDESCREEN: HIGH DENSITY CARDS (6 to 7 Cards Per Row) */
+@media (orientation: landscape), (min-width: 601px) {
+    #moviesPage:not(#indexPage) .itemsContainer,
+    #tvShowsPage:not(#indexPage) .itemsContainer,
+    #showsPage:not(#indexPage) .itemsContainer,
+    #libraryPage:not(#indexPage) .itemsContainer,
+    .view-movies:not(#indexPage) .itemsContainer,
+    .view-shows:not(#indexPage) .itemsContainer {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        flex-direction: row !important;
+        gap: 10px !important;
+        padding: 12px 16px !important;
+        box-sizing: border-box !important;
+        justify-content: flex-start !important;
+    }
+
+    #moviesPage:not(#indexPage) .card,
+    #tvShowsPage:not(#indexPage) .card,
+    #showsPage:not(#indexPage) .card,
+    #libraryPage:not(#indexPage) .card,
+    .view-movies:not(#indexPage) .card,
+    .view-shows:not(#indexPage) .card {
+        width: calc((100% - 50px) / 6) !important;
+        max-width: calc((100% - 50px) / 6) !important;
+        flex: 0 0 calc((100% - 50px) / 6) !important;
+        margin: 0 0 12px 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    #moviesPage:not(#indexPage) .cardText,
+    #tvShowsPage:not(#indexPage) .cardText,
+    #showsPage:not(#indexPage) .cardText {
+        font-size: 0.8rem !important;
+        line-height: 1.25 !important;
+        padding: 4px 2px 0 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+}
+
+@media (orientation: landscape) and (min-width: 860px), (min-width: 1024px) {
+    #moviesPage:not(#indexPage) .card,
+    #tvShowsPage:not(#indexPage) .card,
+    #showsPage:not(#indexPage) .card,
+    #libraryPage:not(#indexPage) .card,
+    .view-movies:not(#indexPage) .card,
+    .view-shows:not(#indexPage) .card {
+        width: calc((100% - 60px) / 7) !important;
+        max-width: calc((100% - 60px) / 7) !important;
+        flex: 0 0 calc((100% - 60px) / 7) !important;
+    }
+}
+
+@media (min-width: 1400px) {
+    #moviesPage:not(#indexPage) .card,
+    #tvShowsPage:not(#indexPage) .card,
+    #showsPage:not(#indexPage) .card,
+    #libraryPage:not(#indexPage) .card,
+    .view-movies:not(#indexPage) .card,
+    .view-shows:not(#indexPage) .card {
+        width: calc((100% - 70px) / 8) !important;
+        max-width: calc((100% - 70px) / 8) !important;
+        flex: 0 0 calc((100% - 70px) / 8) !important;
+    }
+}
+
+/* ZERO STARTUP LAG: INSTANT VISIBILITY OF HOMEPAGE CONTENT */
+#homeTab,
+.homeSectionsContainer,
+#indexPage .sections,
+.verticalSection,
+.section0,
+.section1,
+.section2,
+.section3 {
+    opacity: 1 !important;
+    visibility: visible !important;
 }
