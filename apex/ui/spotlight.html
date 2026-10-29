@@ -938,20 +938,7 @@
 						meta.appendChild(studioSpan);
 					}
 
-					const matchSpan = document.createElement('span');
-					matchSpan.className = 'meta-match';
-					const matchPct = item.CommunityRating ? Math.round(item.CommunityRating * 10) : 98;
-					matchSpan.textContent = `${matchPct}% Match`;
-					meta.appendChild(matchSpan);
-
-					if (item.ProductionYear) {
-						const yearSpan = document.createElement('span');
-						yearSpan.className = 'meta-year';
-						yearSpan.textContent = item.ProductionYear;
-						meta.appendChild(yearSpan);
-					}
-
-					if (isSeries) {
+if (isSeries) {
 						const seasonText = item.ChildCount ? `${item.ChildCount} Season${item.ChildCount > 1 ? 's' : ''}` : 'Series';
 						meta.appendChild(metaPillWithIcon(SVG_TV, seasonText));
 					}
