@@ -3595,12 +3595,10 @@ button[aria-label="menu"],
 
 /* ==========================================================================
    Apex Official Delta Logo Branding (Pure OLED Pitch Black + Solid White)
+   Target ONLY explicit app logos, NEVER media cards, posters, or user avatars!
    ========================================================================== */
-img[src*="icon-transparent"],
-img[src*="apex-logo"],
-.imgLogoIcon,
-.adminDrawerLogo img,
 .headerLogo img,
+.imgLogoIcon,
 .pageTitleWithDefaultLogo,
 .pageTitleWithLogo {
     content: url('apex-logo.svg') !important;
@@ -3612,26 +3610,42 @@ img[src*="apex-logo"],
 }
 
 /* Header Start Icon & Title Bar Logo */
-.MuiButton-startIcon img,
-.skinHeader img,
-header img {
-    content: url('apex-logo.svg') !important;
-    max-height: 28px !important;
-    max-width: 28px !important;
+.headerLogo img,
+.imgLogoIcon {
+    max-height: 22px !important;
+    max-width: 22px !important;
     object-fit: contain !important;
 }
 
-/* Drawer Brand Card Logo */
+/* Drawer Brand Card Logo - refined, small logo (22px) as requested */
 .mainDrawer a[to="/"] img,
+.mainDrawer a[href="/"] img,
 .mainDrawer .adminDrawerLogo img,
+.mainDrawer .adminDrawerLogo .apex-delta-icon,
+.mainDrawer .apex-delta-icon,
 .mainDrawer img[src*="icon-transparent"],
 .mainDrawer img[src*="apex-logo"] {
-    content: url('apex-logo.svg') !important;
-    height: 40px !important;
-    width: 40px !important;
-    max-height: 40px !important;
-    max-width: 40px !important;
+    width: 22px !important;
+    height: 22px !important;
+    max-width: 22px !important;
+    max-height: 22px !important;
+    min-width: 22px !important;
+    min-height: 22px !important;
     object-fit: contain !important;
+    display: inline-block !important;
+    vertical-align: middle !important;
+}
+
+/* Hard safeguarding for real media card posters and user avatars */
+.card img,
+.cardImage,
+.cardContent img,
+.cardScalable img,
+.detailImage img,
+.headerButton-user img,
+.headerUserImage,
+.userImage {
+    content: normal !important;
 }
 
 /* Splash Screen Logo */
@@ -3641,8 +3655,8 @@ header img {
     background-size: contain !important;
     background-repeat: no-repeat !important;
     background-position: center !important;
-    width: 120px !important;
-    height: 120px !important;
+    width: 100px !important;
+    height: 100px !important;
 }
 
 /* Modern Drawer Server Brand Card */

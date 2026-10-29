@@ -402,21 +402,22 @@ body {
 
 #carousel-dots {
 	position: absolute;
-	bottom: 24px;
-	right: 4.5vw;
-	left: auto;
-	transform: none;
+	bottom: 18px;
+	left: 50%;
+	right: auto;
+	transform: translateX(-50%);
 	z-index: 10;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 6px 12px;
+	padding: 5px 12px;
 	border-radius: 20px;
-	background: rgba(0, 0, 0, 0.5);
+	background: rgba(0, 0, 0, 0.55);
 	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 	border: 1px solid rgba(255, 255, 255, 0.12);
 	backdrop-filter: blur(16px);
 	-webkit-backdrop-filter: blur(16px);
+	gap: 6px;
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -428,26 +429,23 @@ body {
 .dot {
 	border: none;
 	background: rgba(255, 255, 255, 0.35);
-	width: 8px;
-	height: 3px;
-	border-radius: 2px;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
 	cursor: pointer;
 	padding: 0;
-	margin: 0 3px;
+	margin: 0;
 	appearance: none;
 	-webkit-appearance: none;
 	-webkit-tap-highlight-color: transparent;
-	transition:
-		width 0.35s var(--ease),
-		background-color 0.35s var(--ease),
-		opacity 0.35s var(--ease);
+	transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 	flex-shrink: 0;
 }
 
 .dot-active {
-	width: 24px;
-	height: 3px;
-	border-radius: 2px;
+	width: 22px !important;
+	height: 6px !important;
+	border-radius: 3px !important;
 	background: #FFFFFF !important;
 	opacity: 1;
 }
@@ -859,10 +857,10 @@ body {
 	/* Dots positioned safely at bottom-right with clean separation */
 	#carousel-dots {
 		bottom: 12px !important;
-		right: 16px !important;
-		left: auto !important;
-		transform: none !important;
-		padding: 4px 8px !important;
+		left: 50% !important;
+		right: auto !important;
+		transform: translateX(-50%) !important;
+		padding: 4px 10px !important;
 		gap: 5px !important;
 		z-index: 10 !important;
 	}
@@ -937,11 +935,11 @@ body {
 	}
 
 	#carousel-dots {
-		bottom: 14px !important;
-		right: 3.5vw !important;
-		left: auto !important;
-		transform: none !important;
-		padding: 4px 8px !important;
+		bottom: 12px !important;
+		left: 50% !important;
+		right: auto !important;
+		transform: translateX(-50%) !important;
+		padding: 4px 10px !important;
 		gap: 5px !important;
 		z-index: 10 !important;
 	}
