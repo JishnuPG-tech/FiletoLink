@@ -3594,3 +3594,156 @@ button[aria-label="menu"],
     height: 120px !important;
 }
 
+/* ==========================================================================
+   Android TV & Apple TV+ Professional Streaming UI Engine
+   ========================================================================== */
+
+/* 1. Global OLED Palette & Typography Tokens */
+:root {
+    --tv-bg: #000000;
+    --tv-surface: #111111;
+    --tv-glass: rgba(17, 17, 17, 0.75);
+    --tv-text-primary: #F5F5F5;
+    --tv-text-muted: #999999;
+    --tv-focus-border: #FFFFFF;
+    --tv-radius: 12px;
+}
+
+body, html, .backgroundContainer {
+    background-color: var(--tv-bg) !important;
+    color: var(--tv-text-primary) !important;
+}
+
+/* 2. Top Navigation Bar (Unified Glass Header) */
+.skinHeader,
+.skinHeader.focuscontainer-x,
+.skinHeader-withBackground {
+    background: rgba(0, 0, 0, 0.72) !important;
+    backdrop-filter: blur(24px) !important;
+    -webkit-backdrop-filter: blur(24px) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+    box-shadow: none !important;
+}
+
+/* Clean up header buttons (remove excessive shadow/background boxes) */
+.skinHeader .headerButton,
+.skinHeader .paper-icon-button-light {
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 50% !important;
+    color: var(--tv-text-primary) !important;
+    transition: background-color 0.2s ease, transform 0.2s ease !important;
+}
+
+.skinHeader .headerButton:hover,
+.skinHeader .headerButton:focus-visible {
+    background: rgba(255, 255, 255, 0.12) !important;
+    transform: scale(1.05) !important;
+}
+
+/* 3. Section Titles & Row Headers */
+.sectionTitle,
+.sectionTitleTextButton {
+    color: var(--tv-text-primary) !important;
+    font-weight: 700 !important;
+    font-size: 1.25rem !important;
+    letter-spacing: -0.01em !important;
+    padding-left: 0.15em !important;
+    margin-bottom: 0.5em !important;
+}
+
+/* 4. Horizontal Carousels & Card Peeking */
+.itemsContainer.padded-left.padded-right {
+    padding-left: 4.5vw !important;
+    padding-right: 4.5vw !important;
+    gap: 16px !important;
+    scroll-behavior: smooth !important;
+    scroll-snap-type: x mandatory !important;
+}
+
+.itemsContainer > .card {
+    scroll-snap-align: start !important;
+    margin-right: 14px !important;
+}
+
+/* 5. Differentiated Card Aspect Ratios */
+/* Portrait 2:3 ratio for Movies, Shows, and General Media */
+.cardScalable,
+.portraitCard .cardScalable {
+    border-radius: var(--tv-radius) !important;
+    overflow: hidden !important;
+    background-color: var(--tv-surface) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), outline 0.18s ease, box-shadow 0.18s ease !important;
+}
+
+.cardImageContainer {
+    background-color: var(--tv-surface) !important;
+}
+
+/* 16:9 Landscape Ratio for Continue Watching & Next Up */
+.resumeSection .card,
+.nextUpSection .card,
+div[data-category="resume"] .card,
+div[data-category="nextup"] .card,
+.thumbCard .cardScalable,
+.backdropCard .cardScalable {
+    border-radius: var(--tv-radius) !important;
+}
+
+/* 6. Continue Watching Progress Bar (Thin 3px Flush Line) */
+.itemProgressBar {
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 3px !important;
+    background: rgba(255, 255, 255, 0.22) !important;
+    border-radius: 0 0 var(--tv-radius) var(--tv-radius) !important;
+    margin: 0 !important;
+    z-index: 4 !important;
+}
+
+.itemProgressBarForeground {
+    background: #FFFFFF !important;
+    height: 100% !important;
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.6) !important;
+}
+
+/* 7. Card Text & Metadata Scrims */
+.cardText {
+    color: var(--tv-text-muted) !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+}
+
+.cardText-first {
+    color: var(--tv-text-primary) !important;
+    font-weight: 600 !important;
+    font-size: 0.92rem !important;
+}
+
+/* Bottom gradient behind text on backdrop cards */
+.cardOverlayContainer {
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.5) 40%, transparent 100%) !important;
+}
+
+/* 8. TV Spatial Focus Transform & Border Ring */
+.card:focus-visible,
+.card.focused,
+.card:focus {
+    outline: none !important;
+}
+
+.card:focus-visible .cardScalable,
+.card.focused .cardScalable,
+.card:focus .cardScalable,
+.card:hover .cardScalable {
+    transform: scale(1.04) !important;
+    outline: 2px solid var(--tv-focus-border) !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.85), 0 0 20px rgba(255, 255, 255, 0.18) !important;
+    z-index: 10 !important;
+}
+
+

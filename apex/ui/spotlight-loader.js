@@ -223,11 +223,21 @@
     try {
       var rect = iframe.getBoundingClientRect();
       var pool = Array.prototype.slice
-        .call(document.querySelectorAll(".focusable"))
-        .filter(function (el) { return el !== iframe; });
+        .call(document.querySelectorAll(".focusable, .itemsContainer .card, .headerButton, .paper-icon-button-light"))
+        .filter(function (el) { return el !== iframe && el.offsetParent !== null; });
       var nearest = nearestFocusable(rect, direction, pool);
+      if (!nearest) {
+        if (direction === "down") {
+          nearest = document.querySelector(".itemsContainer .card");
+        } else {
+          nearest = document.querySelector(".headerButton, .headerLeft button");
+        }
+      }
       if (!nearest) return false;
       nearest.focus();
+      if (nearest.scrollIntoView) {
+        nearest.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      }
       return true;
     } catch (e) {
       return false;
@@ -467,6 +477,132 @@
         }
       }
     });
+  var dpadInstalled = false;
+  function installSpatialDpadNavigation() {
+    safe(function () {
+      function ensureCardFocusable() {
+        var cards = document.querySelectorAll(".itemsContainer .card:not([tabindex])");
+        for (var i = 0; i < cards.length; i++) {
+          cards[i].setAttribute("tabindex", "0");
+        }
+      }
+      ensureCardFocusable();
+
+      if (dpadInstalled) return;
+      dpadInstalled = true;
+
+      document.addEventListener("keydown", function (e) {
+        if (spotlightFocused) return;
+        var key = e.key;
+        if (key !== "ArrowUp" && key !== "ArrowDown" && key !== "ArrowLeft" && key !== "ArrowRight" && key !== "Enter") {
+          return;
+        }
+
+        var active = document.activeElement;
+        if (isEditableElement(active)) return;
+
+        ensureCardFocusable();
+
+        var currentCard = active ? active.closest(".card") : null;
+
+        if (!currentCard) {
+          if (key === "ArrowDown" && (!active || active === document.body)) {
+            var firstCard = document.querySelector(".itemsContainer .card");
+            if (firstCard) {
+              e.preventDefault();
+              firstCard.focus();
+              if (firstCard.scrollIntoView) {
+                firstCard.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+              }
+            }
+          }
+          return;
+        }
+
+        // We are on a card!
+        if (key === "Enter") {
+          e.preventDefault();
+          var clickTarget = currentCard.querySelector("a, button, [data-action]") || currentCard;
+          clickTarget.click();
+          return;
+        }
+
+        if (key === "ArrowLeft" || key === "ArrowRight") {
+          e.preventDefault();
+          var sibling = key === "ArrowRight" ? currentCard.nextElementSibling : currentCard.previousElementSibling;
+          while (sibling && !sibling.classList.contains("card")) {
+            sibling = key === "ArrowRight" ? sibling.nextElementSibling : sibling.previousElementSibling;
+          }
+          if (sibling) {
+            sibling.focus();
+            if (sibling.scrollIntoView) {
+              sibling.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+            }
+          }
+          return;
+        }
+
+        if (key === "ArrowUp" || key === "ArrowDown") {
+          e.preventDefault();
+          var currentContainer = currentCard.closest(".itemsContainer") || currentCard.parentElement;
+          var allContainers = Array.prototype.slice.call(document.querySelectorAll(".itemsContainer"));
+          var currentIndex = allContainers.indexOf(currentContainer);
+
+          if (key === "ArrowDown") {
+            if (currentIndex !== -1 && currentIndex < allContainers.length - 1) {
+              var nextContainer = allContainers[currentIndex + 1];
+              var nextCards = nextContainer.querySelectorAll(".card");
+              if (nextCards.length > 0) {
+                var targetCard = nextCards[0];
+                var currentRect = currentCard.getBoundingClientRect();
+                var bestDiff = Infinity;
+                for (var i = 0; i < nextCards.length; i++) {
+                  var r = nextCards[i].getBoundingClientRect();
+                  var diff = Math.abs(r.left - currentRect.left);
+                  if (diff < bestDiff) {
+                    bestDiff = diff;
+                    targetCard = nextCards[i];
+                  }
+                }
+                targetCard.focus();
+                if (targetCard.scrollIntoView) {
+                  targetCard.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+                }
+              }
+            }
+          } else if (key === "ArrowUp") {
+            if (currentIndex > 0) {
+              var prevContainer = allContainers[currentIndex - 1];
+              var prevCards = prevContainer.querySelectorAll(".card");
+              if (prevCards.length > 0) {
+                var targetCard = prevCards[0];
+                var currentRect = currentCard.getBoundingClientRect();
+                var bestDiff = Infinity;
+                for (var j = 0; j < prevCards.length; j++) {
+                  var r = prevCards[j].getBoundingClientRect();
+                  var diff = Math.abs(r.left - currentRect.left);
+                  if (diff < bestDiff) {
+                    bestDiff = diff;
+                    targetCard = prevCards[j];
+                  }
+                }
+                targetCard.focus();
+                if (targetCard.scrollIntoView) {
+                  targetCard.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+                }
+              }
+            } else {
+              // Reached top row - jump into Hero Spotlight or scroll up
+              if (currentIframe && currentIframe.isConnected) {
+                enterSpotlight(currentIframe);
+              } else {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }
+            }
+          }
+        }
+      }, true);
+    });
   }
 
   function boot() {
@@ -574,6 +710,7 @@
         installClaudeMenuIcon();
         installApexBranding();
         replaceServerNameText();
+        installSpatialDpadNavigation();
       };
 
       if (typeof requestAnimationFrame === "function") {
@@ -587,6 +724,7 @@
     ensureDarkTheme();
     installApexBranding();
     replaceServerNameText();
+    installSpatialDpadNavigation();
     window.addEventListener("hashchange", syncSettingsTheme);
     if (typeof MutationObserver === "function") {
       safe(function () {
@@ -616,6 +754,7 @@
       installClaudeMenuIcon();
       installApexBranding();
       replaceServerNameText();
+      installSpatialDpadNavigation();
       if (currentSync) safe(currentSync);
     }, 2000);
 
