@@ -166,10 +166,10 @@ restore_jellyfin_local() {
         sed -i 's|<link [^>]*rel="icon"[^>]*>|<link rel="icon" href="ui/apex-logo.svg" type="image/svg+xml">|g' "$INDEX_FILE" 2>/dev/null || true
 
         # Inject Abyss CSS into <head>
-        sed -i 's|</head>|<link rel="stylesheet" href="ui/abyss.css" data-abyss-theme></head>|g' "$INDEX_FILE" 2>/dev/null || true
+        sed -i 's|</head>|<link rel="stylesheet" href="ui/abyss.css?v='$(date +%s)'" data-abyss-theme></head>|g' "$INDEX_FILE" 2>/dev/null || true
 
         # Inject Spotlight loader before </body>
-        sed -i 's|</body>|<script src="ui/spotlight-loader.js" data-abyss-spotlight></script></body>|g' "$INDEX_FILE" 2>/dev/null || true
+        sed -i 's|</body>|<script src="ui/spotlight-loader.js?v='$(date +%s)'" data-abyss-spotlight></script></body>|g' "$INDEX_FILE" 2>/dev/null || true
 
         echo "[JELLYFIN] Abyss theme & Spotlight hero banner installed into web assets."
     fi

@@ -607,95 +607,192 @@
     });
   }
 
-    function installTopNavigation() {
+        function installTopNavigation() {
     safe(function () {
       var header = document.querySelector(".skinHeader, .skinHeader-withBackground, header");
       if (!header) return;
-      if (header.querySelector(".apex-top-nav") || document.querySelector(".apex-top-nav")) return;
-
-      var navContainer = document.createElement("div");
-      navContainer.className = "apex-top-nav";
-      var categories = [
-        { label: "Home", hash: "#/home" },
-        { label: "Movies", hash: "#/movies" },
-        { label: "Series", hash: "#/shows" },
-        { label: "My Library", hash: "#/library" }
-      ];
-
-      var currentHash = window.location.hash || "";
-
-      function updateActiveTab() {
-        var hash = window.location.hash || "";
-        var links = navContainer.querySelectorAll(".apex-nav-item");
-        for (var i = 0; i < links.length; i++) {
-          var item = links[i];
-          var navType = item.getAttribute("data-nav");
-          var isActive = false;
-          if (navType === "Home" && (!hash || hash.indexOf("/home") !== -1 || hash === "#/" || hash === "#")) {
-            isActive = true;
-          } else if (navType === "Movies" && (hash.indexOf("movie") !== -1 || hash.indexOf("Movie") !== -1)) {
-            isActive = true;
-          } else if (navType === "Series" && (hash.indexOf("show") !== -1 || hash.indexOf("series") !== -1 || hash.indexOf("tv") !== -1)) {
-            isActive = true;
-          } else if (navType === "My Library" && hash.indexOf("library") !== -1) {
-            isActive = true;
-          }
-          if (isActive) item.classList.add("active");
-          else item.classList.remove("active");
-        }
-      }
-
-      categories.forEach(function (cat) {
-        var a = document.createElement("a");
-        var isHome = cat.label === "Home" && (!currentHash || currentHash.indexOf("/home") !== -1 || currentHash === "#/" || currentHash === "#");
-        a.className = "apex-nav-item" + (isHome ? " active" : "");
-        a.textContent = cat.label;
-        a.href = cat.hash;
-        a.setAttribute("data-nav", cat.label);
-        a.addEventListener("click", function (e) {
-          e.preventDefault();
-          var allLinks = document.querySelectorAll(".apex-nav-item");
-          for (var i = 0; i < allLinks.length; i++) allLinks[i].classList.remove("active");
-          a.classList.add("active");
-
-          if (cat.label === "Home") {
-            window.location.hash = "#/home";
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          } else if (cat.label === "Movies") {
-            var targetMovie = document.querySelector('.card[data-type="Movie"], .card[data-name*="Movie" i], .lnkMediaFolder[title*="Movie" i], .navMenuOption[title*="Movie" i]');
-            if (targetMovie && targetMovie.click) {
-              targetMovie.click();
-            } else {
-              window.location.hash = "#/movies";
-            }
-          } else if (cat.label === "Series") {
-            var targetSeries = document.querySelector('.card[data-type="Series"], .card[data-name*="Series" i], .card[data-name*="Show" i], .lnkMediaFolder[title*="Series" i], .lnkMediaFolder[title*="Show" i], .navMenuOption[title*="Series" i], .navMenuOption[title*="Show" i]');
-            if (targetSeries && targetSeries.click) {
-              targetSeries.click();
-            } else {
-              window.location.hash = "#/shows";
-            }
-          } else {
-            var targetLib = document.querySelector('.lnkMediaFolder[title*="Library" i], .navMenuOption[title*="Library" i]');
-            if (targetLib && targetLib.click) {
-              targetLib.click();
-            } else {
-              window.location.hash = cat.hash;
-            }
-          }
-        });
-        navContainer.appendChild(a);
-      });
-
-      window.addEventListener("hashchange", updateActiveTab);
-      updateActiveTab();
 
       var headerTop = header.querySelector(".headerTop") || header;
       var headerLeft = headerTop.querySelector(".headerLeft") || headerTop.querySelector(".mainDrawerButton") || headerTop.firstChild;
-      if (headerLeft && headerLeft.parentNode) {
-        headerLeft.parentNode.insertBefore(navContainer, headerLeft.nextSibling);
-      } else {
-        headerTop.insertBefore(navContainer, headerTop.firstChild);
+      var headerRight = headerTop.querySelector(".headerRight") || headerTop.lastChild;
+
+      var existingNav = document.querySelector(".apex-top-nav");
+      if (existingNav && (!existingNav.isConnected || !existingNav.closest(".skinHeader"))) {
+        if (existingNav.parentNode) existingNav.parentNode.removeChild(existingNav);
+        existingNav = null;
+      }
+
+      if (!existingNav) {
+        var navContainer = document.createElement("div");
+        navContainer.className = "apex-top-nav";
+        var categories = [
+          { label: "Home", hash: "#/home" },
+          { label: "Movies", hash: "#/movies" },
+          { label: "Web Series", hash: "#/shows" },
+          { label: "My Library", hash: "#/library" }
+        ];
+
+        var currentHash = window.location.hash || "";
+
+        function updateActiveTab() {
+          var hash = window.location.hash || "";
+          var links = navContainer.querySelectorAll(".apex-nav-item");
+          for (var i = 0; i < links.length; i++) {
+            var item = links[i];
+            var navType = item.getAttribute("data-nav");
+            var isActive = false;
+            if (navType === "Home" && (!hash || hash.indexOf("/home") !== -1 || hash === "#/" || hash === "#")) {
+              isActive = true;
+            } else if (navType === "Movies" && (hash.indexOf("movie") !== -1 || hash.indexOf("Movie") !== -1)) {
+              isActive = true;
+            } else if (navType === "Web Series" && (hash.indexOf("show") !== -1 || hash.indexOf("series") !== -1 || hash.indexOf("tv") !== -1)) {
+              isActive = true;
+            } else if (navType === "My Library" && hash.indexOf("library") !== -1) {
+              isActive = true;
+            }
+            if (isActive) item.classList.add("active");
+            else item.classList.remove("active");
+          }
+
+          var mobileChips = document.querySelectorAll(".apex-mobile-chip");
+          for (var j = 0; j < mobileChips.length; j++) {
+            var chip = mobileChips[j];
+            var chipNav = chip.getAttribute("data-nav");
+            var isChipActive = false;
+            if (chipNav === "Home" && (!hash || hash.indexOf("/home") !== -1 || hash === "#/" || hash === "#")) isChipActive = true;
+            else if (chipNav === "Movies" && (hash.indexOf("movie") !== -1 || hash.indexOf("Movie") !== -1)) isChipActive = true;
+            else if (chipNav === "Web Series" && (hash.indexOf("show") !== -1 || hash.indexOf("series") !== -1 || hash.indexOf("tv") !== -1)) isChipActive = true;
+            else if (chipNav === "My Library" && hash.indexOf("library") !== -1) isChipActive = true;
+            if (isChipActive) chip.classList.add("active");
+            else chip.classList.remove("active");
+          }
+        }
+
+        categories.forEach(function (cat) {
+          var a = document.createElement("a");
+          var isHome = cat.label === "Home" && (!currentHash || currentHash.indexOf("/home") !== -1 || currentHash === "#/" || currentHash === "#");
+          a.className = "apex-nav-item" + (isHome ? " active" : "");
+          a.textContent = cat.label;
+          a.href = cat.hash;
+          a.setAttribute("data-nav", cat.label);
+          a.addEventListener("click", function (e) {
+            e.preventDefault();
+            var allLinks = document.querySelectorAll(".apex-nav-item, .apex-mobile-chip");
+            for (var i = 0; i < allLinks.length; i++) allLinks[i].classList.remove("active");
+            a.classList.add("active");
+
+            if (cat.label === "Home") {
+              window.location.hash = "#/home";
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            } else if (cat.label === "Movies") {
+              var targetMovie = document.querySelector('.card[data-type="Movie"], .card[data-name*="Movie" i], .lnkMediaFolder[title*="Movie" i], .navMenuOption[title*="Movie" i]');
+              if (targetMovie && targetMovie.click) {
+                targetMovie.click();
+              } else {
+                window.location.hash = "#/movies";
+              }
+            } else if (cat.label === "Web Series") {
+              var targetSeries = document.querySelector('.card[data-type="Series"], .card[data-name*="Series" i], .card[data-name*="Show" i], .lnkMediaFolder[title*="Series" i], .lnkMediaFolder[title*="Show" i], .navMenuOption[title*="Series" i], .navMenuOption[title*="Show" i]');
+              if (targetSeries && targetSeries.click) {
+                targetSeries.click();
+              } else {
+                window.location.hash = "#/shows";
+              }
+            } else {
+              var targetLib = document.querySelector('.lnkMediaFolder[title*="Library" i], .navMenuOption[title*="Library" i]');
+              if (targetLib && targetLib.click) {
+                targetLib.click();
+              } else {
+                window.location.hash = cat.hash;
+              }
+            }
+          });
+          navContainer.appendChild(a);
+        });
+
+        window.addEventListener("hashchange", updateActiveTab);
+        updateActiveTab();
+
+        if (headerLeft && headerLeft.parentNode) {
+          headerLeft.parentNode.insertBefore(navContainer, headerLeft.nextSibling);
+        } else {
+          headerTop.insertBefore(navContainer, headerTop.firstChild);
+        }
+      }
+
+      // Exact Search Pill matching Image 4
+      if (headerRight && !headerRight.querySelector(".apex-search-pill")) {
+        var searchPill = document.createElement("button");
+        searchPill.type = "button";
+        searchPill.className = "apex-search-pill";
+        searchPill.setAttribute("aria-label", "Search");
+        searchPill.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><span>Search</span>';
+        searchPill.addEventListener("click", function (e) {
+          e.preventDefault();
+          var nativeSearch = document.querySelector('.headerSearchButton, [data-action="search"], button[title*="Search" i]');
+          if (nativeSearch && nativeSearch.click) {
+            nativeSearch.click();
+          } else {
+            window.location.hash = "#/search";
+          }
+        });
+        var userBtn = headerRight.querySelector(".headerUserButtonRound, .headerButton-user");
+        if (userBtn) {
+          headerRight.insertBefore(searchPill, userBtn);
+        } else {
+          headerRight.appendChild(searchPill);
+        }
+      }
+
+      // Install Mobile Chips on Home Page for Portrait Mode
+      var indexPage = document.querySelector("#indexPage");
+      if (indexPage && !indexPage.querySelector(".apex-mobile-chips")) {
+        var chipsBar = document.createElement("div");
+        chipsBar.className = "apex-mobile-chips";
+        var chipCategories = [
+          { label: "Home", hash: "#/home" },
+          { label: "Movies", hash: "#/movies" },
+          { label: "Web Series", hash: "#/shows" },
+          { label: "My Library", hash: "#/library" }
+        ];
+        var curH = window.location.hash || "";
+        chipCategories.forEach(function (cat) {
+          var chip = document.createElement("a");
+          var isH = cat.label === "Home" && (!curH || curH.indexOf("/home") !== -1 || curH === "#/" || curH === "#");
+          chip.className = "apex-mobile-chip" + (isH ? " active" : "");
+          chip.textContent = cat.label;
+          chip.href = cat.hash;
+          chip.setAttribute("data-nav", cat.label);
+          chip.addEventListener("click", function (e) {
+            e.preventDefault();
+            var all = document.querySelectorAll(".apex-nav-item, .apex-mobile-chip");
+            for (var k = 0; k < all.length; k++) all[k].classList.remove("active");
+            chip.classList.add("active");
+
+            if (cat.label === "Home") {
+              window.location.hash = "#/home";
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            } else if (cat.label === "Movies") {
+              var tMovie = document.querySelector('.card[data-type="Movie"], .card[data-name*="Movie" i], .lnkMediaFolder[title*="Movie" i]');
+              if (tMovie && tMovie.click) tMovie.click();
+              else window.location.hash = "#/movies";
+            } else if (cat.label === "Web Series") {
+              var tSeries = document.querySelector('.card[data-type="Series"], .card[data-name*="Series" i], .card[data-name*="Show" i], .lnkMediaFolder[title*="Series" i]');
+              if (tSeries && tSeries.click) tSeries.click();
+              else window.location.hash = "#/shows";
+            } else {
+              window.location.hash = cat.hash;
+            }
+          });
+          chipsBar.appendChild(chip);
+        });
+
+        var homeTab = indexPage.querySelector(".homeSectionsContainer") || indexPage.firstChild;
+        if (homeTab) {
+          indexPage.insertBefore(chipsBar, homeTab);
+        } else {
+          indexPage.appendChild(chipsBar);
+        }
       }
     });
   }

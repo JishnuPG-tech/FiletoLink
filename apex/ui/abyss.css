@@ -3848,15 +3848,15 @@ div[data-category="nextup"] .card,
 .apex-top-nav {
     display: inline-flex !important;
     align-items: center !important;
-    gap: 18px !important;
-    margin-left: 16px !important;
+    gap: 20px !important;
+    margin-left: 12px !important;
     z-index: 100 !important;
     flex-shrink: 0 !important;
 }
 
 .apex-nav-item {
-    color: rgba(255, 255, 255, 0.65) !important;
-    font-size: 14.5px !important;
+    color: rgba(255, 255, 255, 0.72) !important;
+    font-size: 15px !important;
     font-weight: 500 !important;
     font-family: "Google Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
     text-decoration: none !important;
@@ -3865,7 +3865,7 @@ div[data-category="nextup"] .card,
     border: 1px solid transparent !important;
     padding: 6px 14px !important;
     border-radius: 20px !important;
-    transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+    transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
     outline: none !important;
     white-space: nowrap !important;
 }
@@ -3873,54 +3873,176 @@ div[data-category="nextup"] .card,
 .apex-nav-item:hover,
 .apex-nav-item:focus-visible {
     color: #FFFFFF !important;
-    background: rgba(255, 255, 255, 0.1) !important;
-    border-color: rgba(255, 255, 255, 0.15) !important;
+    background: rgba(255, 255, 255, 0.12) !important;
+    border-color: rgba(255, 255, 255, 0.18) !important;
     transform: translateY(-1px) !important;
 }
 
 .apex-nav-item.active {
     color: #FFFFFF !important;
     font-weight: 700 !important;
-    background: rgba(255, 255, 255, 0.16) !important;
-    border-color: rgba(255, 255, 255, 0.22) !important;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 12px rgba(255, 255, 255, 0.1) !important;
+    background: rgba(255, 255, 255, 0.18) !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 12px rgba(255, 255, 255, 0.12) !important;
 }
 
-/* User Directive: On mobile portrait, DO NOT appear at the top of the homepage (drawer takes precedence) */
-@media (max-width: 768px) and (orientation: portrait) {
-    .apex-top-nav {
+/* Image 4 Search Pill Bar */
+.apex-search-pill {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    background: rgba(255, 255, 255, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    border-radius: 24px !important;
+    padding: 6px 16px !important;
+    color: rgba(255, 255, 255, 0.75) !important;
+    font-size: 13.5px !important;
+    font-family: "Google Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    margin-right: 12px !important;
+    outline: none !important;
+}
+
+.apex-search-pill:hover,
+.apex-search-pill:focus-visible {
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: #FFFFFF !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Landscape Mode & Desktop/TV: EXACT MATCH TO IMAGE 4 */
+@media (orientation: landscape), (min-aspect-ratio: 1/1), (min-width: 769px) {
+    .skinHeader {
+        background: linear-gradient(180deg, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.4) 70%, transparent 100%) !important;
+        border-bottom: none !important;
+        box-shadow: none !important;
+        padding: 10px 24px !important;
+    }
+
+    /* Hide hamburger menu in landscape/TV to match Image 4 */
+    .mainDrawerButton,
+    .headerButtonMenu {
         display: none !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
     }
-}
 
-/* User Directive: On mobile landscape, show options prominently on top of the page (mini Android TV) */
-@media (orientation: landscape) and (max-height: 600px) {
+    /* Show top navigation bar prominently */
     .apex-top-nav {
         display: inline-flex !important;
         visibility: visible !important;
+        opacity: 1 !important;
         pointer-events: auto !important;
-        gap: 12px !important;
-        margin-left: 12px !important;
     }
-    .apex-nav-item {
+
+    /* Show search pill in landscape/TV */
+    .apex-search-pill {
+        display: inline-flex !important;
+        visibility: visible !important;
+    }
+
+    /* Hide standalone icon search and cast button in landscape to match Image 4 */
+    .headerSearchButton,
+    button[data-action="search"] {
+        display: none !important;
+    }
+
+    /* Hide mobile chips in landscape/TV (already in top bar) */
+    .apex-mobile-chips {
+        display: none !important;
+    }
+
+    /* User Profile circular avatar */
+    .headerUserButtonRound,
+    .headerButton-user {
+        border-radius: 50% !important;
+        border: 1.5px solid rgba(255, 255, 255, 0.3) !important;
+        overflow: hidden !important;
+    }
+}
+
+/* Mobile Portrait Mode */
+@media (max-width: 768px) and (orientation: portrait) {
+    .apex-top-nav,
+    .apex-search-pill {
+        display: none !important;
+    }
+
+    .mainDrawerButton {
+        display: inline-flex !important;
+    }
+
+    /* Mobile horizontal glass category chips */
+    .apex-mobile-chips {
+        display: flex !important;
+        align-items: center !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        gap: 8px !important;
+        padding: 10px 14px 4px !important;
+        margin-bottom: 4px !important;
+        background: transparent !important;
+        scrollbar-width: none !important;
+        position: relative !important;
+        z-index: 10 !important;
+    }
+
+    .apex-mobile-chips::-webkit-scrollbar {
+        display: none !important;
+    }
+
+    .apex-mobile-chip {
+        flex-shrink: 0 !important;
+        background: rgba(255, 255, 255, 0.1) !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 18px !important;
+        padding: 6px 14px !important;
         font-size: 13px !important;
-        padding: 4px 10px !important;
-        border-radius: 16px !important;
+        font-weight: 500 !important;
+        font-family: "Google Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+        color: rgba(255, 255, 255, 0.8) !important;
+        text-decoration: none !important;
+        transition: all 0.2s ease !important;
+    }
+
+    .apex-mobile-chip.active {
+        background: #FFFFFF !important;
+        color: #000000 !important;
+        font-weight: 700 !important;
+        border-color: #FFFFFF !important;
     }
 }
 
-/* On Desktop / Laptop / TV screens: show top navigation prominently */
-@media (min-width: 769px) {
-    .apex-top-nav {
-        display: inline-flex !important;
-        visibility: visible !important;
-        pointer-events: auto !important;
-    }
+/* STRICT HOMEPAGE HORIZONTAL RAILS - NEVER WRAP */
+#indexPage .itemsContainer,
+.homeSectionsContainer .itemsContainer,
+.section0 .itemsContainer,
+.section1 .itemsContainer,
+.section2 .itemsContainer,
+.section3 .itemsContainer,
+.section4 .itemsContainer,
+.section5 .itemsContainer,
+.emby-scroller .itemsContainer {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scroll-behavior: smooth !important;
+    scroll-snap-type: x mandatory !important;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    gap: 14px !important;
 }
 
-/* Exact Android TV Card Dimensions & Aspect Ratios */
+#indexPage .itemsContainer > .card,
+.homeSectionsContainer .itemsContainer > .card,
+.emby-scroller .itemsContainer > .card {
+    flex-shrink: 0 !important;
+    scroll-snap-align: start !important;
+    margin-right: 14px !important;
+}
+
 /* 1. Continue Watching & Next Up (16:9 Landscape) */
 .resumeSection .card,
 .nextUpSection .card,
@@ -3953,7 +4075,7 @@ div[data-category="nextup"] .cardScalable,
     }
 }
 
-/* 2. Movies & TV Shows Base (2:3 Vertical Portrait) */
+/* 2. Portrait Media Base (2:3 Vertical) */
 .portraitCard,
 .card[data-type="Movie"],
 .card[data-type="Series"] {
@@ -3970,31 +4092,39 @@ div[data-category="nextup"] .cardScalable,
     overflow: hidden !important;
 }
 
-/* User Directive: In Movies and Series section make it 3 section (3 columns) instead of 2 section on mobile */
 @media (max-width: 600px) {
-    /* Vertical library grids (Movies & Series views): exactly 3 columns across */
-    .itemsContainer:not(.itemsContainer-slider):not(.emby-scroller),
-    .vertical-wrap,
-    #moviesPage .itemsContainer,
-    #tvShowsPage .itemsContainer,
-    #showsPage .itemsContainer,
-    #libraryPage .itemsContainer {
+    #indexPage .portraitCard,
+    #indexPage .card[data-type="Movie"],
+    #indexPage .card[data-type="Series"] {
+        width: 125px !important;
+        max-width: 125px !important;
+        flex: 0 0 125px !important;
+    }
+}
+
+/* 3. Dedicated Library/Catalog views (3-Column Grid ONLY on Library Pages, NOT Home) */
+@media (max-width: 600px) {
+    #moviesPage:not(#indexPage) .itemsContainer,
+    #tvShowsPage:not(#indexPage) .itemsContainer,
+    #showsPage:not(#indexPage) .itemsContainer,
+    #libraryPage:not(#indexPage) .itemsContainer,
+    .view-movies:not(#indexPage) .itemsContainer,
+    .view-shows:not(#indexPage) .itemsContainer {
         display: flex !important;
         flex-wrap: wrap !important;
+        flex-direction: row !important;
         gap: 8px !important;
         padding: 8px 10px !important;
         box-sizing: border-box !important;
         justify-content: flex-start !important;
     }
 
-    .itemsContainer:not(.itemsContainer-slider):not(.emby-scroller) > .card,
-    .vertical-wrap > .card,
-    #moviesPage .card,
-    #tvShowsPage .card,
-    #showsPage .card,
-    #libraryPage .card,
-    .view-movies .card,
-    .view-shows .card {
+    #moviesPage:not(#indexPage) .card,
+    #tvShowsPage:not(#indexPage) .card,
+    #showsPage:not(#indexPage) .card,
+    #libraryPage:not(#indexPage) .card,
+    .view-movies:not(#indexPage) .card,
+    .view-shows:not(#indexPage) .card {
         width: calc((100% - 16px) / 3) !important;
         max-width: calc((100% - 16px) / 3) !important;
         flex: 0 0 calc((100% - 16px) / 3) !important;
@@ -4002,27 +4132,11 @@ div[data-category="nextup"] .cardScalable,
         box-sizing: border-box !important;
     }
 
-    /* Refined compact card text for 3-column mobile layout */
-    .itemsContainer:not(.itemsContainer-slider):not(.emby-scroller) .cardText,
-    .vertical-wrap .cardText,
-    #moviesPage .cardText,
-    #tvShowsPage .cardText,
-    #showsPage .cardText {
+    #moviesPage:not(#indexPage) .cardText,
+    #tvShowsPage:not(#indexPage) .cardText,
+    #showsPage:not(#indexPage) .cardText {
         font-size: 0.78rem !important;
         line-height: 1.2 !important;
         padding: 4px 2px 0 !important;
-    }
-
-    /* Keep horizontal scrolling rails on homepage neat and peeking at 115px */
-    .itemsContainer.padded-left.padded-right .portraitCard,
-    .itemsContainer.padded-left.padded-right .card[data-type="Movie"],
-    .itemsContainer.padded-left.padded-right .card[data-type="Series"],
-    .itemsContainer-slider .portraitCard,
-    .itemsContainer-slider .card[data-type="Movie"],
-    .itemsContainer-slider .card[data-type="Series"] {
-        width: 115px !important;
-        max-width: 115px !important;
-        flex: 0 0 115px !important;
-        margin-right: 10px !important;
     }
 }
