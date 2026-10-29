@@ -4172,110 +4172,162 @@ div[data-category="nextup"] .cardScalable,
     }
 }
 
-/* 3. Dedicated Library/Catalog views (3-Column Grid ONLY on Library Pages, NOT Home) */
-@media (max-width: 600px) {
-    #moviesPage:not(#indexPage) .itemsContainer,
-    #tvShowsPage:not(#indexPage) .itemsContainer,
-    #showsPage:not(#indexPage) .itemsContainer,
-    #libraryPage:not(#indexPage) .itemsContainer,
-    .view-movies:not(#indexPage) .itemsContainer,
-    .view-shows:not(#indexPage) .itemsContainer {
+/* 3. Dedicated Library/Catalog views (3-Column Grid ONLY on Non-Home Library Pages) */
+@media (max-width: 600px) and (orientation: portrait) {
+    .page:not(#indexPage) .itemsContainer,
+    div[data-role="page"]:not(#indexPage) .itemsContainer,
+    .pageTabContent:not(#homeTab) .itemsContainer,
+    .itemsContainer.itemsContainer-wrap,
+    .itemsContainer.vertical-wrap,
+    .vertical-wrap.itemsContainer,
+    .itemsContainer:not(.itemsContainer-slider):not(#indexPage .itemsContainer),
+    #moviesPage .itemsContainer,
+    #tvShowsPage .itemsContainer,
+    #showsPage .itemsContainer,
+    #libraryPage .itemsContainer,
+    #itemsPage .itemsContainer {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        flex-direction: row !important;
+        gap: 6px !important;
+        padding: 6px 8px !important;
+        box-sizing: border-box !important;
+        justify-content: flex-start !important;
+        width: 100% !important;
+        scroll-snap-type: none !important;
+    }
+
+    .page:not(#indexPage) .itemsContainer > .card,
+    div[data-role="page"]:not(#indexPage) .itemsContainer > .card,
+    .pageTabContent:not(#homeTab) .itemsContainer > .card,
+    .itemsContainer.itemsContainer-wrap > .card,
+    .itemsContainer.vertical-wrap > .card,
+    .vertical-wrap.itemsContainer > .card,
+    .itemsContainer:not(.itemsContainer-slider):not(#indexPage .itemsContainer) > .card,
+    #moviesPage .card,
+    #tvShowsPage .card,
+    #showsPage .card,
+    #libraryPage .card,
+    #itemsPage .card,
+    .card[data-type="Series"]:not(.itemsContainer-slider .card):not(#indexPage .card),
+    .card[data-type="Movie"]:not(.itemsContainer-slider .card):not(#indexPage .card) {
+        width: calc((100% - 12px) / 3) !important;
+        max-width: calc((100% - 12px) / 3) !important;
+        min-width: calc((100% - 12px) / 3) !important;
+        flex: 0 0 calc((100% - 12px) / 3) !important;
+        margin: 0 0 10px 0 !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+        scroll-snap-align: none !important;
+    }
+
+    .page:not(#indexPage) .itemsContainer > .card > .cardBox,
+    div[data-role="page"]:not(#indexPage) .itemsContainer > .card > .cardBox,
+    .itemsContainer.vertical-wrap > .card > .cardBox,
+    .itemsContainer:not(.itemsContainer-slider):not(#indexPage .itemsContainer) > .card > .cardBox,
+    .card[data-type="Series"]:not(.itemsContainer-slider .card):not(#indexPage .card) > .cardBox,
+    .card[data-type="Movie"]:not(.itemsContainer-slider .card):not(#indexPage .card) > .cardBox {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    .page:not(#indexPage) .itemsContainer > .card .cardScalable,
+    div[data-role="page"]:not(#indexPage) .itemsContainer > .card .cardScalable,
+    .itemsContainer:not(.itemsContainer-slider):not(#indexPage .itemsContainer) > .card .cardScalable,
+    .card[data-type="Series"]:not(.itemsContainer-slider .card):not(#indexPage .card) .cardScalable,
+    .card[data-type="Movie"]:not(.itemsContainer-slider .card):not(#indexPage .card) .cardScalable {
+        aspect-ratio: 2 / 3 !important;
+        border-radius: 8px !important;
+        width: 100% !important;
+    }
+
+    .page:not(#indexPage) .itemsContainer > .card .cardText,
+    div[data-role="page"]:not(#indexPage) .itemsContainer > .card .cardText,
+    .itemsContainer:not(.itemsContainer-slider):not(#indexPage .itemsContainer) > .card .cardText,
+    .card[data-type="Series"]:not(.itemsContainer-slider .card):not(#indexPage .card) .cardText,
+    .card[data-type="Movie"]:not(.itemsContainer-slider .card):not(#indexPage .card) .cardText {
+        font-size: 0.72rem !important;
+        line-height: 1.15 !important;
+        padding: 4px 1px 0 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        max-width: 100% !important;
+    }
+}
+
+/* 4. LANDSCAPE MODE & WIDESCREEN: HIGH DENSITY CARDS (7-8 Cards Per Row) */
+@media (orientation: landscape), (min-width: 601px) {
+    .page:not(#indexPage) .itemsContainer,
+    div[data-role="page"]:not(#indexPage) .itemsContainer,
+    .pageTabContent:not(#homeTab) .itemsContainer,
+    .itemsContainer.itemsContainer-wrap,
+    .itemsContainer.vertical-wrap,
+    .vertical-wrap.itemsContainer,
+    .itemsContainer:not(.itemsContainer-slider):not(#indexPage .itemsContainer),
+    #moviesPage .itemsContainer,
+    #tvShowsPage .itemsContainer,
+    #showsPage .itemsContainer,
+    #libraryPage .itemsContainer,
+    #itemsPage .itemsContainer {
         display: flex !important;
         flex-wrap: wrap !important;
         flex-direction: row !important;
         gap: 8px !important;
-        padding: 8px 10px !important;
+        padding: 10px 14px !important;
         box-sizing: border-box !important;
         justify-content: flex-start !important;
+        width: 100% !important;
     }
 
-    #moviesPage:not(#indexPage) .card,
-    #tvShowsPage:not(#indexPage) .card,
-    #showsPage:not(#indexPage) .card,
-    #libraryPage:not(#indexPage) .card,
-    .view-movies:not(#indexPage) .card,
-    .view-shows:not(#indexPage) .card {
-        width: calc((100% - 16px) / 3) !important;
-        max-width: calc((100% - 16px) / 3) !important;
-        flex: 0 0 calc((100% - 16px) / 3) !important;
+    .page:not(#indexPage) .itemsContainer > .card,
+    div[data-role="page"]:not(#indexPage) .itemsContainer > .card,
+    .pageTabContent:not(#homeTab) .itemsContainer > .card,
+    .itemsContainer.itemsContainer-wrap > .card,
+    .itemsContainer.vertical-wrap > .card,
+    .vertical-wrap.itemsContainer > .card,
+    .itemsContainer:not(.itemsContainer-slider):not(#indexPage .itemsContainer) > .card,
+    #moviesPage .card,
+    #tvShowsPage .card,
+    #showsPage .card,
+    #libraryPage .card,
+    #itemsPage .card,
+    .card[data-type="Series"]:not(.itemsContainer-slider .card):not(#indexPage .card),
+    .card[data-type="Movie"]:not(.itemsContainer-slider .card):not(#indexPage .card) {
+        width: calc((100% - 56px) / 8) !important;
+        max-width: calc((100% - 56px) / 8) !important;
+        min-width: calc((100% - 56px) / 8) !important;
+        flex: 0 0 calc((100% - 56px) / 8) !important;
         margin: 0 0 10px 0 !important;
+        padding: 0 !important;
         box-sizing: border-box !important;
     }
 
-    #moviesPage:not(#indexPage) .cardText,
-    #tvShowsPage:not(#indexPage) .cardText,
-    #showsPage:not(#indexPage) .cardText {
-        font-size: 0.78rem !important;
+    .page:not(#indexPage) .itemsContainer > .card > .cardBox,
+    div[data-role="page"]:not(#indexPage) .itemsContainer > .card > .cardBox,
+    .itemsContainer.vertical-wrap > .card > .cardBox,
+    .itemsContainer:not(.itemsContainer-slider):not(#indexPage .itemsContainer) > .card > .cardBox,
+    .card[data-type="Series"]:not(.itemsContainer-slider .card):not(#indexPage .card) > .cardBox,
+    .card[data-type="Movie"]:not(.itemsContainer-slider .card):not(#indexPage .card) > .cardBox {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    .page:not(#indexPage) .itemsContainer > .card .cardText,
+    div[data-role="page"]:not(#indexPage) .itemsContainer > .card .cardText,
+    .itemsContainer:not(.itemsContainer-slider):not(#indexPage .itemsContainer) > .card .cardText,
+    .card[data-type="Series"]:not(.itemsContainer-slider .card):not(#indexPage .card) .cardText,
+    .card[data-type="Movie"]:not(.itemsContainer-slider .card):not(#indexPage .card) .cardText {
+        font-size: 0.75rem !important;
         line-height: 1.2 !important;
-        padding: 4px 2px 0 !important;
-    }
-}
-
-/* 4. LANDSCAPE MODE & WIDESCREEN: HIGH DENSITY CARDS (6 to 7 Cards Per Row) */
-@media (orientation: landscape), (min-width: 601px) {
-    #moviesPage:not(#indexPage) .itemsContainer,
-    #tvShowsPage:not(#indexPage) .itemsContainer,
-    #showsPage:not(#indexPage) .itemsContainer,
-    #libraryPage:not(#indexPage) .itemsContainer,
-    .view-movies:not(#indexPage) .itemsContainer,
-    .view-shows:not(#indexPage) .itemsContainer {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        flex-direction: row !important;
-        gap: 10px !important;
-        padding: 12px 16px !important;
-        box-sizing: border-box !important;
-        justify-content: flex-start !important;
-    }
-
-    #moviesPage:not(#indexPage) .card,
-    #tvShowsPage:not(#indexPage) .card,
-    #showsPage:not(#indexPage) .card,
-    #libraryPage:not(#indexPage) .card,
-    .view-movies:not(#indexPage) .card,
-    .view-shows:not(#indexPage) .card {
-        width: calc((100% - 50px) / 6) !important;
-        max-width: calc((100% - 50px) / 6) !important;
-        flex: 0 0 calc((100% - 50px) / 6) !important;
-        margin: 0 0 12px 0 !important;
-        box-sizing: border-box !important;
-    }
-
-    #moviesPage:not(#indexPage) .cardText,
-    #tvShowsPage:not(#indexPage) .cardText,
-    #showsPage:not(#indexPage) .cardText {
-        font-size: 0.8rem !important;
-        line-height: 1.25 !important;
-        padding: 4px 2px 0 !important;
+        padding: 3px 2px 0 !important;
         white-space: nowrap !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
-    }
-}
-
-@media (orientation: landscape) and (min-width: 860px), (min-width: 1024px) {
-    #moviesPage:not(#indexPage) .card,
-    #tvShowsPage:not(#indexPage) .card,
-    #showsPage:not(#indexPage) .card,
-    #libraryPage:not(#indexPage) .card,
-    .view-movies:not(#indexPage) .card,
-    .view-shows:not(#indexPage) .card {
-        width: calc((100% - 60px) / 7) !important;
-        max-width: calc((100% - 60px) / 7) !important;
-        flex: 0 0 calc((100% - 60px) / 7) !important;
-    }
-}
-
-@media (min-width: 1400px) {
-    #moviesPage:not(#indexPage) .card,
-    #tvShowsPage:not(#indexPage) .card,
-    #showsPage:not(#indexPage) .card,
-    #libraryPage:not(#indexPage) .card,
-    .view-movies:not(#indexPage) .card,
-    .view-shows:not(#indexPage) .card {
-        width: calc((100% - 70px) / 8) !important;
-        max-width: calc((100% - 70px) / 8) !important;
-        flex: 0 0 calc((100% - 70px) / 8) !important;
     }
 }
 
@@ -4292,7 +4344,6 @@ div[data-category="nextup"] .cardScalable,
     visibility: visible !important;
 }
 
-
 /* ========================================================
    APEX UNIVERSAL TV TOP NAVIGATION BAR (Home, Movies, TV Shows)
    Mounted directly under document.body - immune to React DOM wiping
@@ -4301,21 +4352,26 @@ div[data-category="nextup"] .cardScalable,
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
     height: 56px !important;
     display: flex !important;
     align-items: center !important;
-    padding-left: 16px !important;
-    padding-right: 16px !important;
+    justify-content: center !important;
+    pointer-events: none !important;
     z-index: 99999 !important;
-    pointer-events: auto !important;
+    box-sizing: border-box !important;
+    padding: 0 16px !important;
 }
 
 #apex-tv-topbar .apex-tv-tabs {
     display: flex !important;
     flex-direction: row !important;
     align-items: center !important;
-    gap: 14px !important;
+    justify-content: center !important;
+    gap: 12px !important;
     pointer-events: auto !important;
+    margin: 0 auto !important;
 }
 
 .apex-tv-tab,
@@ -4323,11 +4379,11 @@ div[data-category="nextup"] .cardScalable,
     background: transparent !important;
     border: 1px solid transparent !important;
     color: rgba(255, 255, 255, 0.72) !important;
-    font-size: 15px !important;
+    font-size: 14.5px !important;
     font-weight: 500 !important;
     font-family: "Google Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
     padding: 6px 14px !important;
-    border-radius: 20px !important;
+    border-radius: 9999px !important;
     cursor: pointer !important;
     transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
     outline: none !important;
@@ -4335,6 +4391,7 @@ div[data-category="nextup"] .cardScalable,
     -webkit-tap-highlight-color: transparent !important;
     user-select: none !important;
     -webkit-user-select: none !important;
+    line-height: 1 !important;
 }
 
 .apex-tv-tab:hover,
@@ -4358,27 +4415,27 @@ div[data-category="nextup"] .cardScalable,
 /* Mobile Portrait Mode */
 @media (max-width: 600px) and (orientation: portrait) {
     #apex-tv-topbar {
-        padding-left: 10px !important;
-        padding-right: 10px !important;
+        height: 52px !important;
+        padding: 0 8px !important;
     }
     #apex-tv-topbar .apex-tv-tabs {
         gap: 6px !important;
     }
     .apex-tv-tab,
     .apex-nav-item {
-        font-size: 13.5px !important;
-        padding: 4px 8px !important;
+        font-size: 13px !important;
+        padding: 5px 10px !important;
     }
 }
 
 /* Landscape Mode & Desktop/TV */
 @media (min-width: 601px), (orientation: landscape) {
     #apex-tv-topbar {
-        padding-left: 24px !important;
-        padding-right: 24px !important;
+        height: 56px !important;
+        padding: 0 24px !important;
     }
     #apex-tv-topbar .apex-tv-tabs {
-        gap: 20px !important;
+        gap: 18px !important;
     }
     .apex-tv-tab,
     .apex-nav-item {
@@ -4395,60 +4452,23 @@ body.hide-apex-topbar #apex-tv-topbar {
     pointer-events: none !important;
 }
 
-/* Landscape Mode: Show as many movies as possible in a single row */
-@media (orientation: landscape) {
-    .portraitCard,
-    .card[data-type="Movie"],
-    .card[data-type="Series"] {
-        width: 110px !important;
-        max-width: 110px !important;
-        flex: 0 0 110px !important;
-    }
-
-    .portraitCard .cardScalable,
-    .card[data-type="Movie"] .cardScalable,
-    .card[data-type="Series"] .cardScalable {
-        aspect-ratio: 2 / 3 !important;
-        border-radius: 10px !important;
-    }
-
-    .portraitCard .cardText,
-    .card[data-type="Movie"] .cardText,
-    .card[data-type="Series"] .cardText {
-        font-size: 0.75rem !important;
-        line-height: 1.2 !important;
-        padding: 3px 2px 0 !important;
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-    }
-
-    /* Grid catalog pages in landscape: 8 items per row */
-    .page:not(#indexPage) .itemsContainer,
-    .itemsContainer.itemsContainer-wrap {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        flex-direction: row !important;
-        gap: 8px !important;
-        padding: 10px 14px !important;
-        box-sizing: border-box !important;
-        justify-content: flex-start !important;
-    }
-
-    .page:not(#indexPage) .itemsContainer .portraitCard,
-    .page:not(#indexPage) .itemsContainer .card[data-type="Movie"],
-    .page:not(#indexPage) .itemsContainer .card[data-type="Series"],
-    .itemsContainer.itemsContainer-wrap .portraitCard,
-    .itemsContainer.itemsContainer-wrap .card[data-type="Movie"],
-    .itemsContainer.itemsContainer-wrap .card[data-type="Series"],
-    .page:not(#indexPage) .card,
-    #itemsPage .card {
-        width: calc((100% - 56px) / 8) !important;
-        max-width: calc((100% - 56px) / 8) !important;
-        flex: 0 0 calc((100% - 56px) / 8) !important;
-        margin: 0 0 10px 0 !important;
-        box-sizing: border-box !important;
-    }
+/* Suppress redundant header text and brand elements in top header bar to prevent collision */
+.headerTop .pageTitle,
+.skinHeader .pageTitle,
+header.MuiAppBar-root .pageTitle,
+header .pageTitle,
+.headerLogoText,
+.pageTitleWithDefaultLogo,
+.pageTitleWithLogo,
+.skinHeader .headerLogo {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 
 

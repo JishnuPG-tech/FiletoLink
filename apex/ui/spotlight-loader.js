@@ -781,12 +781,26 @@ function findHomeTab() {
         '.headerCastButton, .btnCast, button[data-action="cast"], button[data-action="syncplay"], ' +
         'button[title*="SyncPlay" i], button[aria-label*="SyncPlay" i], button[title*="Cast" i], button[aria-label*="Cast" i], ' +
         'button:has(svg[data-testid="CastIcon"]), button:has(svg[data-testid="GroupIcon"]), button:has(svg[data-testid="PeopleIcon"]), ' +
-        '.headerLeft, .headerTabs.sectionTabs'
+        '.headerTop .pageTitle, .skinHeader .pageTitle, .headerLogoText, .pageTitleWithDefaultLogo, .headerTabs.sectionTabs'
       );
       for (var u = 0; u < unwanted.length; u++) {
         unwanted[u].style.display = "none";
         unwanted[u].style.visibility = "hidden";
         unwanted[u].style.pointerEvents = "none";
+      }
+
+      // Handle Back Button: Hidden on Home, Visible & clickable on interior library/detail pages
+      var currentHash = window.location.hash || "";
+      var isHomeRoute = !currentHash || currentHash === "#" || currentHash === "#/" || currentHash.indexOf("/home") !== -1;
+      var backBtns = document.querySelectorAll(".headerBackButton, [data-action='back']");
+      for (var b = 0; b < backBtns.length; b++) {
+        if (isHomeRoute) {
+          backBtns[b].style.display = "none";
+        } else {
+          backBtns[b].style.display = "inline-flex";
+          backBtns[b].style.visibility = "visible";
+          backBtns[b].style.pointerEvents = "auto";
+        }
       }
 
       updateActiveNavTab();
