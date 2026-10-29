@@ -128,7 +128,8 @@ restore_jellyfin_local() {
         cp -a -f /opt/apex/ui/. /usr/share/jellyfin/web/ui/ 2>/dev/null || true
     fi
 
-    # Replace default Jellyfin icons across web assets with Apex Delta branding    if [ -f "/opt/apex/ui/icon-transparent.png" ] || [ -f "/opt/apex/ui/apex-logo.png" ]; then
+    # Replace default Jellyfin icons across web assets with Apex Delta branding
+    if [ -f "/opt/apex/ui/icon-transparent.png" ] || [ -f "/opt/apex/ui/apex-logo.png" ]; then
         SRC_LOGO="/opt/apex/ui/icon-transparent.png"
         [ ! -f "$SRC_LOGO" ] && SRC_LOGO="/opt/apex/ui/apex-logo.png"
         echo "[BRANDING] Replacing default Jellyfin web icons with Apex Delta glyph ($SRC_LOGO)..."
@@ -140,7 +141,6 @@ restore_jellyfin_local() {
                 [ -f "$f" ] && cp -f "$SRC_LOGO" "$f" 2>/dev/null || true
             done
         fi
-    fi
     fi
 
     INDEX_FILE="/usr/share/jellyfin/web/index.html"
