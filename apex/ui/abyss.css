@@ -1427,7 +1427,9 @@ div[data-role="controlgroup"] a[data-role="button"] {
 
 .transcodingProgress>div,
 .itemProgressBarForeground {
-    background-color: rgba(var(--abyss-accent), 0.3);
+    background: #E50914 !important;
+    height: 100% !important;
+    box-shadow: 0 0 10px rgba(229, 9, 20, 0.7) !important;
 }
 
 .playbackProgress>div {
@@ -1603,7 +1605,9 @@ div[data-role="controlgroup"] a[data-role="button"] {
 }
 
 .listItem:hover .itemProgressBarForeground {
-    background-color: rgba(18, 18, 18, 0.6) !important;
+    background: #E50914 !important;
+    height: 100% !important;
+    box-shadow: 0 0 10px rgba(229, 9, 20, 0.7) !important;
 }
 
 .listItem:hover .itemProgressBar {
@@ -2147,7 +2151,9 @@ body:has(#videoOsdPage) .skinHeader .MuiTypography-root.MuiTypography-body1 {
 #indexPage .itemProgressBarForeground,
 .libraryPage .itemProgressBarForeground,
 #itemDetailPage .itemProgressBarForeground {
-    background-color: rgba(var(--abyss-accent), 0.95) !important;
+    background: #E50914 !important;
+    height: 100% !important;
+    box-shadow: 0 0 10px rgba(229, 9, 20, 0.7) !important;
 }
 
 #indexPage .itemProgressBar,
@@ -3795,9 +3801,9 @@ div[data-category="nextup"] .card,
 }
 
 .itemProgressBarForeground {
-    background: #FFFFFF !important;
+    background: #E50914 !important;
     height: 100% !important;
-    box-shadow: 0 0 8px rgba(255, 255, 255, 0.6) !important;
+    box-shadow: 0 0 10px rgba(229, 9, 20, 0.7) !important;
 }
 
 /* 7. Card Text & Metadata Scrims */
@@ -3837,3 +3843,59 @@ div[data-category="nextup"] .card,
 }
 
 
+
+/* Top Floating Category Navigation (Android TV / Disney+ Style) */
+.apex-top-nav {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 24px !important;
+    margin-left: 18px !important;
+    z-index: 100 !important;
+}
+
+.apex-nav-item {
+    color: rgba(255, 255, 255, 0.65) !important;
+    font-size: 14.5px !important;
+    font-weight: 500 !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 6px 12px !important;
+    border-radius: 12px !important;
+    transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease !important;
+    outline: none !important;
+    white-space: nowrap !important;
+}
+
+.apex-nav-item:hover {
+    color: #FFFFFF !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.apex-nav-item.active {
+    color: #FFFFFF !important;
+    font-weight: 700 !important;
+    background: rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 0 14px rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Hide top nav items on narrow vertical mobile screens (drawer takes precedence) */
+@media (max-width: 680px) and (orientation: portrait) {
+    .apex-top-nav {
+        display: none !important;
+    }
+}
+
+/* Show top nav items on mobile landscape (turns phone horizontally into mini Android TV) */
+@media (orientation: landscape) and (max-height: 540px) {
+    .apex-top-nav {
+        display: inline-flex !important;
+        gap: 12px !important;
+        margin-left: 10px !important;
+    }
+    .apex-nav-item {
+        font-size: 12px !important;
+        padding: 4px 8px !important;
+    }
+}

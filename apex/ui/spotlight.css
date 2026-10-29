@@ -964,3 +964,88 @@ body {
 		transform: none !important;
 	}
 }
+/* Genre Pills above Title/Logo (Image 1 Style) */
+#genres {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 14px;
+	animation: fadeUp 0.6s var(--ease) both;
+	animation-delay: 0.2s;
+	flex-wrap: wrap;
+}
+
+.genre-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 4px 12px;
+	font-size: 0.72rem;
+	font-weight: 600;
+	color: rgba(255, 255, 255, 0.92);
+	background: rgba(255, 255, 255, 0.1);
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	border-radius: 14px;
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
+	letter-spacing: 0.02em;
+	text-transform: capitalize;
+}
+
+/* Studio & Match Affinity Badge */
+.meta-studio {
+	font-size: 0.82rem;
+	font-weight: 600;
+	color: rgba(255, 255, 255, 0.85);
+	margin-right: 12px;
+	letter-spacing: 0.01em;
+}
+
+.meta-match {
+	font-size: 0.8rem;
+	font-weight: 700;
+	color: #00E676;
+	background: rgba(0, 230, 118, 0.12);
+	border: 1px solid rgba(0, 230, 118, 0.28);
+	padding: 2px 8px;
+	border-radius: 6px;
+	margin-right: 12px;
+	letter-spacing: 0.02em;
+}
+
+.meta-year {
+	font-size: 0.82rem;
+	font-weight: 500;
+	color: rgba(255, 255, 255, 0.72);
+	margin-right: 12px;
+}
+
+/* Circular Watchlist/Heart Button (Image 1 & 2 Style) */
+.btn-circle {
+	width: 44px !important;
+	height: 44px !important;
+	border-radius: 50% !important;
+	padding: 0 !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	background: rgba(255, 255, 255, 0.1) !important;
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	border: 1px solid rgba(255, 255, 255, 0.2) !important;
+	color: #FFFFFF !important;
+	cursor: pointer;
+	transition: background-color 0.25s, transform 0.25s, border-color 0.25s, color 0.25s;
+	flex-shrink: 0;
+}
+
+.btn-circle:hover, .btn-circle:focus-visible {
+	background: rgba(255, 255, 255, 0.24) !important;
+	transform: scale(1.08);
+	border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.btn-circle.active, .btn-circle.active svg {
+	color: #E50914 !important;
+	fill: #E50914 !important;
+	border-color: rgba(229, 9, 20, 0.6) !important;
+}

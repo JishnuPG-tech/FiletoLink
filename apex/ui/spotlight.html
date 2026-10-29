@@ -15,6 +15,7 @@
 <body>
 	<div id="backdrop"><img id="backdrop-img" alt="" /></div>
 	<div id="content">
+		<div id="genres"></div>
 		<img id="logo" alt="" />
 		<div id="title"></div>
 		<div id="episode-label"></div>
@@ -817,6 +818,24 @@
 					}
 				} catch { /* parent sync is optional */ }
 				let episodePrefix = '';
+				try {
+					const genresContainer = $('genres');
+					if (genresContainer) {
+						while (genresContainer.firstChild) genresContainer.removeChild(genresContainer.firstChild);
+						const genres = item.Genres || [];
+						if (genres.length > 0) {
+							genres.slice(0, 3).forEach(g => {
+								const pill = document.createElement('span');
+								pill.className = 'genre-pill';
+								pill.textContent = g;
+								genresContainer.appendChild(pill);
+							});
+							genresContainer.style.display = 'flex';
+						} else {
+							genresContainer.style.display = 'none';
+						}
+					}
+				} catch (e) {}
 
 				try {
 					if (artwork.logo) {
@@ -887,9 +906,20 @@
 					infoButton.setAttribute('aria-label', `View details for ${title}`);
 					setButtonContent(infoButton, SVG_INFO);
 					infoButton.addEventListener('click', event => { event.preventDefault(); navigateTo(detailRoute); });
+					const watchlistButton = document.createElement('button');
+					watchlistButton.type = 'button';
+					watchlistButton.className = 'btn btn-circle btn-watchlist';
+					watchlistButton.setAttribute('aria-label', `Add ${title} to Watchlist`);
+					watchlistButton.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>';
+					watchlistButton.addEventListener('click', (e) => {
+						e.stopPropagation();
+						watchlistButton.classList.toggle('active');
+					});
+
 					const buttonsContainer = $('buttons');
 					while (buttonsContainer.firstChild) buttonsContainer.removeChild(buttonsContainer.firstChild);
 					buttonsContainer.appendChild(playButton);
+					buttonsContainer.appendChild(watchlistButton);
 					buttonsContainer.appendChild(trailerButton);
 					buttonsContainer.appendChild(infoButton);
 				} catch (error) {
@@ -899,6 +929,28 @@
 				try {
 					const meta = $('meta');
 					while (meta.firstChild) meta.removeChild(meta.firstChild);
+
+					const studio = (item.Studios && item.Studios[0] && item.Studios[0].Name) || (isSeries ? 'Series' : 'Feature Film');
+					if (studio) {
+						const studioSpan = document.createElement('span');
+						studioSpan.className = 'meta-studio';
+						studioSpan.textContent = studio;
+						meta.appendChild(studioSpan);
+					}
+
+					const matchSpan = document.createElement('span');
+					matchSpan.className = 'meta-match';
+					const matchPct = item.CommunityRating ? Math.round(item.CommunityRating * 10) : 98;
+					matchSpan.textContent = `${matchPct}% Match`;
+					meta.appendChild(matchSpan);
+
+					if (item.ProductionYear) {
+						const yearSpan = document.createElement('span');
+						yearSpan.className = 'meta-year';
+						yearSpan.textContent = item.ProductionYear;
+						meta.appendChild(yearSpan);
+					}
+
 					if (isSeries) {
 						const seasonText = item.ChildCount ? `${item.ChildCount} Season${item.ChildCount > 1 ? 's' : ''}` : 'Series';
 						meta.appendChild(metaPillWithIcon(SVG_TV, seasonText));
@@ -906,8 +958,6 @@
 					if (item.OfficialRating) meta.appendChild(metaPillWithIcon(SVG_RATING, item.OfficialRating));
 					const runtime = formatRuntime(item.RunTimeTicks);
 					if (runtime) meta.appendChild(metaPillWithIcon(SVG_CLOCK, runtime));
-					const rating = Number(item.CommunityRating);
-					if (Number.isFinite(rating) && rating > 0) meta.appendChild(metaPillWithIcon(SVG_STAR, rating.toFixed(1)));
 				} catch (error) {
 					console.error('[Abyss Spotlight] meta pills section failed:', error);
 				}

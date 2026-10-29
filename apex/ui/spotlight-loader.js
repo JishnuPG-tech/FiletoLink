@@ -607,6 +607,58 @@
     });
   }
 
+  function installTopNavigation() {
+    safe(function () {
+      var header = document.querySelector(".skinHeader, .skinHeader-withBackground");
+      if (!header) return;
+      if (header.querySelector(".apex-top-nav")) return;
+
+      var navContainer = document.createElement("div");
+      navContainer.className = "apex-top-nav";
+
+      var categories = [
+        { label: "Home", hash: "#/home" },
+        { label: "Movies", hash: "#/movies" },
+        { label: "TV Shows", hash: "#/shows" },
+        { label: "My Library", hash: "#/library" }
+      ];
+
+      var currentHash = window.location.hash || "";
+
+      categories.forEach(function (cat) {
+        var a = document.createElement("a");
+        a.className = "apex-nav-item" + ((cat.label === "Home" && (!currentHash || currentHash.indexOf("/home") !== -1)) ? " active" : "");
+        a.textContent = cat.label;
+        a.href = cat.hash;
+        a.addEventListener("click", function (e) {
+          e.preventDefault();
+          var allLinks = navContainer.querySelectorAll(".apex-nav-item");
+          for (var i = 0; i < allLinks.length; i++) allLinks[i].classList.remove("active");
+          a.classList.add("active");
+
+          if (cat.label === "Home") {
+            window.location.hash = "#/home";
+          } else {
+            var targetCard = document.querySelector('.card[data-type="' + (cat.label === "Movies" ? "Movie" : "Series") + '"], .lnkMediaFolder[title*="' + cat.label + '"]');
+            if (targetCard && targetCard.click) {
+              targetCard.click();
+            } else {
+              window.location.hash = cat.hash;
+            }
+          }
+        });
+        navContainer.appendChild(a);
+      });
+
+      var headerLeft = header.querySelector(".headerLeft") || header.firstChild;
+      if (headerLeft && headerLeft.parentNode) {
+        headerLeft.parentNode.insertBefore(navContainer, headerLeft.nextSibling);
+      } else {
+        header.insertBefore(navContainer, header.firstChild);
+      }
+    });
+  }
+
   var dpadInstalled = false;
   function installSpatialDpadNavigation() {
     safe(function () {
@@ -856,6 +908,7 @@
         removeAlphaPicker();
         installClaudeMenuIcon();
         installApexBranding();
+      installTopNavigation();
         replaceServerNameText();
         installSpatialDpadNavigation();
         enhanceLibraryCards();
@@ -871,6 +924,7 @@
     syncSettingsTheme();
     ensureDarkTheme();
     installApexBranding();
+      installTopNavigation();
     replaceServerNameText();
     installSpatialDpadNavigation();
     enhanceLibraryCards();
@@ -902,6 +956,7 @@
       removeAlphaPicker();
       installClaudeMenuIcon();
       installApexBranding();
+      installTopNavigation();
       replaceServerNameText();
       installSpatialDpadNavigation();
       enhanceLibraryCards();
