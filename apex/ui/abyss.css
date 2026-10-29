@@ -3596,6 +3596,8 @@ button[aria-label="menu"],
 /* ==========================================================================
    Apex Official Delta Logo Branding (Pure OLED Pitch Black + Solid White)
    ========================================================================== */
+img[src*="icon-transparent"],
+img[src*="apex-logo"],
 .imgLogoIcon,
 .adminDrawerLogo img,
 .headerLogo img,
@@ -3605,12 +3607,34 @@ button[aria-label="menu"],
     background-image: url('apex-logo.svg') !important;
     background-size: contain !important;
     background-repeat: no-repeat !important;
-    background-position: left center !important;
-    max-height: 36px !important;
-    max-width: 36px !important;
+    background-position: center !important;
     object-fit: contain !important;
 }
 
+/* Header Start Icon & Title Bar Logo */
+.MuiButton-startIcon img,
+.skinHeader img,
+header img {
+    content: url('apex-logo.svg') !important;
+    max-height: 28px !important;
+    max-width: 28px !important;
+    object-fit: contain !important;
+}
+
+/* Drawer Brand Card Logo */
+.mainDrawer a[to="/"] img,
+.mainDrawer .adminDrawerLogo img,
+.mainDrawer img[src*="icon-transparent"],
+.mainDrawer img[src*="apex-logo"] {
+    content: url('apex-logo.svg') !important;
+    height: 40px !important;
+    width: 40px !important;
+    max-height: 40px !important;
+    max-width: 40px !important;
+    object-fit: contain !important;
+}
+
+/* Splash Screen Logo */
 .splashLogo,
 #splashScreen .splashLogo {
     background-image: url('apex-logo.svg') !important;
@@ -3622,6 +3646,7 @@ button[aria-label="menu"],
 }
 
 /* Modern Drawer Server Brand Card */
+.mainDrawer a[to="/"],
 .mainDrawer .navMenuOption.lnkMediaFolder.btnSelectServer,
 .mainDrawer .navMenuOption.btnSelectServer,
 .mainDrawer .adminDrawerLogo,
@@ -3633,10 +3658,15 @@ button[aria-label="menu"],
     padding: 10px 14px !important;
 }
 
-/* Never show raw container hostname or server URL in the UI */
+/* Never show raw container hostname or server URL anywhere in the UI */
 .mainDrawer .serverUrl,
 .mainDrawer .serverAddress,
-.manualServerAddress {
+.manualServerAddress,
+.serverUrl,
+.serverAddress,
+[class*="serverUrl"],
+[class*="serverAddress"],
+[class*="ServerAddress"] {
     display: none !important;
 }
 

@@ -298,17 +298,26 @@ async def proxy_http_request(
         except Exception:
             pass
 
-    # Ensure clean ServerName everywhere: never expose container hostname or server URL in system info
-    if "application/json" in content_type and any(k in request.url.path.lower() for k in ("system/info", "system/configuration")) and content:
+    # Ensure clean ServerName everywhere: never expose container hostname or server URL in JSON responses
+    if "application/json" in content_type and content:
         try:
             import json
-            info_data = json.loads(content.decode("utf-8"))
-            if isinstance(info_data, dict):
-                if "ServerName" in info_data:
-                    info_data["ServerName"] = "Apex"
-                if "Name" in info_data and any(x in str(info_data.get("Name", "")).lower() for x in ("r-jishnupg", "hf.space", "http")):
-                    info_data["Name"] = "Apex"
-            content = json.dumps(info_data).encode("utf-8")
+            decoded = content.decode("utf-8")
+            if any(k in decoded for k in ("ServerName", "r-jishnupg-", "hf.space")):
+                info_data = json.loads(decoded)
+                def sanitize_node(obj):
+                    if isinstance(obj, dict):
+                        for k, v in obj.items():
+                            if k in ("ServerName", "Name") and isinstance(v, str):
+                                if any(x in v.lower() for x in ("r-jishnupg", "hf.space", "http")):
+                                    obj[k] = "Apex"
+                            elif isinstance(v, (dict, list)):
+                                sanitize_node(v)
+                    elif isinstance(obj, list):
+                        for item in obj:
+                            sanitize_node(item)
+                sanitize_node(info_data)
+                content = json.dumps(info_data).encode("utf-8")
         except Exception:
             pass
 

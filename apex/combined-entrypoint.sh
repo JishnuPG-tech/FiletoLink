@@ -128,6 +128,21 @@ restore_jellyfin_local() {
         cp -a -f /opt/apex/ui/. /usr/share/jellyfin/web/ui/ 2>/dev/null || true
     fi
 
+    # Replace default Jellyfin icons across web assets with Apex Delta branding
+    if [ -f "/opt/apex/ui/icon-transparent.png" ] || [ -f "/opt/apex/ui/apex-logo.png" ]; then
+        SRC_LOGO="/opt/apex/ui/icon-transparent.png"
+        [ ! -f "" ] && SRC_LOGO="/opt/apex/ui/apex-logo.png"
+        echo "[BRANDING] Replacing default Jellyfin web icons with Apex Delta glyph ()..."
+        find /usr/share/jellyfin/web -name "icon-transparent*.png" -exec cp -f "" {} \; 2>/dev/null || true
+        find /usr/share/jellyfin/web -name "touchicon*.png" -exec cp -f "" {} \; 2>/dev/null || true
+        find /usr/share/jellyfin/web -name "notificationicon*.png" -exec cp -f "" {} \; 2>/dev/null || true
+        if [ -d "/usr/share/jellyfin/web/favicons" ]; then
+            for f in /usr/share/jellyfin/web/favicons/*.png; do
+                [ -f "" ] && cp -f "" "" 2>/dev/null || true
+            done
+        fi
+    fi
+
     INDEX_FILE="/usr/share/jellyfin/web/index.html"
     if [ -f "$INDEX_FILE" ]; then
         # Ensure <html> has data-theme="dark"

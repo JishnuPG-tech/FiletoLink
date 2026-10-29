@@ -105,6 +105,20 @@ async def route_catch_all(path: str, request: Request):
     raw_path = request.url.path
     req_path = raw_path.lower()
     
+    # Brand logo interception: serve Apex Delta vector glyph & PNG directly for any Jellyfin logo/icon request
+    if any(icon_kw in req_path for icon_kw in ("icon-transparent", "apex-logo", "touchicon", "notificationicon")):
+        for logo_cand in ("/opt/apex/ui/icon-transparent.png", "/opt/apex/ui/apex-logo.png", "apex/ui/apex-logo.png"):
+            if os.path.isfile(logo_cand):
+                logo_png = logo_cand
+                break
+        else:
+            logo_png = None
+        logo_svg = "/opt/apex/ui/apex-logo.svg" if os.path.isfile("/opt/apex/ui/apex-logo.svg") else "apex/ui/apex-logo.svg"
+        if req_path.endswith(".svg") and os.path.isfile(logo_svg):
+            return FileResponse(logo_svg, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=86400"})
+        elif logo_png and os.path.isfile(logo_png):
+            return FileResponse(logo_png, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
     if req_path in ("/", "/index.html"):
         return await root_portal(request)
     

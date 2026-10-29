@@ -473,7 +473,19 @@
         document.head.appendChild(link);
       }
 
-      // 2. Header and Drawer Logos - replace any default icons or SVGs with our exact Apex Delta glyph
+      // 2. Direct <img> replacements for all Jellyfin / icon-transparent references
+      var targetImgs = document.querySelectorAll(
+        'img[src*="icon-transparent"], img[src*="jellyfin"], img[src*="touchicon"], .adminDrawerLogo img, .headerLogo img, .MuiButton-startIcon img, .mainDrawer a[to="/"] img, .mainDrawer a[href="/"] img'
+      );
+      for (var k = 0; k < targetImgs.length; k++) {
+        var imgEl = targetImgs[k];
+        if (imgEl.src && !imgEl.src.includes("apex-logo")) {
+          imgEl.src = logoSvgUrl;
+          imgEl.srcset = "";
+        }
+      }
+
+      // 3. Header and Drawer Logos - replace any default icons or SVGs with our exact Apex Delta glyph
       var logos = document.querySelectorAll(
         ".imgLogoIcon, .adminDrawerLogo img, .adminDrawerLogo, .headerLogo, .pageTitleWithDefaultLogo, .btnSelectServer .navMenuOptionIcon"
       );
@@ -488,19 +500,22 @@
         }
       }
 
-      // 3. Drawer top card logo icon
-      var drawerServerOption = document.querySelector(".mainDrawer .btnSelectServer, .mainDrawer .navMenuOption:first-child");
-      if (drawerServerOption && !drawerServerOption.querySelector(".apex-delta-icon")) {
-        var iconSpan = drawerServerOption.querySelector(".navMenuOptionIcon, .material-icons, svg");
-        if (iconSpan) {
-          iconSpan.outerHTML = '<span class="navMenuOptionIcon apex-drawer-icon" style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;margin-right:12px;">' + APEX_DELTA_SVG + '</span>';
+      // 4. Drawer top card logo icon
+      var drawerServerOption = document.querySelector(".mainDrawer a[to='/'], .mainDrawer a[href='/'], .mainDrawer .btnSelectServer, .mainDrawer .navMenuOption:first-child");
+      if (drawerServerOption) {
+        var drawerImg = drawerServerOption.querySelector('img[src*="icon-transparent"], img');
+        if (drawerImg && !drawerImg.src.includes("apex-logo")) {
+          drawerImg.src = logoSvgUrl;
         }
       }
 
-      // 4. Login Page top icon
-      var loginHeader = document.querySelector("#loginPage .headerLogo, .skinHeader .headerLogo, .skinHeader .pageTitleWithDefaultLogo");
-      if (loginHeader && !loginHeader.querySelector(".apex-delta-icon")) {
-        loginHeader.innerHTML = APEX_DELTA_SVG;
+      // 5. Login Page top icon & startIcon
+      var loginHeader = document.querySelector("#loginPage .headerLogo, .skinHeader .headerLogo, .skinHeader .pageTitleWithDefaultLogo, .MuiButton-startIcon");
+      if (loginHeader) {
+        var startImg = loginHeader.querySelector("img");
+        if (startImg && !startImg.src.includes("apex-logo")) {
+          startImg.src = logoSvgUrl;
+        }
       }
     });
   }
@@ -729,7 +744,7 @@
     function replaceServerNameText() {
       try {
         if (!document.body) return;
-        var urlPattern = /r-jishnupg-[a-z0-9-]+|(?:https?:\/\/)?[\w.-]+\.hf\.space[^\s]*|https?:\/\/[^\s<>'"]+/gi;
+        var urlPattern = /r-jishnupg-[a-z0-9-]+|(?:https?:\/\/)?[\w.-]+\.hf\.space[^\s]*|https?:\/\/[^\s<>'"]+|127\.0\.0\.1|localhost:\d+/gi;
         var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
         var node;
         while ((node = walker.nextNode())) {
@@ -738,13 +753,17 @@
           }
         }
         var targets = document.querySelectorAll(
-          ".pageTitle, .sectionTitle, .sectionName, .navMenuOptionText, .headerButton, .sidebarHeader, .cardText, .cardLargeText, .adminDrawerLogo, .btnSelectServer"
+          ".pageTitle, .sectionTitle, .sectionName, .navMenuOptionText, .headerButton, .sidebarHeader, .cardText, .cardLargeText, .adminDrawerLogo, .btnSelectServer, a[href='/'], a[to='/'], .MuiButton-root, .MuiTypography-root, .MuiListItemText-primary, .MuiListItemText-secondary, .MuiTypography-h6"
         );
         for (var i = 0; i < targets.length; i++) {
           var t = targets[i];
           if (t.textContent && urlPattern.test(t.textContent)) {
             t.textContent = t.textContent.replace(urlPattern, "Apex");
           }
+        }
+        var hiddenUrls = document.querySelectorAll(".serverUrl, .serverAddress, .manualServerAddress, [class*='serverUrl'], [class*='serverAddress']");
+        for (var h = 0; h < hiddenUrls.length; h++) {
+          hiddenUrls[h].style.display = "none";
         }
         if (document.title && urlPattern.test(document.title)) {
           document.title = document.title.replace(urlPattern, "Apex");
