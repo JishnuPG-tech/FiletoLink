@@ -3565,3 +3565,32 @@ button[aria-label="menu"],
     align-items: center !important;
     justify-content: center !important;
 }
+
+/* ==========================================================================
+   Apex Official Delta Logo Branding (Pure OLED Pitch Black + Solid White)
+   ========================================================================== */
+.imgLogoIcon,
+.adminDrawerLogo img {
+    content: url('/ui/apex-logo.svg') !important;
+    max-height: 36px !important;
+    object-fit: contain !important;
+}
+
+.pageTitleWithLogo {
+    background-image: url('/ui/apex-logo.svg') !important;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    background-position: left center !important;
+    min-height: 36px !important;
+}
+
+.splashLogo,
+#splashScreen .splashLogo {
+    background-image: url('/ui/apex-logo.svg') !important;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    width: 120px !important;
+    height: 120px !important;
+}
+

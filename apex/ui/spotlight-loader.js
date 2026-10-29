@@ -438,6 +438,37 @@
     });
   }
 
+  function installApexBranding() {
+    safe(function () {
+      var logoSvgUrl = "/ui/apex-logo.svg";
+      // 1. Favicon sync
+      var links = document.querySelectorAll("link[rel*='icon']");
+      for (var i = 0; i < links.length; i++) {
+        if (links[i].getAttribute("data-apex-logo") !== "true") {
+          links[i].setAttribute("data-apex-logo", "true");
+          links[i].href = logoSvgUrl;
+        }
+      }
+      if (links.length === 0 && document.head) {
+        var link = document.createElement("link");
+        link.rel = "icon";
+        link.type = "image/svg+xml";
+        link.href = logoSvgUrl;
+        link.setAttribute("data-apex-logo", "true");
+        document.head.appendChild(link);
+      }
+
+      // 2. Header and Drawer Logos
+      var logos = document.querySelectorAll(".imgLogoIcon, .adminDrawerLogo img");
+      for (var j = 0; j < logos.length; j++) {
+        var img = logos[j];
+        if (img.src && !img.src.includes("apex-logo.svg")) {
+          img.src = logoSvgUrl;
+        }
+      }
+    });
+  }
+
   function boot() {
     function ensureDarkTheme() {
       try {
@@ -541,6 +572,7 @@
         installSpotlight();
         removeAlphaPicker();
         installClaudeMenuIcon();
+        installApexBranding();
         replaceServerNameText();
       };
 
@@ -553,6 +585,7 @@
 
     syncSettingsTheme();
     ensureDarkTheme();
+    installApexBranding();
     replaceServerNameText();
     window.addEventListener("hashchange", syncSettingsTheme);
     if (typeof MutationObserver === "function") {
@@ -580,7 +613,8 @@
       syncSettingsTheme();
       scheduleInstall();
       removeAlphaPicker();
-        installClaudeMenuIcon();
+      installClaudeMenuIcon();
+      installApexBranding();
       replaceServerNameText();
       if (currentSync) safe(currentSync);
     }, 2000);

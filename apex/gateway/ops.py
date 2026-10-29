@@ -442,13 +442,13 @@ JELLYFIN_THEME_CSS = (
     '@import url("https://raw.githubusercontent.com/Automationxperts/jellyflix/main/Logo.css");\n'
     "/* App bar / sidebar logo */\n"
     ".imgLogoIcon {\n"
-    "content: url('https://raw.githubusercontent.com/Automationxperts/jellyflix/main/img/logo.png') !important; }\n"
+    "content: url('/ui/apex-logo.svg') !important; }\n"
     "/* Main Drawer Mobile Logo */\n"
     ".adminDrawerLogo img {\n"
-    "content: url('https://raw.githubusercontent.com/Automationxperts/jellyflix/main/img/logo.png') !important; }\n"
+    "content: url('/ui/apex-logo.svg') !important; }\n"
     "/* Home Page Logo */\n"
     ".pageTitleWithLogo {\n"
-    "background-image: url('https://raw.githubusercontent.com/Automationxperts/jellyflix/main/img/logo.png') !important; }\n"
+    "background-image: url('/ui/apex-logo.svg') !important; }\n"
 )
 
 _JELLYFIN_BASE = "http://127.0.0.1:8096"
