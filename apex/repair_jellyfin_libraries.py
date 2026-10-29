@@ -772,8 +772,7 @@ def repair_system_xml(configs=None):
             elif "</SystemConfiguration>" in content:
                 content = content.replace(
                     "</SystemConfiguration>",
-                    "  <ServerName>Apex</ServerName>
-</SystemConfiguration>"
+                    "  <ServerName>Apex</ServerName>\n</SystemConfiguration>"
                 )
                 changed = True
 
