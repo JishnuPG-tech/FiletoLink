@@ -146,6 +146,10 @@ restore_jellyfin_local() {
         sed -i 's|<link rel="stylesheet" href="[^"]*netflix-dark.css"></head>|</head>|g' "$INDEX_FILE" 2>/dev/null || true
         sed -i 's|<link rel="stylesheet" href="[^"]*pitch-black.css"></head>|</head>|g' "$INDEX_FILE" 2>/dev/null || true
 
+        # Replace default Jellyfin favicon with Apex Delta logo
+        sed -i 's|<link [^>]*rel="shortcut icon"[^>]*>|<link rel="shortcut icon" href="ui/apex-logo.svg" type="image/svg+xml">|g' "$INDEX_FILE" 2>/dev/null || true
+        sed -i 's|<link [^>]*rel="icon"[^>]*>|<link rel="icon" href="ui/apex-logo.svg" type="image/svg+xml">|g' "$INDEX_FILE" 2>/dev/null || true
+
         # Inject Abyss CSS into <head>
         sed -i 's|</head>|<link rel="stylesheet" href="ui/abyss.css" data-abyss-theme></head>|g' "$INDEX_FILE" 2>/dev/null || true
 
