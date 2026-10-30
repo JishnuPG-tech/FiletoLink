@@ -727,8 +727,10 @@ function findHomeTab() {
   // ========================================================
   function deduplicateAndEnrichCards() {
     try {
+      // 1. Safe non-destructive deduplication for library & home rails
       var containers = document.querySelectorAll('.itemsContainer, .verticalSection .cardBoxParent, .section1, .section2, .section3, .section4, .section5, .section6, .section7');
       containers.forEach(function(container) {
+        if (container.closest('#itemDetailPage') || container.closest('.detailPagePrimaryContainer')) return;
         var cards = container.querySelectorAll('.card');
         if (!cards || !cards.length) return;
         var seen = {};
@@ -739,14 +741,20 @@ function findHomeTab() {
           var key = rawTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
           if (!key) return;
 
-          var hasImg = !!card.querySelector('img[src]:not([src=""])');
+          var cic = card.querySelector('.cardImageContainer');
+          var bg = cic ? (cic.style.backgroundImage || '') : '';
+          var hasImg = !!card.querySelector('img[src]:not([src=""])') ||
+                       (bg.indexOf('url(') !== -1) ||
+                       (cic && (cic.getAttribute('data-src') || cic.getAttribute('data-image-url') || cic.classList.contains('lazy-image-fadein-fast')));
 
           if (seen[key]) {
             if (hasImg && !seen[key].hasImg) {
-              seen[key].card.remove();
+              seen[key].card.style.display = 'none';
+              seen[key].card.classList.add('hide', 'apex-dup-hidden');
               seen[key] = { card: card, hasImg: hasImg };
             } else {
-              card.remove();
+              card.style.display = 'none';
+              card.classList.add('hide', 'apex-dup-hidden');
             }
           } else {
             seen[key] = { card: card, hasImg: hasImg };
@@ -754,19 +762,27 @@ function findHomeTab() {
         });
       });
 
-      // Enrich cards that lack poster images with structured visual cards
-      var blankCards = document.querySelectorAll('.card:not(.has-apex-poster)');
+      // 2. Safe Fallback Art for genuinely blank cards (NEVER on detail page)
+      var blankCards = document.querySelectorAll(':is(#indexPage, .libraryPage, #moviesPage, #tvShowsPage) .card:not(.has-apex-poster)');
       blankCards.forEach(function(card) {
-        var img = card.querySelector('img[src]:not([src=""])');
-        var imgContainer = card.querySelector('.cardImageContainer');
-        if (!img && imgContainer && !imgContainer.querySelector('.apex-fallback-art')) {
+        if (card.closest('#itemDetailPage')) return;
+        var cic = card.querySelector('.cardImageContainer');
+        if (!cic) return;
+        var bg = cic.style.backgroundImage || '';
+        if (bg.indexOf('url(') !== -1 || card.querySelector('img[src]:not([src=""])')) return;
+
+        if (cic.classList.contains('defaultCardBackground') || !cic.getAttribute('data-src')) {
           var titleEl = card.querySelector('.cardText-first, .cardTitle, .cardText');
-          var titleText = titleEl ? titleEl.textContent.trim() : 'Media';
-          var fallback = document.createElement('div');
-          fallback.className = 'apex-fallback-art';
-          fallback.innerHTML = '<div class="apex-art-icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="rgba(255,255,255,0.7)"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg></div><div class="apex-art-title">' + titleText + '</div>';
-          imgContainer.appendChild(fallback);
-          card.classList.add('has-apex-poster');
+          if (!titleEl) return;
+          var titleText = titleEl.textContent.trim();
+          if (!titleText || titleText === 'Media') return;
+          if (!cic.querySelector('.apex-fallback-art')) {
+            var fallback = document.createElement('div');
+            fallback.className = 'apex-fallback-art';
+            fallback.innerHTML = '<div class="apex-art-icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="rgba(255,255,255,0.7)"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg></div><div class="apex-art-title">' + titleText + '</div>';
+            cic.appendChild(fallback);
+            card.classList.add('has-apex-poster');
+          }
         }
       });
     } catch (e) {}
@@ -843,16 +859,14 @@ function findHomeTab() {
       }
 
             // 1.4 Guarantee strictly one poster on #itemDetailPage
+      // 1.4 Guarantee strictly one poster on #itemDetailPage without breaking DOM references
       var detailPosters = document.querySelectorAll('#itemDetailPage .detailPagePrimaryContainer .detailImageContainer');
       if (detailPosters.length > 1) {
         for (var dp = 1; dp < detailPosters.length; dp++) {
-          detailPosters[dp].remove();
+          detailPosters[dp].style.setProperty('display', 'none', 'important');
         }
       }
-      var ghostLogos = document.querySelectorAll('#itemDetailPage .detailLogo');
-      for (var gl = 0; gl < ghostLogos.length; gl++) {
-        ghostLogos[gl].remove();
-      }
+      // Never remove .detailLogo from DOM - Jellyfin itemDetails.chunk.js requires it for classList operations
 
       deduplicateAndEnrichCards();
 
