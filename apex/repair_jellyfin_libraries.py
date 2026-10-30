@@ -930,6 +930,33 @@ def deduplicate_media_strms(roots=None, databases=None):
                         print(f"[DEDUP] Error removing file {dup}: {e}")
                 all_deleted_paths.append(dup)
 
+        # Also detect duplicate episodes in the same Season folder matching SxxExx
+        ep_map = {}
+        for dirpath, _, filenames in os.walk(root_dir):
+            for fn in filenames:
+                if fn.lower().endswith(".strm"):
+                    m = re.search(r"(?i)S(\d+)E(\d+)", fn)
+                    if m:
+                        key = (os.path.normpath(dirpath), m.group(1), m.group(2))
+                        fp = os.path.join(dirpath, fn)
+                        ep_map.setdefault(key, []).append(fp)
+
+        for key, filepaths in ep_map.items():
+            if len(filepaths) <= 1:
+                continue
+            filepaths.sort(key=score_path, reverse=True)
+            canonical = filepaths[0]
+            for dup in filepaths[1:]:
+                if dup in all_deleted_paths:
+                    continue
+                print(f"[DEDUP] Removing duplicate episode file: '{dup}' (retaining '{canonical}')")
+                try:
+                    if os.path.exists(dup):
+                        os.remove(dup)
+                except Exception as e:
+                    print(f"[DEDUP] Error removing episode file {dup}: {e}")
+                all_deleted_paths.append(dup)
+
     for db_p in db_list:
         if not os.path.exists(db_p):
             continue
