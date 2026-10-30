@@ -721,6 +721,57 @@ function findHomeTab() {
     );
   }
 
+  
+  // ========================================================
+  // AUTOMATIC CARD DEDUPLICATION & FALLBACK ART ENRICHMENT
+  // ========================================================
+  function deduplicateAndEnrichCards() {
+    try {
+      var containers = document.querySelectorAll('.itemsContainer, .verticalSection .cardBoxParent, .section1, .section2, .section3, .section4, .section5, .section6, .section7');
+      containers.forEach(function(container) {
+        var cards = container.querySelectorAll('.card');
+        if (!cards || !cards.length) return;
+        var seen = {};
+        cards.forEach(function(card) {
+          var titleEl = card.querySelector('.cardText-first, .cardTitle, .cardText');
+          if (!titleEl) return;
+          var rawTitle = titleEl.textContent.trim();
+          var key = rawTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (!key) return;
+
+          var hasImg = !!card.querySelector('img[src]:not([src=""])');
+
+          if (seen[key]) {
+            if (hasImg && !seen[key].hasImg) {
+              seen[key].card.remove();
+              seen[key] = { card: card, hasImg: hasImg };
+            } else {
+              card.remove();
+            }
+          } else {
+            seen[key] = { card: card, hasImg: hasImg };
+          }
+        });
+      });
+
+      // Enrich cards that lack poster images with structured visual cards
+      var blankCards = document.querySelectorAll('.card:not(.has-apex-poster)');
+      blankCards.forEach(function(card) {
+        var img = card.querySelector('img[src]:not([src=""])');
+        var imgContainer = card.querySelector('.cardImageContainer');
+        if (!img && imgContainer && !imgContainer.querySelector('.apex-fallback-art')) {
+          var titleEl = card.querySelector('.cardText-first, .cardTitle, .cardText');
+          var titleText = titleEl ? titleEl.textContent.trim() : 'Media';
+          var fallback = document.createElement('div');
+          fallback.className = 'apex-fallback-art';
+          fallback.innerHTML = '<div class="apex-art-icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="rgba(255,255,255,0.7)"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg></div><div class="apex-art-title">' + titleText + '</div>';
+          imgContainer.appendChild(fallback);
+          card.classList.add('has-apex-poster');
+        }
+      });
+    } catch (e) {}
+  }
+
   function ensureTopNavigation() {
     safe(function () {
       discoverLibraries();
@@ -763,30 +814,31 @@ function findHomeTab() {
       }
 
       if (tvTopbar) {
-        var isVideo = !!document.querySelector(".videoPlayerContainer:not(.hide), #videoOsdPage:not(.hide), video");
+        var activePage = document.querySelector(".page:not(.hide), .view:not(.hide)");
+        var activeId = activePage ? activePage.id : "";
         var hash = (window.location.hash || "").toLowerCase();
 
-        // Strictly detect auth / startup / error / server mismatch pages
-        var isMismatch = !!document.querySelector("#serverMismatchPage, .serverMismatchPage") || (document.body.innerText && document.body.innerText.indexOf("Server Mismatch") !== -1);
-        var isAuthScreen = !!document.querySelector("#loginPage:not(.hide), .loginPage:not(.hide), #selectServerPage:not(.hide), .selectServerPage:not(.hide), .manualLoginForm, .manualServerContainer");
+        var isVideo = !!document.querySelector(".videoPlayerContainer:not(.hide), #videoOsdPage:not(.hide)");
+        var isMismatch = !!document.querySelector("#serverMismatchPage:not(.hide), .serverMismatchPage:not(.hide)");
+        var isAuthScreen = !!document.querySelector("#loginPage:not(.hide), .loginPage:not(.hide), #selectServerPage:not(.hide), .selectServerPage:not(.hide)");
         var isAuthRoute = hash.indexOf("login") !== -1 || hash.indexOf("selectserver") !== -1 || hash.indexOf("servermismatch") !== -1 || hash.indexOf("forgotpassword") !== -1;
-        var isDetailPage = !!document.querySelector("#itemDetailPage:not(.hide), .itemDetailPage:not(.hide)") || hash.indexOf("details") !== -1;
+        var isDetailPage = activeId === "itemDetailPage" || !!document.querySelector("#itemDetailPage:not(.hide), .itemDetailPage:not(.hide)") || hash.indexOf("details") !== -1;
         var isSettingsRoute = hash.indexOf("dashboard") !== -1 || hash.indexOf("settings") !== -1;
 
-        // Positive check for main catalog / home navigation
-        var isHomeOrLibrary = !!document.querySelector("#indexPage, .homePage, #homeTab, .pageTabContent, .itemsContainer, iframe.featurediframe, #moviesPage, #tvShowsPage");
+        var isCatalog = activeId === "indexPage" || activeId === "moviesPage" || activeId === "tvShowsPage" ||
+                        !!document.querySelector("#indexPage:not(.hide), .homePage:not(.hide), #moviesPage:not(.hide), #tvShowsPage:not(.hide), .libraryPage:not(.hide), #homeTab, .itemsContainer:not(.hide)");
 
-        if (isVideo || isMismatch || isAuthScreen || isAuthRoute || isDetailPage || isSettingsRoute) {
+        if (isVideo || isMismatch || isAuthScreen || isAuthRoute || isDetailPage || isSettingsRoute || !isCatalog) {
           tvTopbar.classList.remove("is-visible");
           document.body.classList.remove("show-apex-topbar");
           tvTopbar.style.display = "none";
           tvTopbar.style.visibility = "hidden";
-          return;
-        } else if (isHomeOrLibrary) {
+        } else {
           tvTopbar.classList.add("is-visible");
           document.body.classList.add("show-apex-topbar");
           tvTopbar.style.display = "flex";
           tvTopbar.style.visibility = "visible";
+          tvTopbar.style.opacity = "1";
         }
       }
 
@@ -801,6 +853,8 @@ function findHomeTab() {
       for (var gl = 0; gl < ghostLogos.length; gl++) {
         ghostLogos[gl].remove();
       }
+
+      deduplicateAndEnrichCards();
 
       // 1.5 Suppress and purge floating Play / Shuffle buttons from catalog/library views
       var strayPlayBtns = document.querySelectorAll(

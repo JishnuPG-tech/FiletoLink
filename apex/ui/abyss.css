@@ -4549,21 +4549,18 @@ body.show-apex-topbar #apex-tv-topbar,
     }
 }
 
-/* Never display topbar on splash screen, login screen, server selection, server mismatch, or wizard */
-#loginPage ~ #apex-tv-topbar,
-#serverMismatchPage ~ #apex-tv-topbar,
-#selectServerPage ~ #apex-tv-topbar,
-.serverMismatchPage #apex-tv-topbar,
-#serverMismatchPage #apex-tv-topbar,
-body:has(#serverMismatchPage) #apex-tv-topbar,
-body:has(.serverMismatchPage) #apex-tv-topbar,
+/* Never display topbar on splash screen, login screen, server selection, server mismatch, wizard, or video */
+#loginPage:not(.hide) ~ #apex-tv-topbar,
+#serverMismatchPage:not(.hide) ~ #apex-tv-topbar,
+#selectServerPage:not(.hide) ~ #apex-tv-topbar,
+body:has(#serverMismatchPage:not(.hide)) #apex-tv-topbar,
+body:has(.serverMismatchPage:not(.hide)) #apex-tv-topbar,
 body:has(#loginPage:not(.hide)) #apex-tv-topbar,
 body:has(.loginPage:not(.hide)) #apex-tv-topbar,
 body:has(#selectServerPage:not(.hide)) #apex-tv-topbar,
 body:has(.selectServerPage:not(.hide)) #apex-tv-topbar,
 body:has(#forgotPasswordPage:not(.hide)) #apex-tv-topbar,
-body:has(.manualLoginForm) #apex-tv-topbar,
-body:has(.manualServerContainer) #apex-tv-topbar,
+body:has(#itemDetailPage:not(.hide)) #apex-tv-topbar,
 body:has(.splashLogo:not(.hide):not(:empty)) #apex-tv-topbar,
 body.is-logged-out #apex-tv-topbar,
 body.hide-apex-topbar #apex-tv-topbar,
@@ -5434,4 +5431,76 @@ div[data-category="cast"] .cardScalable,
     align-items: center !important;
     justify-content: center !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+}
+
+
+/* ========================================================
+   APEX FALLBACK CARD POSTERS & MOBILE MULTI-COLUMN GRID
+   ======================================================== */
+.apex-fallback-art {
+    position: absolute !important;
+    inset: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 12px 8px !important;
+    text-align: center !important;
+    background: linear-gradient(145deg, #181926 0%, #0e0f17 100%) !important;
+    box-sizing: border-box !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    z-index: 1 !important;
+}
+.apex-art-icon {
+    margin-bottom: 8px !important;
+    opacity: 0.8 !important;
+}
+.apex-art-title {
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    color: #ffffff !important;
+    line-height: 1.25 !important;
+    max-height: 2.5em !important;
+    overflow: hidden !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+}
+
+/* Multi-column grid for Series & Movies in library and catalog views (no single-column rows) */
+@media (max-width: 600px) and (orientation: portrait) {
+    .itemsContainer-vertical,
+    .itemsContainer-cards,
+    .libraryPage .itemsContainer,
+    #moviesPage .itemsContainer,
+    #tvShowsPage .itemsContainer {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)) !important;
+        gap: 12px 10px !important;
+        padding: 8px 12px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    .itemsContainer-vertical > .card,
+    .itemsContainer-cards > .card,
+    .libraryPage .card {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+    }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+    .itemsContainer-vertical,
+    .itemsContainer-cards,
+    .libraryPage .itemsContainer,
+    #moviesPage .itemsContainer,
+    #tvShowsPage .itemsContainer {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)) !important;
+        gap: 12px 10px !important;
+        padding: 8px 16px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
 }
