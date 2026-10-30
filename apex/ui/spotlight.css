@@ -809,15 +809,16 @@ body {
 		overflow: hidden;
 	}
 
-	/* Action buttons: single flex row, Play truncates gracefully, Trailer fits, Info is square */
+	/* Action buttons: single flex row, Play never truncates, Trailer fits, circle buttons 38px */
 	#buttons {
 		display: flex !important;
 		flex-direction: row !important;
 		align-items: center !important;
-		gap: 8px !important;
+		gap: 6px !important;
 		width: 100% !important;
 		max-width: 100% !important;
 		margin-bottom: 14px !important;
+		flex-wrap: nowrap !important;
 	}
 
 	.btn {
@@ -826,15 +827,25 @@ body {
 	}
 
 	.btn-play {
-		flex: 1 1 auto !important;
-		min-width: 0 !important;
+		flex: 0 0 auto !important;
+		min-width: max-content !important;
 		max-width: none !important;
-		padding: 8px 12px !important;
+		padding: 8px 14px !important;
 		margin-right: 0 !important;
 		white-space: nowrap !important;
-		overflow: hidden !important;
-		text-overflow: ellipsis !important;
+		overflow: visible !important;
+		text-overflow: clip !important;
 		justify-content: center !important;
+		font-weight: 700 !important;
+	}
+
+	.btn-circle {
+		width: 38px !important;
+		height: 38px !important;
+		min-width: 38px !important;
+		max-width: 38px !important;
+		flex: 0 0 38px !important;
+		padding: 0 !important;
 	}
 
 	.btn-trailer {

@@ -374,6 +374,19 @@ trigger_library_scan() {
 }
 trigger_library_scan &
 
+trigger_episode_heal() {
+    for _ in $(seq 1 40); do
+        if curl -s -f http://127.0.0.1:8096/System/Info/Public >/dev/null 2>&1; then
+            sleep 10
+            echo "[EPISODES] Running automated TV episode title healer..."
+            python3 /opt/apex/heal_episodes.py >/dev/null 2>&1 || python3 "$(dirname "$0")/heal_episodes.py" >/dev/null 2>&1 || true
+            break
+        fi
+        sleep 2
+    done
+}
+trigger_episode_heal &
+
 
 echo "[HEALTH] FastAPI Gateway (PID $FASTAPI_PID) and Nginx (PID $NGINX_PID) active."
 

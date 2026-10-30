@@ -340,8 +340,10 @@ async def proxy_http_request(
                             stream_path = path_val[path_val.find("/stream"):]
                         if stream_path:
                             public_stream = f"/tg-stream{stream_path}" if not stream_path.startswith("/tg-stream") else stream_path
-                            m_src["Path"] = public_stream
+                            m_src["Path"] = f"http://127.0.0.1:{TG_PORT}{stream_path}"
                             m_src["DirectStreamUrl"] = public_stream
+                            m_src["SupportsDirectStream"] = True
+                            m_src["SupportsDirectPlay"] = True
 
                     # 2. Ensure TranscodingUrl is reachable via /jellyfin prefix
                     tc_url = m_src.get("TranscodingUrl") or ""
