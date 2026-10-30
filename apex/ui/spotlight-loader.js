@@ -790,6 +790,18 @@ function findHomeTab() {
         }
       }
 
+            // 1.4 Guarantee strictly one poster on #itemDetailPage
+      var detailPosters = document.querySelectorAll('#itemDetailPage .detailPagePrimaryContainer .detailImageContainer');
+      if (detailPosters.length > 1) {
+        for (var dp = 1; dp < detailPosters.length; dp++) {
+          detailPosters[dp].remove();
+        }
+      }
+      var ghostLogos = document.querySelectorAll('#itemDetailPage .detailLogo');
+      for (var gl = 0; gl < ghostLogos.length; gl++) {
+        ghostLogos[gl].remove();
+      }
+
       // 1.5 Suppress and purge floating Play / Shuffle buttons from catalog/library views
       var strayPlayBtns = document.querySelectorAll(
         ':is(.view, .page, [data-role="page"], .libraryPage):not(#itemDetailPage):not(#videoOsdPage) :is(.btnPlay, .btnShuffle, button[data-action="playall"], button[data-action="shuffleall"], button[title*="Play all" i], button[title*="Shuffle all" i]), ' +

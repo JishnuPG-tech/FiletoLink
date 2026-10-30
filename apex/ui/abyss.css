@@ -4439,6 +4439,11 @@ div[data-category="nextup"] .cardImageContainer img,
     z-index: 99999 !important;
     box-sizing: border-box !important;
     padding: 0 16px !important;
+    background: rgba(10, 11, 15, 0.92) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important;
     transition: opacity 0.2s ease, visibility 0.2s ease !important;
 }
 
@@ -4502,10 +4507,12 @@ body.show-apex-topbar #apex-tv-topbar,
 @media (max-width: 600px) and (orientation: portrait) {
     #apex-tv-topbar {
         height: 48px !important;
-        padding: 0 4px !important;
-        background: transparent !important;
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
+        padding: 0 8px !important;
+        background: rgba(10, 11, 15, 0.92) !important;
+        backdrop-filter: blur(20px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important;
     }
     #apex-tv-topbar .apex-tv-tabs {
         gap: 4px !important;
@@ -4641,8 +4648,8 @@ header .pageTitle,
     }
 
     /* Fixed Single Clean Poster Thumbnail in Portrait */
-    #itemDetailPage .detailImageContainer,
-    .layout-mobile #itemDetailPage .detailImageContainer {
+    #itemDetailPage .detailPagePrimaryContainer > .detailImageContainer,
+    .layout-mobile #itemDetailPage .detailPagePrimaryContainer > .detailImageContainer {
         display: block !important;
         visibility: visible !important;
         opacity: 1 !important;
@@ -4661,13 +4668,19 @@ header .pageTitle,
         border: 1px solid rgba(255, 255, 255, 0.14) !important;
     }
 
-    /* Guarantee never more than one poster in portrait */
+    /* STRICTLY ELIMINATE ANY DUPLICATE / GHOST POSTER */
+    #itemDetailPage .detailRibbon .detailImageContainer,
     #itemDetailPage .detailImageContainer ~ .detailImageContainer,
-    #itemDetailPage .detailImageContainer:nth-of-type(n+2) {
+    #itemDetailPage .detailImageContainer:nth-of-type(n+2),
+    #itemDetailPage .detailLogo,
+    .layout-mobile #itemDetailPage .detailLogo {
         display: none !important;
         visibility: hidden !important;
         width: 0 !important;
         height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        pointer-events: none !important;
     }
 
     #itemDetailPage .detailImageContainer .card,
@@ -4770,18 +4783,46 @@ header .pageTitle,
         font-size: 0.85rem !important;
     }
 
-    #itemDetailPage .mainDetailButtons,
+        #itemDetailPage .mainDetailButtons,
     .layout-mobile #itemDetailPage .mainDetailButtons {
+        position: relative !important;
+        bottom: auto !important;
+        left: auto !important;
         display: flex !important;
         flex-direction: row !important;
         align-items: center !important;
         flex-wrap: nowrap !important;
-        gap: 10px !important;
+        gap: 12px !important;
+        margin: 8px 0 12px 0 !important;
         width: 100% !important;
-        flex-basis: 100% !important;
-        margin-top: 12px !important;
-        overflow-x: auto !important;
-        padding-bottom: 4px !important;
+        clear: both !important;
+    }
+
+    /* Media info and technical specs placed cleanly below buttons */
+    #itemDetailPage .detailSectionContent,
+    #itemDetailPage .mediaInfo,
+    #itemDetailPage .trackSelections,
+    #itemDetailPage .audioVideoInfo,
+    #itemDetailPage .mediaInfoStreamContainer {
+        position: relative !important;
+        display: block !important;
+        margin-top: 10px !important;
+        margin-bottom: 6px !important;
+        clear: both !important;
+        width: 100% !important;
+    }
+
+    /* Media stream info & technical specs */
+    #itemDetailPage .detailSectionContent,
+    #itemDetailPage .mediaInfo,
+    #itemDetailPage .trackSelections,
+    #itemDetailPage .audioVideoInfo {
+        position: relative !important;
+        display: block !important;
+        margin-top: 10px !important;
+        margin-bottom: 8px !important;
+        clear: both !important;
+        width: 100% !important;
     }
 }
 
@@ -5347,4 +5388,50 @@ div[data-category="cast"] .cardScalable,
     font-size: 0.85rem !important;
     text-align: center !important;
     margin-top: 4px !important;
+}
+
+
+/* ========================================================
+   CLEAN MEDIA CARDS & SLEEK COUNT BADGES (NO BOX-IN-BOX)
+   ======================================================== */
+#indexPage .card,
+.libraryPage .card,
+.itemsContainer .card,
+.card[data-type="Movie"],
+.card[data-type="Series"],
+.card[data-type="Episode"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+#indexPage .cardBox,
+.libraryPage .cardBox,
+.itemsContainer .cardBox,
+.itemsContainer .visualCardBox,
+.card[data-type="Movie"] .cardBox,
+.card[data-type="Series"] .cardBox,
+.card[data-type="Episode"] .cardBox {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* TV Series Unplayed Count Badge */
+.countIndicator {
+    background: rgba(0, 0, 0, 0.82) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    border-radius: 6px !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    padding: 2px 6px !important;
+    min-width: 18px !important;
+    height: 18px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
 }
