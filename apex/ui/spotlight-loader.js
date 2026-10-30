@@ -765,30 +765,24 @@ function findHomeTab() {
       if (tvTopbar) {
         var isVideo = !!document.querySelector(".videoPlayerContainer:not(.hide), #videoOsdPage:not(.hide), video");
         var hash = (window.location.hash || "").toLowerCase();
-        var isAuthOrStartup = !!document.querySelector(
-          "#serverMismatchPage, .serverMismatchPage, #loginPage:not(.hide), .loginPage:not(.hide), " +
-          "#selectServerPage:not(.hide), .selectServerPage:not(.hide), #forgotPasswordPage:not(.hide), " +
-          ".manualLoginForm, .splashLogo:not(.hide), .manualServerContainer, input[type='password']"
-        );
-        var isHiddenRoute = hash.indexOf("dashboard") !== -1 ||
-                            hash.indexOf("settings") !== -1 ||
-                            hash.indexOf("login") !== -1 ||
-                            hash.indexOf("selectserver") !== -1 ||
-                            hash.indexOf("servermismatch") !== -1 ||
-                            hash.indexOf("forgotpassword") !== -1 ||
-                            hash.indexOf("details") !== -1 ||
-                            hash.indexOf("itemdetails") !== -1;
 
-        var isDetailPage = !!document.querySelector("#itemDetailPage:not(.hide), .itemDetailPage:not(.hide)");
-        var isUserLoggedIn = (window.ApiClient && typeof window.ApiClient.isLoggedIn === "function") ? window.ApiClient.isLoggedIn() : (window.ApiClient && !!window.ApiClient.accessToken());
+        // Strictly detect auth / startup / error / server mismatch pages
+        var isMismatch = !!document.querySelector("#serverMismatchPage, .serverMismatchPage") || (document.body.innerText && document.body.innerText.indexOf("Server Mismatch") !== -1);
+        var isAuthScreen = !!document.querySelector("#loginPage:not(.hide), .loginPage:not(.hide), #selectServerPage:not(.hide), .selectServerPage:not(.hide), .manualLoginForm, .manualServerContainer");
+        var isAuthRoute = hash.indexOf("login") !== -1 || hash.indexOf("selectserver") !== -1 || hash.indexOf("servermismatch") !== -1 || hash.indexOf("forgotpassword") !== -1;
+        var isDetailPage = !!document.querySelector("#itemDetailPage:not(.hide), .itemDetailPage:not(.hide)") || hash.indexOf("details") !== -1;
+        var isSettingsRoute = hash.indexOf("dashboard") !== -1 || hash.indexOf("settings") !== -1;
 
-        if (isVideo || isHiddenRoute || isDetailPage || isAuthOrStartup || !isUserLoggedIn) {
+        // Positive check for main catalog / home navigation
+        var isHomeOrLibrary = !!document.querySelector("#indexPage, .homePage, #homeTab, .pageTabContent, .itemsContainer, iframe.featurediframe, #moviesPage, #tvShowsPage");
+
+        if (isVideo || isMismatch || isAuthScreen || isAuthRoute || isDetailPage || isSettingsRoute) {
           tvTopbar.classList.remove("is-visible");
           document.body.classList.remove("show-apex-topbar");
           tvTopbar.style.display = "none";
           tvTopbar.style.visibility = "hidden";
           return;
-        } else {
+        } else if (isHomeOrLibrary) {
           tvTopbar.classList.add("is-visible");
           document.body.classList.add("show-apex-topbar");
           tvTopbar.style.display = "flex";

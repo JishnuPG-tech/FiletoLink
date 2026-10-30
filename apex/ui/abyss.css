@@ -4248,7 +4248,7 @@ div[data-category="nextup"] .cardImageContainer img,
 
 /* 3. Dedicated Library/Catalog views (3-Column Grid ONLY on Non-Home Library Pages) */
 @media (max-width: 600px) and (orientation: portrait) {
-    .page:not(#indexPage) .itemsContainer,
+    .page:not(#indexPage):not(#itemDetailPage) .itemsContainer,
     div[data-role="page"]:not(#indexPage) .itemsContainer,
     .pageTabContent:not(#homeTab) .itemsContainer,
     .itemsContainer.itemsContainer-wrap,
@@ -4271,7 +4271,7 @@ div[data-category="nextup"] .cardImageContainer img,
         scroll-snap-type: none !important;
     }
 
-    .page:not(#indexPage) .itemsContainer > .card,
+    .page:not(#indexPage):not(#itemDetailPage) .itemsContainer > .card,
     div[data-role="page"]:not(#indexPage) .itemsContainer > .card,
     .pageTabContent:not(#homeTab) .itemsContainer > .card,
     .itemsContainer.itemsContainer-wrap > .card,
@@ -4334,7 +4334,7 @@ div[data-category="nextup"] .cardImageContainer img,
 
 /* 4. LANDSCAPE MODE & WIDESCREEN: HIGH DENSITY CARDS (7-8 Cards Per Row) */
 @media (orientation: landscape), (min-width: 601px) {
-    .page:not(#indexPage) .itemsContainer,
+    .page:not(#indexPage):not(#itemDetailPage) .itemsContainer,
     div[data-role="page"]:not(#indexPage) .itemsContainer,
     .pageTabContent:not(#homeTab) .itemsContainer,
     .itemsContainer.itemsContainer-wrap,
@@ -4356,7 +4356,7 @@ div[data-category="nextup"] .cardImageContainer img,
         width: 100% !important;
     }
 
-    .page:not(#indexPage) .itemsContainer > .card,
+    .page:not(#indexPage):not(#itemDetailPage) .itemsContainer > .card,
     div[data-role="page"]:not(#indexPage) .itemsContainer > .card,
     .pageTabContent:not(#homeTab) .itemsContainer > .card,
     .itemsContainer.itemsContainer-wrap > .card,
@@ -4623,43 +4623,51 @@ header .pageTitle,
 
 /* ========================================================
    DETAIL PAGE: MOBILE PORTRAIT & DEFAULT CLEAN LAYOUT
-   Clean poster card thumbnail + left-aligned stacked title & metadata
+   Clean single poster card + side-by-side title & metadata
    ======================================================== */
 @media (orientation: portrait) {
-    #itemDetailPage .detailRibbon,
-    .layout-mobile #itemDetailPage .detailRibbon {
+    #itemDetailPage .detailPagePrimaryContainer,
+    .layout-mobile #itemDetailPage .detailPagePrimaryContainer {
         display: flex !important;
         flex-direction: row !important;
         align-items: flex-start !important;
         flex-wrap: wrap !important;
+        padding: 16px !important;
+        gap: 16px !important;
         width: 100% !important;
-        max-width: 100% !important;
-        padding: 16px 16px 12px 16px !important;
-        gap: 14px !important;
         box-sizing: border-box !important;
         position: relative !important;
-        background: transparent !important;
+        z-index: 2 !important;
     }
 
-    /* Fixed Clean Poster Thumbnail in Portrait */
+    /* Fixed Single Clean Poster Thumbnail in Portrait */
     #itemDetailPage .detailImageContainer,
     .layout-mobile #itemDetailPage .detailImageContainer {
         display: block !important;
         visibility: visible !important;
         opacity: 1 !important;
         position: relative !important;
-        width: 108px !important;
-        min-width: 108px !important;
-        max-width: 108px !important;
-        height: 162px !important;
+        width: 110px !important;
+        min-width: 110px !important;
+        max-width: 110px !important;
+        height: 165px !important;
         aspect-ratio: 2 / 3 !important;
-        border-radius: 10px !important;
+        border-radius: 12px !important;
         overflow: hidden !important;
         margin: 0 !important;
         padding: 0 !important;
-        flex-shrink: 0 !important;
+        flex: 0 0 110px !important;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75) !important;
         border: 1px solid rgba(255, 255, 255, 0.14) !important;
+    }
+
+    /* Guarantee never more than one poster in portrait */
+    #itemDetailPage .detailImageContainer ~ .detailImageContainer,
+    #itemDetailPage .detailImageContainer:nth-of-type(n+2) {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
     }
 
     #itemDetailPage .detailImageContainer .card,
@@ -4668,7 +4676,7 @@ header .pageTitle,
         width: 100% !important;
         height: 100% !important;
         aspect-ratio: 2 / 3 !important;
-        border-radius: 10px !important;
+        border-radius: 12px !important;
         overflow: hidden !important;
         margin: 0 !important;
         position: relative !important;
@@ -4680,14 +4688,27 @@ header .pageTitle,
         display: none !important;
     }
 
+    #itemDetailPage .detailRibbon,
+    .layout-mobile #itemDetailPage .detailRibbon {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        justify-content: flex-start !important;
+        flex: 1 1 calc(100% - 136px) !important;
+        min-width: 0 !important;
+        gap: 4px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+    }
+
     #itemDetailPage .infoWrapper,
     .layout-mobile #itemDetailPage .infoWrapper {
         display: flex !important;
         flex-direction: column !important;
         align-items: flex-start !important;
         justify-content: flex-start !important;
-        flex: 1 1 calc(100% - 128px) !important;
-        min-width: 0 !important;
+        width: 100% !important;
         gap: 3px !important;
         margin: 0 !important;
         padding: 0 !important;
@@ -4758,7 +4779,7 @@ header .pageTitle,
         gap: 10px !important;
         width: 100% !important;
         flex-basis: 100% !important;
-        margin-top: 10px !important;
+        margin-top: 12px !important;
         overflow-x: auto !important;
         padding-bottom: 4px !important;
     }
@@ -4823,13 +4844,19 @@ button:has(svg[data-testid="PeopleIcon"]),
         overflow-y: auto !important;
     }
 
-    #itemDetailPage .detailLogo,
-    .layout-mobile #itemDetailPage .detailLogo {
-        display: none !important;
-        visibility: hidden !important;
-        height: 0 !important;
-        margin: 0 !important;
-    }
+    /* Completely hide detailLogo in all orientations to eliminate duplicate ghost posters */
+#itemDetailPage .detailLogo,
+.layout-mobile #itemDetailPage .detailLogo,
+.layout-desktop #itemDetailPage .detailLogo,
+.layout-tv #itemDetailPage .detailLogo {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    pointer-events: none !important;
+}
 
     #itemDetailPage .itemBackdrop,
     .layout-mobile #itemDetailPage .itemBackdrop {
@@ -4863,8 +4890,8 @@ button:has(svg[data-testid="PeopleIcon"]),
         position: relative !important;
         width: 100% !important;
         box-sizing: border-box !important;
-        padding: 16px 28px 12px 185px !important;
-        min-height: 230px !important;
+        padding: 16px 24px 12px 180px !important;
+        min-height: auto !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: flex-start !important;
@@ -4987,12 +5014,15 @@ button:has(svg[data-testid="PeopleIcon"]),
 
     #itemDetailPage .mainDetailButtons,
     .layout-mobile #itemDetailPage .mainDetailButtons {
+        position: relative !important;
+        bottom: auto !important;
+        left: auto !important;
         display: flex !important;
         flex-direction: row !important;
         align-items: center !important;
         flex-wrap: nowrap !important;
-        gap: 10px !important;
-        margin-top: 6px !important;
+        gap: 12px !important;
+        margin: 8px 0 0 0 !important;
         width: 100% !important;
     }
 
@@ -5231,4 +5261,90 @@ body:not(.hide-apex-topbar) #showsPage,
 body:not(.hide-apex-topbar) .libraryPage:not(#itemDetailPage) {
     padding-top: 56px !important;
     box-sizing: border-box !important;
+}
+
+
+/* ========================================================
+   CAST & CREW / PEOPLE SECTION - PROPER CARD PROPORTIONS
+   ======================================================== */
+#castContent,
+#guestCastContent,
+#peopleSection,
+.peopleSection,
+div[data-category="people"],
+div[data-category="cast"] {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    gap: 12px !important;
+    padding: 8px 4px 16px 4px !important;
+    box-sizing: border-box !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+#castContent .card,
+#guestCastContent .card,
+#peopleSection .card,
+.peopleSection .card,
+div[data-category="people"] .card,
+div[data-category="cast"] .card,
+.card[data-type="Person"],
+.personCard {
+    width: 120px !important;
+    min-width: 120px !important;
+    max-width: 120px !important;
+    flex: 0 0 120px !important;
+    margin: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+}
+
+#castContent .cardScalable,
+#guestCastContent .cardScalable,
+#peopleSection .cardScalable,
+.peopleSection .cardScalable,
+div[data-category="people"] .cardScalable,
+div[data-category="cast"] .cardScalable,
+.personCard .cardScalable {
+    width: 120px !important;
+    height: 160px !important;
+    aspect-ratio: 3 / 4 !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    position: relative !important;
+}
+
+#castContent .cardImage,
+#guestCastContent .cardImage,
+.personCard .cardImage,
+#castContent img,
+#guestCastContent img,
+.personCard img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    border-radius: 12px !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+}
+
+#castContent .cardText,
+#guestCastContent .cardText,
+.personCard .cardText {
+    width: 120px !important;
+    max-width: 120px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    font-size: 0.85rem !important;
+    text-align: center !important;
+    margin-top: 4px !important;
 }
