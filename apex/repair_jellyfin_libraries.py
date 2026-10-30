@@ -850,6 +850,116 @@ def heal_missing_db_strm_paths(databases=None):
         except Exception as e:
             print(f"[REPAIR] Note healing missing DB STRMs: {e}")
 
+
+def deduplicate_media_strms(roots=None, databases=None):
+    """
+    Deduplicates .strm files on disk and removes duplicate rows from Jellyfin BaseItems.
+    When multiple folders or .strm files point to the exact same stream URL, picks the
+    canonical version, deletes the duplicate folder/file from disk, and removes the redundant
+    rows from BaseItems in jellyfin.db.
+    """
+    media_roots = roots or [
+        "/data/jellyfin/media/Movies",
+        "/data/jellyfin/media/TV Shows",
+        "/opt/jellyfin-local/media/Movies",
+        "/opt/jellyfin-local/media/TV Shows",
+    ]
+    db_list = databases or TARGET_DATABASES
+
+    def score_path(p: str) -> int:
+        score = 0
+        bname = os.path.basename(p)
+        parent = os.path.basename(os.path.dirname(p))
+        lower_p = p.lower()
+        for bad in ("linkz", "www.", "t.me", "telegram", "sample", "trailer"):
+            if bad in lower_p:
+                score -= 50
+        if re.search(r"\(\d{4}\)", parent) or re.search(r"\(\d{4}\)", bname):
+            score += 20
+        if "-" in parent:
+            score += 10
+        if "." in parent or "," in parent:
+            score += 5
+        if re.search(r"\bIT\b", p):
+            score += 15
+        score += min(len(parent), 30)
+        return score
+
+    all_deleted_paths = []
+    all_deleted_dirs = []
+
+    for root_dir in media_roots:
+        if not os.path.isdir(root_dir):
+            continue
+        url_map = {}
+        for dirpath, _, filenames in os.walk(root_dir):
+            for fn in filenames:
+                if fn.lower().endswith(".strm"):
+                    fp = os.path.join(dirpath, fn)
+                    try:
+                        with open(fp, "r", encoding="utf-8", errors="ignore") as f:
+                            url = f.read().strip()
+                        if url:
+                            url_map.setdefault(url, []).append(fp)
+                    except Exception:
+                        pass
+
+        for url, filepaths in url_map.items():
+            if len(filepaths) <= 1:
+                continue
+            filepaths.sort(key=score_path, reverse=True)
+            canonical = filepaths[0]
+            duplicates = filepaths[1:]
+
+            for dup in duplicates:
+                dup_dir = os.path.dirname(dup)
+                canon_dir = os.path.dirname(canonical)
+                if dup_dir != canon_dir and dup_dir != root_dir:
+                    print(f"[DEDUP] Removing duplicate media folder: '{dup_dir}' (retaining '{canon_dir}')")
+                    try:
+                        shutil.rmtree(dup_dir, ignore_errors=True)
+                        all_deleted_dirs.append(dup_dir)
+                    except Exception as e:
+                        print(f"[DEDUP] Error removing folder {dup_dir}: {e}")
+                else:
+                    print(f"[DEDUP] Removing duplicate media file: '{dup}' (retaining '{canonical}')")
+                    try:
+                        if os.path.exists(dup):
+                            os.remove(dup)
+                    except Exception as e:
+                        print(f"[DEDUP] Error removing file {dup}: {e}")
+                all_deleted_paths.append(dup)
+
+    for db_p in db_list:
+        if not os.path.exists(db_p):
+            continue
+        try:
+            conn = sqlite3.connect(db_p, timeout=10)
+            cur = conn.cursor()
+            del_count = 0
+            for d in all_deleted_dirs:
+                cur.execute("DELETE FROM BaseItems WHERE Path = ? OR Path LIKE ?", (d, f"{d}/%"))
+                del_count += cur.rowcount
+            for p in all_deleted_paths:
+                cur.execute("DELETE FROM BaseItems WHERE Path = ?", (p,))
+                del_count += cur.rowcount
+            cur.execute("""
+                DELETE FROM BaseItems
+                WHERE Id NOT IN (
+                    SELECT MIN(Id)
+                    FROM BaseItems
+                    GROUP BY Path
+                )
+                AND Path IS NOT NULL AND Path != ''
+            """)
+            del_count += cur.rowcount
+            conn.commit()
+            conn.close()
+            if del_count > 0:
+                print(f"[DEDUP] Cleaned {del_count} redundant BaseItems database row(s) in {db_p}")
+        except Exception as e:
+            print(f"[DEDUP] Note cleaning database {db_p}: {e}")
+
 def main():
     env_force = os.environ.get("RESET_JELLYFIN_PASSWORD", "").strip().lower() in ("1", "true", "yes")
     manual_trigger = any(os.path.exists(p) for p in MANUAL_RESET_TRIGGERS)
@@ -880,6 +990,7 @@ def main():
     heal_mismatched_media()
     heal_channel_and_db_names()
     heal_missing_db_strm_paths()
+    deduplicate_media_strms()
     repair_user_subtitle_preferences()
     repair_user_policy_preferences()
     repair_system_xml()

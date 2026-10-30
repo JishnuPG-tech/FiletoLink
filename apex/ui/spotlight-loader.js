@@ -794,7 +794,7 @@ function findHomeTab() {
         '.headerCastButton, .btnCast, button[data-action="cast"], button[data-action="syncplay"], ' +
         'button[title*="SyncPlay" i], button[aria-label*="SyncPlay" i], button[title*="Cast" i], button[aria-label*="Cast" i], ' +
         'button:has(svg[data-testid="CastIcon"]), button:has(svg[data-testid="GroupIcon"]), button:has(svg[data-testid="PeopleIcon"]), ' +
-        '.headerTop .pageTitle, .skinHeader .pageTitle, .headerLogoText, .pageTitleWithDefaultLogo, .headerTabs.sectionTabs'
+        '.headerTop .pageTitle, .skinHeader .pageTitle, .headerLogoText, .pageTitleWithDefaultLogo, .headerTabs, .sectionTabs, .headerTabs.sectionTabs, .emby-tabs, .emby-tabs-slider'
       );
       for (var u = 0; u < unwanted.length; u++) {
         unwanted[u].style.display = "none";

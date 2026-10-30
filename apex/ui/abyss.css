@@ -238,17 +238,22 @@ input[type="radio"]:checked {
     accent-color: rgb(var(--abyss-accent));
 }
 
-/* 4. TYPOGRAPHY */
+/* 4. TYPOGRAPHY - Native Header Tabs Fully Suppressed in Favor of Apex TV Topbar */
 
-.headerTabs.sectionTabs {
-    text-size-adjust: 110%;
-    font-size: 110%;
-    padding-top: 8px;
-    margin-top: -2em;
-    width: fit-content;
-    max-width: 95vw;
-    align-self: center !important;
-    border-radius: 50px;
+.headerTabs,
+.headerTabs.sectionTabs,
+.emby-tabs,
+.emby-tabs-slider,
+.sectionTabs {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 
 .pageTitle {
@@ -2559,7 +2564,7 @@ body:has(#videoOsdPage) .skinHeader .MuiTypography-root.MuiTypography-body1 {
     }
 
     .headerTabs.sectionTabs {
-        margin-top: -4.9em !important;
+        display: none !important;
     }
 }
 
@@ -2653,7 +2658,7 @@ body:has(#videoOsdPage) .skinHeader .MuiTypography-root.MuiTypography-body1 {
     }
 
     body:has(#indexPage.homePage:not(.hide)) .headerTabs.sectionTabs {
-        margin-top: -4.9em !important;
+        display: none !important;
     }
 }
 
@@ -2699,41 +2704,43 @@ body:has(#videoOsdPage) .skinHeader .MuiTypography-root.MuiTypography-body1 {
 
 @media (min-aspect-ratio: 1.98/1) {
     .detailImageContainer .card {
-        width: 21vw !important;
+        width: 150px !important;
+        max-width: 150px !important;
     }
 
     .detailRibbon {
-        padding-left: 28.45vw !important;
+        padding-left: 20px !important;
     }
 
     .detailPagePrimaryContent,
     .layout-tv .detailPageSecondaryContainer.padded-left,
     .layout-desktop .detailPageSecondaryContainer.padded-left {
-        padding-left: 28.45vw !important;
+        padding-left: 0 !important;
     }
 
     .detailPageContent {
-        padding-left: 28.45vw !important;
+        padding-left: 0 !important;
     }
 }
 
 @media (min-aspect-ratio: 2.7/1) {
     .detailImageContainer .card {
-        width: 16vw !important;
+        width: 150px !important;
+        max-width: 150px !important;
     }
 
     .detailRibbon {
-        padding-left: 23.45vw !important;
+        padding-left: 20px !important;
     }
 
     .detailPagePrimaryContent,
     .layout-tv .detailPageSecondaryContainer.padded-left,
     .layout-desktop .detailPageSecondaryContainer.padded-left {
-        padding-left: 23.45vw !important;
+        padding-left: 0 !important;
     }
 
     .detailPageContent {
-        padding-left: 23.45vw !important;
+        padding-left: 0 !important;
     }
 }
 
@@ -4124,25 +4131,38 @@ button[data-action="search"] {
     margin-right: 14px !important;
 }
 
-/* 1. Continue Watching & Next Up (16:9 Landscape) */
+/* 1. Continue Watching & Next Up: Uniform 2:3 Vertical Rectangular Posters */
 .resumeSection .card,
 .nextUpSection .card,
 div[data-category="resume"] .card,
 div[data-category="nextup"] .card {
-    width: 280px !important;
-    max-width: 280px !important;
-    flex: 0 0 280px !important;
+    width: 150px !important;
+    max-width: 150px !important;
+    flex: 0 0 150px !important;
 }
 
 .resumeSection .cardScalable,
 .nextUpSection .cardScalable,
 div[data-category="resume"] .cardScalable,
 div[data-category="nextup"] .cardScalable,
+.resumeSection .card[data-type="Episode"] .cardScalable,
+.nextUpSection .card[data-type="Episode"] .cardScalable,
+div[data-category="resume"] .card[data-type="Episode"] .cardScalable,
+div[data-category="nextup"] .card[data-type="Episode"] .cardScalable,
 .thumbCard .cardScalable,
 .backdropCard .cardScalable {
-    aspect-ratio: 16 / 9 !important;
+    aspect-ratio: 2 / 3 !important;
     border-radius: 12px !important;
     overflow: hidden !important;
+}
+
+.resumeSection .cardImageContainer img,
+.nextUpSection .cardImageContainer img,
+div[data-category="resume"] .cardImageContainer img,
+div[data-category="nextup"] .cardImageContainer img {
+    object-fit: cover !important;
+    width: 100% !important;
+    height: 100% !important;
 }
 
 @media (max-width: 600px) {
@@ -4150,9 +4170,9 @@ div[data-category="nextup"] .cardScalable,
     .nextUpSection .card,
     div[data-category="resume"] .card,
     div[data-category="nextup"] .card {
-        width: 220px !important;
-        max-width: 220px !important;
-        flex: 0 0 220px !important;
+        width: 125px !important;
+        max-width: 125px !important;
+        flex: 0 0 125px !important;
     }
 }
 
@@ -4537,6 +4557,7 @@ header .pageTitle,
 /* ========================================================
    DETAIL PAGE: POSTER THUMBNAIL & METADATA SPACING FIX
    Prevents poster from overlapping title/metadata text
+   Ensures title never breaks letter-by-letter in landscape or portrait
    ======================================================== */
 #itemDetailPage .detailRibbon,
 .layout-mobile #itemDetailPage .detailRibbon,
@@ -4546,19 +4567,23 @@ header .pageTitle,
     display: flex !important;
     flex-direction: row !important;
     align-items: flex-start !important;
-    gap: 18px !important;
-    padding-left: 16px !important;
-    padding-right: 16px !important;
+    gap: 20px !important;
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+    padding-top: 16px !important;
     margin-top: 0 !important;
     box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
 }
 
 #itemDetailPage .detailImageContainer,
 .detailImageContainer {
     position: relative !important;
-    flex-shrink: 0 !important;
-    width: 140px !important;
-    max-width: 140px !important;
+    flex: 0 0 150px !important;
+    width: 150px !important;
+    max-width: 150px !important;
+    min-width: 130px !important;
     margin: 0 !important;
     z-index: 2 !important;
 }
@@ -4572,8 +4597,8 @@ header .pageTitle,
     top: auto !important;
     left: auto !important;
     margin: 0 !important;
-    width: 140px !important;
-    max-width: 140px !important;
+    width: 100% !important;
+    max-width: 100% !important;
     border-radius: 12px !important;
 }
 
@@ -4581,17 +4606,27 @@ header .pageTitle,
 .layout-mobile #itemDetailPage .detailPagePrimaryContent,
 .layout-desktop #itemDetailPage .detailPagePrimaryContent,
 .layout-tv #itemDetailPage .detailPagePrimaryContent,
-.detailPagePrimaryContent {
+.detailPagePrimaryContent,
+#itemDetailPage .detailPageContent {
     flex: 1 1 auto !important;
     min-width: 0 !important;
+    width: auto !important;
+    max-width: 100% !important;
     padding-left: 0 !important;
     margin-left: 0 !important;
 }
 
+#itemDetailPage .nameContainer,
 #itemDetailPage .itemName,
+#itemDetailPage .parentName,
+#itemDetailPage h1.itemName,
 .itemName {
-    word-break: break-word !important;
+    white-space: normal !important;
+    word-break: normal !important;
     overflow-wrap: break-word !important;
+    display: block !important;
+    width: auto !important;
+    max-width: 100% !important;
 }
 
 /* Universal Abyss Spotlight Hero Banner Iframe */

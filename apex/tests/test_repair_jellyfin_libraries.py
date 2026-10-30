@@ -5,6 +5,7 @@ import tempfile
 import pytest
 
 from repair_jellyfin_libraries import (
+    deduplicate_media_strms,
     repair_database,
     cleanup_empty_media_folders,
     heal_subtitle_files,
@@ -702,3 +703,56 @@ def test_heal_mismatched_media_merges_into_existing_destination(tmp_path):
 
 
 
+
+
+def test_deduplicate_media_strms_removes_duplicate_folders_and_db_rows(tmp_path):
+    movies_root = tmp_path / "Movies"
+    movies_root.mkdir()
+
+    # Canonical movie
+    canon_dir = movies_root / "Spider-Man Brand New Day (2026)"
+    canon_dir.mkdir()
+    canon_strm = canon_dir / "Spider-Man Brand New Day (2026).strm"
+    canon_strm.write_text("http://stream/119/video.mp4")
+
+    # Duplicate movie with noisy prefix
+    dup_dir = movies_root / "Man Brand New Day (2026)"
+    dup_dir.mkdir()
+    dup_strm = dup_dir / "Man Brand New Day (2026).strm"
+    dup_strm.write_text("http://stream/119/video.mp4")
+
+    # Setup test DB
+    db_file = tmp_path / "jellyfin.db"
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE BaseItems (
+            Id TEXT PRIMARY KEY,
+            Path TEXT,
+            Name TEXT,
+            type TEXT
+        )
+    """)
+    cur.execute("INSERT INTO BaseItems VALUES ('id1', ?, 'Spider-Man', 'Movie')", (str(canon_strm),))
+    cur.execute("INSERT INTO BaseItems VALUES ('id2', ?, 'Spider-Man', 'Movie')", (str(canon_dir),))
+    cur.execute("INSERT INTO BaseItems VALUES ('id3', ?, 'Man', 'Movie')", (str(dup_strm),))
+    cur.execute("INSERT INTO BaseItems VALUES ('id4', ?, 'Man', 'Movie')", (str(dup_dir),))
+    conn.commit()
+    conn.close()
+
+    deduplicate_media_strms(roots=[str(movies_root)], databases=[str(db_file)])
+
+    assert canon_dir.exists()
+    assert canon_strm.exists()
+    assert not dup_dir.exists()
+    assert not dup_strm.exists()
+
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("SELECT Path FROM BaseItems")
+    paths = [r[0] for r in cur.fetchall()]
+    conn.close()
+
+    assert str(canon_strm) in paths
+    assert str(dup_strm) not in paths
+    assert str(dup_dir) not in paths

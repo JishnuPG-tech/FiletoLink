@@ -337,6 +337,19 @@ cp -f "$ENCODING_XML" "/data/jellyfin/config/encoding.xml" 2>/dev/null || true
 sed -i 's|<EnableVideoEncoding>false</EnableVideoEncoding>|<EnableVideoEncoding>true</EnableVideoEncoding>|g' "$ENCODING_XML" "/data/jellyfin/config/encoding.xml" 2>/dev/null || true
 echo "[JELLYFIN] Configured high-performance video encoding & direct stream remux in $ENCODING_XML"
 
+echo "[HEALTH] Telegram streamer starting in background..."
+PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python3 /opt/apex/tg_streamer.py &
+TG_STREAMER_PID=$!
+
+echo "[HEALTH] Awaiting Telegram streamer initialization on port 8082..."
+for i in $(seq 1 40); do
+    if curl -s -f http://127.0.0.1:8082/health >/dev/null 2>&1; then
+        echo "[HEALTH] Telegram streamer is active and healthy on port 8082 (took ${i}s)."
+        break
+    fi
+    sleep 1
+done
+
 echo "[HEALTH] Jellyfin starting in background (local datadir)..."
 launch_jellyfin
 
@@ -348,9 +361,6 @@ fi
 sync_jellyfin_back &
 SYNC_PID=$!
 
-echo "[HEALTH] Telegram streamer starting in background..."
-PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python3 /opt/apex/tg_streamer.py &
-TG_STREAMER_PID=$!
 
 echo "[HEALTH] FastAPI Gateway (PID $FASTAPI_PID) and Nginx (PID $NGINX_PID) active."
 
