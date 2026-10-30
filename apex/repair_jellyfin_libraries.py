@@ -936,41 +936,49 @@ def deduplicate_media_strms(roots=None, databases=None):
                         print(f"[DEDUP] Error removing file {dup}: {e}")
                 all_deleted_paths.append(dup)
 
-        # 2. Deduplicate media folders matching the same normalized title (e.g. Movies/Shang-Chi (2021) vs Movies/Shang-Chi)
-        folder_groups = {}
-        try:
-            for entry in os.scandir(root_dir):
-                if entry.is_dir():
-                    norm_k = normalize_title(entry.name)
-                    if norm_k:
-                        folder_groups.setdefault(norm_k, []).append(entry.path)
-        except Exception:
-            pass
+        # 2. Deduplicate media folders matching the same normalized title (strictly for Movies)
+        if "movie" in root_dir.lower():
+            folder_groups = {}
+            try:
+                for dirpath, dirnames, filenames in os.walk(root_dir):
+                    if dirpath == root_dir:
+                        continue
+                    bname = os.path.basename(dirpath)
+                    # Ignore language top-level categories
+                    if bname.lower() in ("english", "malayalam", "tamil", "telugu", "hindi", "kannada", "korean", "chinese", "japanese"):
+                        continue
+                    # Match leaf movie directories or folders containing media files
+                    if any(fn.lower().endswith((".strm", ".nfo", ".mp4", ".mkv", ".avi")) for fn in filenames) or not dirnames:
+                        norm_k = normalize_title(bname)
+                        if norm_k:
+                            folder_groups.setdefault(norm_k, []).append(dirpath)
+            except Exception:
+                pass
 
-        for norm_k, fpaths in folder_groups.items():
-            if len(fpaths) <= 1:
-                continue
-            def score_folder(p: str) -> int:
-                s = score_path(p)
-                try:
-                    for sub_f in os.listdir(p):
-                        if sub_f.lower().endswith(".strm") and os.path.getsize(os.path.join(p, sub_f)) > 0:
-                            s += 100
-                            break
-                except Exception:
-                    pass
-                return s
-            fpaths.sort(key=score_folder, reverse=True)
-            canon_folder = fpaths[0]
-            for dup_folder in fpaths[1:]:
-                if dup_folder in all_deleted_dirs:
+            for norm_k, fpaths in folder_groups.items():
+                if len(fpaths) <= 1:
                     continue
-                print(f"[DEDUP] Removing duplicate media folder by title: '{dup_folder}' (retaining '{canon_folder}')")
-                try:
-                    shutil.rmtree(dup_folder, ignore_errors=True)
-                    all_deleted_dirs.append(dup_folder)
-                except Exception as e:
-                    print(f"[DEDUP] Error removing folder {dup_folder}: {e}")
+                def score_folder(p: str) -> int:
+                    s = score_path(p)
+                    try:
+                        for sub_f in os.listdir(p):
+                            if sub_f.lower().endswith(".strm") and os.path.getsize(os.path.join(p, sub_f)) > 0:
+                                s += 100
+                                break
+                    except Exception:
+                        pass
+                    return s
+                fpaths.sort(key=score_folder, reverse=True)
+                canon_folder = fpaths[0]
+                for dup_folder in fpaths[1:]:
+                    if dup_folder in all_deleted_dirs:
+                        continue
+                    print(f"[DEDUP] Removing duplicate media folder by title: '{dup_folder}' (retaining '{canon_folder}')")
+                    try:
+                        shutil.rmtree(dup_folder, ignore_errors=True)
+                        all_deleted_dirs.append(dup_folder)
+                    except Exception as e:
+                        print(f"[DEDUP] Error removing folder {dup_folder}: {e}")
 
         # 3. Detect duplicate episodes in the same Season folder matching SxxExx
         ep_map = {}
