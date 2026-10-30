@@ -764,29 +764,47 @@ function findHomeTab() {
 
       if (tvTopbar) {
         var isVideo = !!document.querySelector(".videoPlayerContainer:not(.hide), #videoOsdPage:not(.hide), video");
-        var hash = window.location.hash || "";
+        var hash = (window.location.hash || "").toLowerCase();
+        var isAuthOrStartup = !!document.querySelector(
+          "#serverMismatchPage, .serverMismatchPage, #loginPage:not(.hide), .loginPage:not(.hide), " +
+          "#selectServerPage:not(.hide), .selectServerPage:not(.hide), #forgotPasswordPage:not(.hide), " +
+          ".manualLoginForm, .splashLogo:not(.hide), .manualServerContainer, input[type='password']"
+        );
         var isHiddenRoute = hash.indexOf("dashboard") !== -1 ||
                             hash.indexOf("settings") !== -1 ||
                             hash.indexOf("login") !== -1 ||
                             hash.indexOf("selectserver") !== -1 ||
+                            hash.indexOf("servermismatch") !== -1 ||
                             hash.indexOf("forgotpassword") !== -1 ||
                             hash.indexOf("details") !== -1 ||
                             hash.indexOf("itemdetails") !== -1;
 
         var isDetailPage = !!document.querySelector("#itemDetailPage:not(.hide), .itemDetailPage:not(.hide)");
-        var isAuthPage = !!document.querySelector("#loginPage:not(.hide), .loginPage:not(.hide), #selectServerPage:not(.hide), #forgotPasswordPage:not(.hide), .manualLoginForm, form[data-action='login'], input[type='password']");
-        var isSplash = !!document.querySelector(".splashLogo:not(.hide), #splashPage:not(.hide), .splashLogo");
-        var hasHomeOrLibrary = !!document.querySelector("#indexPage, .homePage, #homeTab, .pageTabContent, .mainDrawer, .itemsContainer");
         var isUserLoggedIn = (window.ApiClient && typeof window.ApiClient.isLoggedIn === "function") ? window.ApiClient.isLoggedIn() : (window.ApiClient && !!window.ApiClient.accessToken());
 
-        if (isVideo || isHiddenRoute || isDetailPage || isAuthPage || (isSplash && !hasHomeOrLibrary) || (!isUserLoggedIn && !hasHomeOrLibrary)) {
+        if (isVideo || isHiddenRoute || isDetailPage || isAuthOrStartup || !isUserLoggedIn) {
+          tvTopbar.classList.remove("is-visible");
+          document.body.classList.remove("show-apex-topbar");
           tvTopbar.style.display = "none";
           tvTopbar.style.visibility = "hidden";
           return;
         } else {
+          tvTopbar.classList.add("is-visible");
+          document.body.classList.add("show-apex-topbar");
           tvTopbar.style.display = "flex";
           tvTopbar.style.visibility = "visible";
         }
+      }
+
+      // 1.5 Suppress and purge floating Play / Shuffle buttons from catalog/library views
+      var strayPlayBtns = document.querySelectorAll(
+        ':is(.view, .page, [data-role="page"], .libraryPage):not(#itemDetailPage):not(#videoOsdPage) :is(.btnPlay, .btnShuffle, button[data-action="playall"], button[data-action="shuffleall"], button[title*="Play all" i], button[title*="Shuffle all" i]), ' +
+        '.viewSettings :is(.btnPlay, .btnShuffle, button[data-action="play"], button[data-action="shuffle"]), ' +
+        '.pageTitleWithDefaultButton :is(.btnPlay, .btnShuffle), ' +
+        '.mainTabsContainer :is(.btnPlay, .btnShuffle)'
+      );
+      for (var sp = 0; sp < strayPlayBtns.length; sp++) {
+        strayPlayBtns[sp].remove();
       }
 
       // 2. Hide Hamburger, Cast, SyncPlay, and stray drawer buttons completely
@@ -901,31 +919,30 @@ function findHomeTab() {
 
   function deduplicateDomCards() {
     safe(function () {
-      var containers = document.querySelectorAll(".itemsContainer");
-      for (var i = 0; i < containers.length; i++) {
-        var container = containers[i];
-        var cards = container.querySelectorAll(":scope > .card, :scope > div > .card");
-        if (!cards || !cards.length) cards = container.children;
-        var seenTitles = {};
-        for (var j = 0; j < cards.length; j++) {
-          var card = cards[j];
-          if (!card.classList || !card.classList.contains("card")) continue;
-          var titleEl = card.querySelector(".cardText-first") || card.querySelector(".cardText:not(.cardText-secondary)") || card.querySelector(".cardTextCentered") || card.querySelector(".cardText");
-          var rawTitle = (titleEl ? titleEl.textContent : (card.getAttribute("aria-label") || "")).trim().toLowerCase();
-          var normTitle = rawTitle.replace(/\s*\(\s*\d{4}\s*\)\s*/g, "").replace(/[^a-z0-9]/g, "");
-          if (!normTitle) continue;
-          if (seenTitles[normTitle]) {
-            card.classList.add("apex-duplicate-hidden");
-            card.style.setProperty("display", "none", "important");
-            card.style.setProperty("visibility", "hidden", "important");
-            card.style.setProperty("width", "0px", "important");
-            card.style.setProperty("height", "0px", "important");
-            card.style.setProperty("flex", "0 0 0px", "important");
-            card.style.setProperty("margin", "0px", "important");
-            card.style.setProperty("padding", "0px", "important");
-          } else {
-            seenTitles[normTitle] = true;
-          }
+      var activePage = document.querySelector('.page:not(.hide), .view:not(.hide), [data-role="page"]:not(.hide)') || document;
+      var cards = activePage.querySelectorAll('.card');
+      if (!cards || !cards.length) return;
+      var seenTitles = {};
+      for (var j = 0; j < cards.length; j++) {
+        var card = cards[j];
+        if (!card.classList || !card.classList.contains("card")) continue;
+        if (card.closest('#itemDetailPage') || card.closest('.detailImageContainer')) continue;
+        var titleEl = card.querySelector(".cardText-first") || card.querySelector(".cardText:not(.cardText-secondary)") || card.querySelector(".cardTextCentered") || card.querySelector(".cardText");
+        var rawTitle = (titleEl ? titleEl.textContent : (card.getAttribute("aria-label") || "")).trim().toLowerCase();
+        var normTitle = rawTitle.replace(/\s*\(\s*\d{4}\s*\)\s*/g, "").replace(/^(linkz|the)\b/g, "").replace(/[^a-z0-9]/g, "");
+        if (!normTitle) continue;
+        if (seenTitles[normTitle]) {
+          card.classList.add("apex-duplicate-hidden");
+          card.style.setProperty("display", "none", "important");
+          card.style.setProperty("visibility", "hidden", "important");
+          card.style.setProperty("width", "0px", "important");
+          card.style.setProperty("height", "0px", "important");
+          card.style.setProperty("flex", "0 0 0px", "important");
+          card.style.setProperty("margin", "0px", "important");
+          card.style.setProperty("padding", "0px", "important");
+          card.remove();
+        } else {
+          seenTitles[normTitle] = true;
         }
       }
     });

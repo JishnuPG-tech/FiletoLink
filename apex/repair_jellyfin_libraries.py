@@ -200,6 +200,44 @@ def repair_database(db_path: str, marker_file: str | None = None, force_reset_pa
             cur.executemany("DELETE FROM BaseItems WHERE Id = ?", [(did,) for did in dup_to_delete])
             print(f"[REPAIR] Removed {len(dup_to_delete)} duplicate row(s) pointing to identical paths from {db_path}.")
 
+        # Permanent disk + DB deduplication for Movie directories
+        movies_dir = "/data/jellyfin/media/Movies"
+        if os.path.isdir(movies_dir):
+            seen_movie_keys = {}
+            for lang in os.listdir(movies_dir):
+                lang_path = os.path.join(movies_dir, lang)
+                if not os.path.isdir(lang_path):
+                    continue
+                for movie_folder in sorted(os.listdir(lang_path)):
+                    folder_path = os.path.join(lang_path, movie_folder)
+                    if not os.path.isdir(folder_path):
+                        continue
+                    strm_files = [f for f in os.listdir(folder_path) if f.endswith('.strm')]
+                    strm_url = None
+                    if strm_files:
+                        try:
+                            with open(os.path.join(folder_path, strm_files[0]), 'r', encoding='utf-8', errors='ignore') as sf:
+                                strm_url = sf.read().strip()
+                        except Exception:
+                            pass
+                    norm_k = re.sub(r'^(linkz|the)', '', movie_folder, flags=re.I)
+                    norm_k = re.sub(r'\(\d{4}\)', '', norm_k)
+                    norm_k = re.sub(r'[^a-zA-Z0-9]', '', norm_k).lower()
+
+                    key = strm_url if strm_url else (norm_k if norm_k else None)
+                    if key:
+                        if key in seen_movie_keys:
+                            existing_folder = seen_movie_keys[key]
+                            is_curr_worse = 'linkz' in movie_folder.lower() or 'man brand' in movie_folder.lower()
+                            to_delete = folder_path if is_curr_worse else existing_folder
+                            to_keep = existing_folder if is_curr_worse else folder_path
+                            print(f"[REPAIR] Duplicate movie detected: keeping '{to_keep}', deleting duplicate '{to_delete}'")
+                            shutil.rmtree(to_delete, ignore_errors=True)
+                            cur.execute("DELETE FROM BaseItems WHERE Path LIKE ?", (to_delete + '%',))
+                            seen_movie_keys[key] = to_keep
+                        else:
+                            seen_movie_keys[key] = folder_path
+
         # Check and repair Users table: clear password and login attempt lockouts
         cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Users'")
         if cur.fetchone():
