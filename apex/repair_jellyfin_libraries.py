@@ -980,6 +980,34 @@ def deduplicate_media_strms(roots=None, databases=None):
                 AND Path IS NOT NULL AND Path != ''
             """)
             del_count += cur.rowcount
+
+            # Remove duplicate BaseItems rows having identical Name and Type
+            cur.execute("""
+                SELECT Name, type, COUNT(*) c
+                FROM BaseItems
+                WHERE type LIKE '%Movie' OR type LIKE '%Series'
+                GROUP BY Name, type
+                HAVING c > 1
+            """)
+            name_dups = cur.fetchall()
+            for name, itype, _ in name_dups:
+                cur.execute("SELECT Id, Path FROM BaseItems WHERE Name = ? AND type = ?", (name, itype))
+                dup_rows = cur.fetchall()
+                def score_db_row(r):
+                    p = (r[1] or "").lower()
+                    s = 0
+                    if os.path.exists(r[1] or ""): s += 100
+                    if "spider-man" in p: s += 50
+                    if "shang-chi" in p: s += 50
+                    if "china-town" in p: s += 50
+                    if "," in p or "." in p: s += 10
+                    s += len(p)
+                    return s
+                dup_rows.sort(key=score_db_row, reverse=True)
+                for redundant in dup_rows[1:]:
+                    print(f"[DEDUP] Removing duplicate BaseItems row by name: '{name}' (Id={redundant[0]}, Path={redundant[1]})")
+                    cur.execute("DELETE FROM BaseItems WHERE Id = ?", (redundant[0],))
+                    del_count += cur.rowcount
             conn.commit()
             conn.close()
             if del_count > 0:

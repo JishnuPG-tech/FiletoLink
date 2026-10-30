@@ -361,6 +361,19 @@ fi
 sync_jellyfin_back &
 SYNC_PID=$!
 
+trigger_library_scan() {
+    for _ in $(seq 1 30); do
+        if curl -s -f http://127.0.0.1:8096/System/Info/Public >/dev/null 2>&1; then
+            sleep 4
+            curl -s -X POST http://127.0.0.1:8096/Library/Refresh >/dev/null 2>&1 || true
+            echo "[JELLYFIN] Triggered automated library scan to purge in-memory duplicates."
+            break
+        fi
+        sleep 2
+    done
+}
+trigger_library_scan &
+
 
 echo "[HEALTH] FastAPI Gateway (PID $FASTAPI_PID) and Nginx (PID $NGINX_PID) active."
 

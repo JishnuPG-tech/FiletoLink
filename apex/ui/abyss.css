@@ -2632,12 +2632,7 @@ body:has(#videoOsdPage) .skinHeader .MuiTypography-root.MuiTypography-body1 {
         padding: 8px;
     }
 
-    .btnPause {
-        position: fixed !important;
-        left: 42vw;
-        transform: translateY(-45vh);
-        font-size: 2em;
-    }
+    /* btnPause fixed neutralized */
 
 
 }
@@ -2647,15 +2642,7 @@ body:has(#videoOsdPage) .skinHeader .MuiTypography-root.MuiTypography-body1 {
         font-size: large !important;
     }
 
-    .btnPause {
-        position: fixed !important;
-        left: 42vw;
-        transform: translateY(-45vh);
-        font-size: 2em;
-        backdrop-filter: blur(15px) !important;
-        background-color: rgba(var(--abyss-glass-tint), 0.69) !important;
-        border-radius: 20px !important;
-    }
+    /* btnPause fixed landscape neutralized */
 
     body:has(#indexPage.homePage:not(.hide)) .headerTabs.sectionTabs {
         display: none !important;
@@ -4131,14 +4118,32 @@ button[data-action="search"] {
     margin-right: 14px !important;
 }
 
-/* 1. Continue Watching & Next Up: Uniform 2:3 Vertical Rectangular Posters */
+/* 1. Continue Watching & Next Up: Strict Uniform 2:3 Vertical Rectangular Posters Across ALL Devices */
 .resumeSection .card,
 .nextUpSection .card,
 div[data-category="resume"] .card,
-div[data-category="nextup"] .card {
-    width: 150px !important;
-    max-width: 150px !important;
-    flex: 0 0 150px !important;
+div[data-category="nextup"] .card,
+.card[data-type="Episode"]:is(.resumeSection *, div[data-category="resume"] *, #indexPage *),
+.backdropCard:is(.resumeSection *, div[data-category="resume"] *, #indexPage *) {
+    width: 140px !important;
+    max-width: 140px !important;
+    min-width: 140px !important;
+    flex: 0 0 140px !important;
+}
+
+/* Force 2:3 vertical aspect-ratio on cardPadder (150% padding-bottom overrides Jellyfin 56.25% 16:9) */
+.resumeSection .cardPadder,
+.nextUpSection .cardPadder,
+div[data-category="resume"] .cardPadder,
+div[data-category="nextup"] .cardPadder,
+#indexPage .itemsContainer-slider .cardPadder,
+.cardPadder:is(.resumeSection *, div[data-category="resume"] *, #indexPage *),
+.cardPadder-backdrop:is(.resumeSection *, div[data-category="resume"] *, #indexPage *),
+.cardPadder-overflowBackdrop:is(.resumeSection *, div[data-category="resume"] *, #indexPage *),
+.cardPadder-smallBackdrop:is(.resumeSection *, div[data-category="resume"] *, #indexPage *) {
+    padding-bottom: 150% !important;
+    aspect-ratio: 2 / 3 !important;
+    height: 0 !important;
 }
 
 .resumeSection .cardScalable,
@@ -4149,8 +4154,7 @@ div[data-category="nextup"] .cardScalable,
 .nextUpSection .card[data-type="Episode"] .cardScalable,
 div[data-category="resume"] .card[data-type="Episode"] .cardScalable,
 div[data-category="nextup"] .card[data-type="Episode"] .cardScalable,
-.thumbCard .cardScalable,
-.backdropCard .cardScalable {
+.cardScalable:is(.resumeSection *, div[data-category="resume"] *, #indexPage *) {
     aspect-ratio: 2 / 3 !important;
     border-radius: 12px !important;
     overflow: hidden !important;
@@ -4159,20 +4163,27 @@ div[data-category="nextup"] .card[data-type="Episode"] .cardScalable,
 .resumeSection .cardImageContainer img,
 .nextUpSection .cardImageContainer img,
 div[data-category="resume"] .cardImageContainer img,
-div[data-category="nextup"] .cardImageContainer img {
+div[data-category="nextup"] .cardImageContainer img,
+#indexPage .itemsContainer-slider .cardImageContainer img {
     object-fit: cover !important;
     width: 100% !important;
     height: 100% !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
 }
 
 @media (max-width: 600px) {
     .resumeSection .card,
     .nextUpSection .card,
     div[data-category="resume"] .card,
-    div[data-category="nextup"] .card {
-        width: 125px !important;
-        max-width: 125px !important;
-        flex: 0 0 125px !important;
+    div[data-category="nextup"] .card,
+    .card[data-type="Episode"]:is(.resumeSection *, div[data-category="resume"] *, #indexPage *),
+    .backdropCard:is(.resumeSection *, div[data-category="resume"] *, #indexPage *) {
+        width: 120px !important;
+        max-width: 120px !important;
+        min-width: 120px !important;
+        flex: 0 0 120px !important;
     }
 }
 
@@ -4677,4 +4688,305 @@ button:has(svg[data-testid="PeopleIcon"]),
     width: 0 !important;
     height: 0 !important;
     opacity: 0 !important;
+}
+
+/* ========================================================
+   LANDSCAPE MOVIE DETAIL PAGE: 2-COLUMN NETFLIX/APPLE TV LAYOUT
+   ======================================================== */
+@media (orientation: landscape) {
+    #itemDetailPage .detailLogo,
+    .layout-mobile #itemDetailPage .detailLogo {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        margin: 0 !important;
+    }
+
+    #itemDetailPage .itemBackdrop,
+    .layout-mobile #itemDetailPage .itemBackdrop {
+        height: 40vh !important;
+        max-height: 200px !important;
+    }
+
+    #itemDetailPage .detailRibbon,
+    .layout-mobile #itemDetailPage .detailRibbon {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: flex-start !important;
+        gap: 24px !important;
+        padding: 12px 28px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        position: relative !important;
+        top: 0 !important;
+        left: 0 !important;
+    }
+
+    #itemDetailPage .infoWrapper,
+    .layout-mobile #itemDetailPage .infoWrapper {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: flex-start !important;
+        gap: 20px !important;
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        width: 100% !important;
+    }
+
+    #itemDetailPage .detailImageContainer,
+    .layout-mobile #itemDetailPage .detailImageContainer {
+        display: block !important;
+        flex: 0 0 140px !important;
+        width: 140px !important;
+        max-width: 140px !important;
+        min-width: 140px !important;
+        position: relative !important;
+        top: 0 !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        margin: 0 !important;
+    }
+
+    #itemDetailPage .detailImageContainer .card,
+    .layout-mobile #itemDetailPage .detailImageContainer .card {
+        width: 140px !important;
+        max-width: 140px !important;
+        aspect-ratio: 2 / 3 !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+        margin: 0 !important;
+        position: relative !important;
+        top: 0 !important;
+        left: 0 !important;
+        bottom: 0 !important;
+    }
+
+    #itemDetailPage .detailImageContainer .cardScalable {
+        aspect-ratio: 2 / 3 !important;
+        border-radius: 12px !important;
+    }
+
+    #itemDetailPage .detailImageContainer .cardPadder {
+        padding-bottom: 150% !important;
+    }
+
+    #itemDetailPage .nameContainer,
+    .layout-mobile #itemDetailPage .nameContainer {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 0 8px 0 !important;
+    }
+
+    #itemDetailPage .itemName,
+    .layout-mobile #itemDetailPage .itemName,
+    #itemDetailPage h1.itemName {
+        font-size: 1.6em !important;
+        font-weight: 700 !important;
+        line-height: 1.25 !important;
+        color: #ffffff !important;
+        margin: 0 0 6px 0 !important;
+        white-space: normal !important;
+        word-break: normal !important;
+        overflow-wrap: break-word !important;
+        display: block !important;
+    }
+
+    #itemDetailPage .itemMiscInfo,
+    .layout-mobile #itemDetailPage .itemMiscInfo {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+        color: rgba(255, 255, 255, 0.7) !important;
+        font-size: 0.9em !important;
+        margin-bottom: 12px !important;
+    }
+
+    #itemDetailPage .mainDetailButtons,
+    .layout-mobile #itemDetailPage .mainDetailButtons {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        flex-wrap: wrap !important;
+        gap: 12px !important;
+        margin-top: 8px !important;
+    }
+
+    #itemDetailPage .btnPlay,
+    #itemDetailPage .btnReplay {
+        background: #ffffff !important;
+        color: #000000 !important;
+        border-radius: 8px !important;
+        padding: 6px 18px !important;
+        font-weight: 600 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+    }
+}
+
+/* ========================================================
+   VIDEO PLAYER OSD: CLEAN, UNIFIED LANDSCAPE CONTROLS
+   Fixes scattered playback buttons and misaligned bottom bar
+   ======================================================== */
+#videoOsdPage {
+    background: #000000 !important;
+}
+
+/* 1. Neutralize disruptive fixed positioning on btnPause */
+.btnPause,
+#videoOsdPage .btnPause {
+    position: static !important;
+    transform: none !important;
+    left: auto !important;
+    margin: 0 !important;
+}
+
+/* 2. Unified Centered Media Transport Cluster (Play, Pause, Rewind, Fast-Forward, Next, Prev) */
+#videoOsdPage .videoOsdBottom .buttons > div[dir="ltr"] {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 32px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    z-index: 100 !important;
+    pointer-events: auto !important;
+}
+
+#videoOsdPage .videoOsdBottom .btnPause {
+    width: 64px !important;
+    height: 64px !important;
+    min-width: 64px !important;
+    border-radius: 50% !important;
+    background: rgba(255, 255, 255, 0.22) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.35) !important;
+    color: #ffffff !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important;
+    transition: transform 0.15s ease, background 0.15s ease !important;
+}
+
+#videoOsdPage .videoOsdBottom .btnPause:active {
+    transform: scale(0.92) !important;
+    background: rgba(255, 255, 255, 0.35) !important;
+}
+
+#videoOsdPage .videoOsdBottom .btnPause .material-icons {
+    font-size: 38px !important;
+    color: #ffffff !important;
+}
+
+#videoOsdPage .videoOsdBottom .btnRewind,
+#videoOsdPage .videoOsdBottom .btnFastForward,
+#videoOsdPage .videoOsdBottom .btnPreviousTrack,
+#videoOsdPage .videoOsdBottom .btnNextTrack,
+#videoOsdPage .videoOsdBottom .btnPreviousChapter,
+#videoOsdPage .videoOsdBottom .btnNextChapter {
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+    border-radius: 50% !important;
+    background: rgba(0, 0, 0, 0.35) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    color: #ffffff !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+}
+
+#videoOsdPage .videoOsdBottom .btnRewind .material-icons,
+#videoOsdPage .videoOsdBottom .btnFastForward .material-icons,
+#videoOsdPage .videoOsdBottom .btnPreviousTrack .material-icons,
+#videoOsdPage .videoOsdBottom .btnNextTrack .material-icons {
+    font-size: 30px !important;
+    color: #ffffff !important;
+}
+
+/* 3. Bottom Control Bar: Pinned, Clean, Gradient Backdrop */
+#videoOsdPage .videoOsdBottom {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+    padding: 12px 28px 16px 28px !important;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.4) 65%, transparent 100%) !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    border-radius: 0 !important;
+    z-index: 50 !important;
+}
+
+#videoOsdPage .videoOsdBottom .osdControls {
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    width: 100% !important;
+}
+
+/* 4. Timeline Slider Row */
+#videoOsdPage .flex.flex-direction-row.align-items-center {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 14px !important;
+    width: 100% !important;
+    margin-bottom: 6px !important;
+}
+
+#videoOsdPage .startTimeText,
+#videoOsdPage .endTimeText {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    min-width: 44px !important;
+    text-align: center !important;
+}
+
+#videoOsdPage .sliderContainer {
+    flex: 1 1 auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* 5. Bottom Icons Row (Audio, Subtitles, Settings, Pip, Fullscreen) */
+#videoOsdPage .videoOsdBottom .buttons {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 16px !important;
+    width: 100% !important;
+    padding-top: 4px !important;
+    position: relative !important;
+}
+
+#videoOsdPage .btnFullscreen {
+    margin-left: auto !important;
+}
+
+#videoOsdPage .videoOsdBottom .buttons button[is="paper-icon-button-light"] {
+    color: rgba(255, 255, 255, 0.88) !important;
+    padding: 8px !important;
+}
+
+#videoOsdPage .videoOsdBottom .buttons button[is="paper-icon-button-light"] .material-icons {
+    font-size: 24px !important;
 }

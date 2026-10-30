@@ -769,14 +769,17 @@ function findHomeTab() {
                             hash.indexOf("settings") !== -1 ||
                             hash.indexOf("login") !== -1 ||
                             hash.indexOf("selectserver") !== -1 ||
-                            hash.indexOf("forgotpassword") !== -1;
+                            hash.indexOf("forgotpassword") !== -1 ||
+                            hash.indexOf("details") !== -1 ||
+                            hash.indexOf("itemdetails") !== -1;
 
+        var isDetailPage = !!document.querySelector("#itemDetailPage:not(.hide), .itemDetailPage:not(.hide)");
         var isAuthPage = !!document.querySelector("#loginPage:not(.hide), .loginPage:not(.hide), #selectServerPage:not(.hide), #forgotPasswordPage:not(.hide), .manualLoginForm, form[data-action='login'], input[type='password']");
         var isSplash = !!document.querySelector(".splashLogo:not(.hide), #splashPage:not(.hide), .splashLogo");
         var hasHomeOrLibrary = !!document.querySelector("#indexPage, .homePage, #homeTab, .pageTabContent, .mainDrawer, .itemsContainer");
         var isUserLoggedIn = (window.ApiClient && typeof window.ApiClient.isLoggedIn === "function") ? window.ApiClient.isLoggedIn() : (window.ApiClient && !!window.ApiClient.accessToken());
 
-        if (isVideo || isHiddenRoute || isAuthPage || (isSplash && !hasHomeOrLibrary) || (!isUserLoggedIn && !hasHomeOrLibrary)) {
+        if (isVideo || isHiddenRoute || isDetailPage || isAuthPage || (isSplash && !hasHomeOrLibrary) || (!isUserLoggedIn && !hasHomeOrLibrary)) {
           tvTopbar.style.display = "none";
           tvTopbar.style.visibility = "hidden";
           return;
@@ -817,6 +820,8 @@ function findHomeTab() {
       }
 
       updateActiveNavTab();
+      normalizeContinueWatchingCards();
+      deduplicateDomCards();
 
       // 3. Ensure Search Pill in landscape & desktop
       var bar = findActiveToolbar();
@@ -843,6 +848,76 @@ function findHomeTab() {
             headerRight.insertBefore(searchPill, userBtn);
           } else {
             headerRight.insertBefore(searchPill, headerRight.firstChild);
+          }
+        }
+      }
+    });
+  }
+
+  
+  function normalizeContinueWatchingCards() {
+    safe(function () {
+      var resumeContainers = document.querySelectorAll('.resumeSection, .nextUpSection, div[data-category="resume"], div[data-category="nextup"], #indexPage .itemsContainer-slider');
+      for (var rc = 0; rc < resumeContainers.length; rc++) {
+        var cards = resumeContainers[rc].querySelectorAll('.card');
+        for (var c = 0; c < cards.length; c++) {
+          var card = cards[c];
+          card.classList.remove('backdropCard', 'overflowBackdropCard', 'smallBackdropCard');
+          card.classList.add('portraitCard');
+          card.style.width = '140px';
+          card.style.maxWidth = '140px';
+          card.style.minWidth = '140px';
+          card.style.flex = '0 0 140px';
+          
+          var padders = card.querySelectorAll('.cardPadder');
+          for (var p = 0; p < padders.length; p++) {
+            padders[p].classList.remove('cardPadder-backdrop', 'cardPadder-overflowBackdrop', 'cardPadder-smallBackdrop');
+            padders[p].classList.add('cardPadder-portrait');
+            padders[p].style.paddingBottom = '150%';
+            padders[p].style.aspectRatio = '2 / 3';
+            padders[p].style.height = '0';
+          }
+
+          var scalables = card.querySelectorAll('.cardScalable');
+          for (var s = 0; s < scalables.length; s++) {
+            scalables[s].style.aspectRatio = '2 / 3';
+            scalables[s].style.borderRadius = '12px';
+            scalables[s].style.overflow = 'hidden';
+          }
+
+          var imgs = card.querySelectorAll('.cardImageContainer img');
+          for (var m = 0; m < imgs.length; m++) {
+            imgs[m].style.objectFit = 'cover';
+            imgs[m].style.width = '100%';
+            imgs[m].style.height = '100%';
+            imgs[m].style.position = 'absolute';
+            imgs[m].style.top = '0';
+            imgs[m].style.left = '0';
+          }
+        }
+      }
+    });
+  }
+
+  function deduplicateDomCards() {
+    safe(function () {
+      var containers = document.querySelectorAll('.itemsContainer');
+      for (var i = 0; i < containers.length; i++) {
+        var container = containers[i];
+        var cards = container.children;
+        var seenTitles = {};
+        for (var j = 0; j < cards.length; j++) {
+          var card = cards[j];
+          if (!card.classList || !card.classList.contains('card')) continue;
+          var titleEl = card.querySelector('.cardText-first, .cardTextCentered, .cardText, .cardText-secondary');
+          var title = (titleEl ? titleEl.textContent : (card.getAttribute('aria-label') || '')).trim().toLowerCase();
+          var normTitle = title.replace(/[^a-z0-9]/g, '');
+          if (!normTitle) continue;
+          if (seenTitles[normTitle]) {
+            card.style.display = 'none';
+            card.style.visibility = 'hidden';
+          } else {
+            seenTitles[normTitle] = true;
           }
         }
       }
