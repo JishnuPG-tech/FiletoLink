@@ -762,29 +762,11 @@ function findHomeTab() {
         });
       });
 
-      // 2. Safe Fallback Art for genuinely blank cards (NEVER on detail page)
-      var blankCards = document.querySelectorAll(':is(#indexPage, .libraryPage, #moviesPage, #tvShowsPage) .card:not(.has-apex-poster)');
-      blankCards.forEach(function(card) {
-        if (card.closest('#itemDetailPage')) return;
-        var cic = card.querySelector('.cardImageContainer');
-        if (!cic) return;
-        var bg = cic.style.backgroundImage || '';
-        if (bg.indexOf('url(') !== -1 || card.querySelector('img[src]:not([src=""])')) return;
-
-        if (cic.classList.contains('defaultCardBackground') || !cic.getAttribute('data-src')) {
-          var titleEl = card.querySelector('.cardText-first, .cardTitle, .cardText');
-          if (!titleEl) return;
-          var titleText = titleEl.textContent.trim();
-          if (!titleText || titleText === 'Media') return;
-          if (!cic.querySelector('.apex-fallback-art')) {
-            var fallback = document.createElement('div');
-            fallback.className = 'apex-fallback-art';
-            fallback.innerHTML = '<div class="apex-art-icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="rgba(255,255,255,0.7)"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg></div><div class="apex-art-title">' + titleText + '</div>';
-            cic.appendChild(fallback);
-            card.classList.add('has-apex-poster');
-          }
-        }
-      });
+      // Purge any stray fallback art elements so real posters are never obstructed
+      var oldFallbacks = document.querySelectorAll('.apex-fallback-art');
+      for (var of = 0; of < oldFallbacks.length; of++) {
+        oldFallbacks[of].style.setProperty("display", "none", "important");
+      }
     } catch (e) {}
   }
 
@@ -878,7 +860,8 @@ function findHomeTab() {
         '.mainTabsContainer :is(.btnPlay, .btnShuffle)'
       );
       for (var sp = 0; sp < strayPlayBtns.length; sp++) {
-        strayPlayBtns[sp].remove();
+        strayPlayBtns[sp].style.setProperty("display", "none", "important");
+        strayPlayBtns[sp].classList.add("hide");
       }
 
       // 2. Hide Hamburger, Cast, SyncPlay, and stray drawer buttons completely
@@ -1014,7 +997,6 @@ function findHomeTab() {
           card.style.setProperty("flex", "0 0 0px", "important");
           card.style.setProperty("margin", "0px", "important");
           card.style.setProperty("padding", "0px", "important");
-          card.remove();
         } else {
           seenTitles[normTitle] = true;
         }

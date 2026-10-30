@@ -1037,15 +1037,54 @@ html.abyss-spotlight-visible[data-theme="dark"] .MuiAppBar-root+div[aria-hidden=
     background-color: #0d0d16 !important;
 }
 
-/* My Media / Library Channel Cards */
+/* My Media / Library Channel Cards: Strict Uniform 2:3 Cards on Portrait & Landscape */
 .card[data-type="CollectionFolder"],
+.card[data-type="UserView"],
 [data-category="views"] .card,
+.section0 .card,
 .apex-library-card {
+    width: 140px !important;
+    max-width: 140px !important;
+    min-width: 140px !important;
+    flex: 0 0 140px !important;
     border-radius: 14px !important;
     background: linear-gradient(135deg, #181824 0%, #0d0d14 100%) !important;
     border: 1px solid rgba(255, 255, 255, 0.12) !important;
     overflow: hidden !important;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6) !important;
+}
+
+.card[data-type="CollectionFolder"] .cardPadder,
+.card[data-type="UserView"] .cardPadder,
+[data-category="views"] .cardPadder,
+.section0 .cardPadder,
+.apex-library-card .cardPadder {
+    padding-bottom: 150% !important;
+    aspect-ratio: 2 / 3 !important;
+    height: 0 !important;
+}
+
+.card[data-type="CollectionFolder"] .cardScalable,
+.card[data-type="UserView"] .cardScalable,
+[data-category="views"] .cardScalable,
+.section0 .cardScalable,
+.apex-library-card .cardScalable {
+    aspect-ratio: 2 / 3 !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}
+
+@media (orientation: landscape) {
+    .card[data-type="CollectionFolder"],
+    .card[data-type="UserView"],
+    [data-category="views"] .card,
+    .section0 .card,
+    .apex-library-card {
+        width: 130px !important;
+        max-width: 130px !important;
+        min-width: 130px !important;
+        flex: 0 0 130px !important;
+    }
 }
 
 .card[data-type="CollectionFolder"] .cardScalable::after,
@@ -2297,16 +2336,20 @@ body:has(#videoOsdPage) .skinHeader .MuiTypography-root.MuiTypography-body1 {
     height: calc(12vw - 0.6em) !important;
 }
 
-.layout-mobile #castContent .card.overflowPortraitCard,
-.layout-mobile #guestCastContent .card.overflowPortraitCard {
-    width: 35vw !important;
-    font-size: 90% !important;
+.layout-mobile #castContent .card,
+.layout-mobile #guestCastContent .card {
+    width: 95px !important;
+    min-width: 95px !important;
+    max-width: 95px !important;
+    flex: 0 0 95px !important;
+    font-size: 85% !important;
 }
 
 .layout-mobile #castContent .cardScalable,
 .layout-mobile #guestCastContent .cardScalable {
-    width: calc(35vw - 0.6em) !important;
-    height: calc(35vw - 0.6em) !important;
+    width: 95px !important;
+    height: 130px !important;
+    aspect-ratio: 3 / 4 !important;
 }
 
 .layout-mobile .innerCardFooterClear {
@@ -2323,16 +2366,20 @@ body:has(#videoOsdPage) .skinHeader .MuiTypography-root.MuiTypography-body1 {
 
 @media (orientation: landscape) and (max-height: 500px) {
 
-    .layout-mobile #castContent .card.overflowPortraitCard,
-    .layout-mobile #guestCastContent .card.overflowPortraitCard {
-        width: 31.2vw !important;
-        font-size: 90% !important;
+    .layout-mobile #castContent .card,
+    .layout-mobile #guestCastContent .card {
+        width: 90px !important;
+        min-width: 90px !important;
+        max-width: 90px !important;
+        flex: 0 0 90px !important;
+        font-size: 85% !important;
     }
 
     .layout-mobile #castContent .cardScalable,
     .layout-mobile #guestCastContent .cardScalable {
-        width: calc(31.2vw - 0.6em) !important;
-        height: calc(31.2vw - 0.6em) !important;
+        width: 90px !important;
+        height: 120px !important;
+        aspect-ratio: 3 / 4 !important;
     }
 
     .layout-mobile .innerCardFooterClear {
@@ -3282,10 +3329,22 @@ div[role="main"] {
 
 
 /* Universal suppression of floating Play All & Shuffle All buttons outside item detail & video */
-:is(.view, .page, [data-role="page"], .libraryPage):not(#itemDetailPage):not(#videoOsdPage) :is(.btnPlay, .btnShuffle, button[data-action="playall"], button[data-action="shuffleall"], button[title*="Play all" i], button[title*="Shuffle all" i]),
-.viewSettings :is(.btnPlay, .btnShuffle, button[data-action="play"], button[data-action="shuffle"]),
-.pageTitleWithDefaultButton :is(.btnPlay, .btnShuffle),
-.mainTabsContainer :is(.btnPlay, .btnShuffle),
+:is(.view, .page, [data-role="page"], .libraryPage):not(#itemDetailPage):not(#videoOsdPage) :is(
+    .btnPlay,
+    .btnShuffle,
+    .fab,
+    button[data-action="playall"],
+    button[data-action="shuffleall"],
+    button[data-action="play"],
+    button[data-action="shuffle"],
+    button[title*="Play" i],
+    button[title*="Shuffle" i],
+    button:has(svg[data-testid="PlayArrowIcon"]),
+    button:has(svg[data-testid="ShuffleIcon"])
+),
+.viewSettings :is(.btnPlay, .btnShuffle, button[data-action="play"], button[data-action="shuffle"], button[title*="Play" i], button[title*="Shuffle" i], .fab),
+.pageTitleWithDefaultButton :is(.btnPlay, .btnShuffle, .fab),
+.mainTabsContainer :is(.btnPlay, .btnShuffle, .fab),
 .headerRight :is(.btnPlay, .btnShuffle) {
     display: none !important;
     visibility: hidden !important;
@@ -4630,13 +4689,14 @@ header .pageTitle,
    Clean single poster card + side-by-side title & metadata
    ======================================================== */
 @media (orientation: portrait) {
+    #itemDetailPage .detailPageWrapperContainer,
     #itemDetailPage .detailPagePrimaryContainer,
     .layout-mobile #itemDetailPage .detailPagePrimaryContainer {
         display: flex !important;
         flex-direction: row !important;
         align-items: flex-start !important;
         flex-wrap: wrap !important;
-        padding: 16px !important;
+        padding: 56px 16px 16px 16px !important;
         gap: 16px !important;
         width: 100% !important;
         box-sizing: border-box !important;
@@ -4738,8 +4798,13 @@ header .pageTitle,
 
     #itemDetailPage .itemName,
     .layout-mobile #itemDetailPage .itemName,
-    #itemDetailPage h1.itemName {
+    #itemDetailPage h1.itemName,
+    #itemDetailPage .itemName.hide,
+    #itemDetailPage .nameContainer,
+    #itemDetailPage .nameContainer.hide {
         display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
         width: 100% !important;
         max-width: 100% !important;
         font-size: 1.45rem !important;
@@ -4753,6 +4818,8 @@ header .pageTitle,
         margin: 0 !important;
         padding: 0 !important;
         text-align: left !important;
+        position: relative !important;
+        z-index: 10 !important;
     }
 
     #itemDetailPage .originalTitle,
@@ -5025,7 +5092,13 @@ button:has(svg[data-testid="PeopleIcon"]),
 
     #itemDetailPage .itemName,
     .layout-mobile #itemDetailPage .itemName,
-    #itemDetailPage h1.itemName {
+    #itemDetailPage h1.itemName,
+    #itemDetailPage .itemName.hide,
+    #itemDetailPage .nameContainer,
+    #itemDetailPage .nameContainer.hide {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
         font-size: 1.65rem !important;
         font-weight: 700 !important;
         line-height: 1.22 !important;
@@ -5036,6 +5109,8 @@ button:has(svg[data-testid="PeopleIcon"]),
         word-break: normal !important;
         overflow-wrap: break-word !important;
         letter-spacing: -0.01em !important;
+        position: relative !important;
+        z-index: 10 !important;
     }
 
     #itemDetailPage .itemMiscInfo,
@@ -5309,6 +5384,10 @@ body:not(.hide-apex-topbar) .libraryPage:not(#itemDetailPage) {
 #guestCastContent,
 #peopleSection,
 .peopleSection,
+.peopleSection .itemsContainer,
+.castSection .itemsContainer,
+.emby-scroller:has(#castContent),
+.emby-scroller:has(#guestCastContent),
 div[data-category="people"],
 div[data-category="cast"] {
     display: flex !important;
@@ -5317,23 +5396,27 @@ div[data-category="cast"] {
     overflow-x: auto !important;
     overflow-y: hidden !important;
     gap: 12px !important;
-    padding: 8px 4px 16px 4px !important;
+    padding: 8px 14px 16px 14px !important;
     box-sizing: border-box !important;
     -webkit-overflow-scrolling: touch !important;
+    scroll-behavior: smooth !important;
+    width: 100% !important;
+    max-width: 100% !important;
 }
 
 #castContent .card,
 #guestCastContent .card,
 #peopleSection .card,
 .peopleSection .card,
+.castSection .card,
 div[data-category="people"] .card,
 div[data-category="cast"] .card,
 .card[data-type="Person"],
 .personCard {
-    width: 120px !important;
-    min-width: 120px !important;
-    max-width: 120px !important;
-    flex: 0 0 120px !important;
+    width: 95px !important;
+    min-width: 95px !important;
+    max-width: 95px !important;
+    flex: 0 0 95px !important;
     margin: 0 !important;
     display: flex !important;
     flex-direction: column !important;
@@ -5346,11 +5429,12 @@ div[data-category="cast"] .card,
 #guestCastContent .cardScalable,
 #peopleSection .cardScalable,
 .peopleSection .cardScalable,
+.castSection .cardScalable,
 div[data-category="people"] .cardScalable,
 div[data-category="cast"] .cardScalable,
 .personCard .cardScalable {
-    width: 120px !important;
-    height: 160px !important;
+    width: 95px !important;
+    height: 130px !important;
     aspect-ratio: 3 / 4 !important;
     border-radius: 12px !important;
     overflow: hidden !important;
@@ -5438,34 +5522,12 @@ div[data-category="cast"] .cardScalable,
    APEX FALLBACK CARD POSTERS & MOBILE MULTI-COLUMN GRID
    ======================================================== */
 .apex-fallback-art {
-    position: absolute !important;
-    inset: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 12px 8px !important;
-    text-align: center !important;
-    background: linear-gradient(145deg, #181926 0%, #0e0f17 100%) !important;
-    box-sizing: border-box !important;
-    border-radius: 12px !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    z-index: 1 !important;
-}
-.apex-art-icon {
-    margin-bottom: 8px !important;
-    opacity: 0.8 !important;
-}
-.apex-art-title {
-    font-size: 0.78rem !important;
-    font-weight: 600 !important;
-    color: #ffffff !important;
-    line-height: 1.25 !important;
-    max-height: 2.5em !important;
-    overflow: hidden !important;
-    display: -webkit-box !important;
-    -webkit-line-clamp: 2 !important;
-    -webkit-box-orient: vertical !important;
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
 }
 
 /* Multi-column grid for Series & Movies in library and catalog views (no single-column rows) */
