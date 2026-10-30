@@ -756,3 +756,52 @@ def test_deduplicate_media_strms_removes_duplicate_folders_and_db_rows(tmp_path)
     assert str(canon_strm) in paths
     assert str(dup_strm) not in paths
     assert str(dup_dir) not in paths
+
+def test_deduplicate_media_strms_normalizes_title_variants(tmp_path):
+    """Ensure duplicate movie folders with differing punctuation, case, or year are deduplicated."""
+    movies_root = tmp_path / "Movies"
+    movies_root.mkdir()
+
+    # Folder 1: Spider-Man Far From Home (2019)
+    dir1 = movies_root / "Spider-Man Far From Home (2019)"
+    dir1.mkdir()
+    strm1 = dir1 / "Spider-Man Far From Home (2019).strm"
+    strm1.write_text("http://127.0.0.1:8082/stream/111", encoding="utf-8")
+
+    # Folder 2: Spider-Man: Far from Home
+    dir2 = movies_root / "Spider-Man: Far from Home"
+    dir2.mkdir()
+    strm2 = dir2 / "Spider-Man Far from Home.strm"
+    strm2.write_text("http://127.0.0.1:8082/stream/222", encoding="utf-8")
+
+    # DB with both rows
+    db_file = tmp_path / "jellyfin.db"
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE BaseItems (
+            Id TEXT PRIMARY KEY,
+            Path TEXT,
+            Name TEXT,
+            type TEXT
+        )
+    """)
+    cur.execute("INSERT INTO BaseItems VALUES ('id_canon', ?, 'Spider-Man: Far From Home', 'MediaBrowser.Controller.Entities.Movies.Movie')", (str(strm1),))
+    cur.execute("INSERT INTO BaseItems VALUES ('id_dup', ?, 'Spider-Man: Far from Home', 'MediaBrowser.Controller.Entities.Movies.Movie')", (str(strm2),))
+    conn.commit()
+    conn.close()
+
+    deduplicate_media_strms(roots=[str(movies_root)], databases=[str(db_file)])
+
+    # Exactly one folder and one DB item should remain
+    assert dir1.exists() != dir2.exists()
+
+    conn = sqlite3.connect(str(db_file))
+    cur = conn.cursor()
+    cur.execute("SELECT Id FROM BaseItems")
+    remaining_ids = [r[0] for r in cur.fetchall()]
+    conn.close()
+
+    assert len(remaining_ids) == 1
+    assert 'id_canon' in remaining_ids
+

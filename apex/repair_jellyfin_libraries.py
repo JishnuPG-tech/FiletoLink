@@ -853,10 +853,10 @@ def heal_missing_db_strm_paths(databases=None):
 
 def deduplicate_media_strms(roots=None, databases=None):
     """
-    Deduplicates .strm files on disk and removes duplicate rows from Jellyfin BaseItems.
-    When multiple folders or .strm files point to the exact same stream URL, picks the
-    canonical version, deletes the duplicate folder/file from disk, and removes the redundant
-    rows from BaseItems in jellyfin.db.
+    Deduplicates .strm files and folders on disk, and removes duplicate rows from Jellyfin BaseItems.
+    When multiple folders or .strm files point to the exact same stream URL, or share the exact same
+    normalized movie/show title, picks the canonical version, deletes duplicate folders/files from disk,
+    and removes redundant rows from BaseItems in jellyfin.db.
     """
     media_roots = roots or [
         "/data/jellyfin/media/Movies",
@@ -865,6 +865,10 @@ def deduplicate_media_strms(roots=None, databases=None):
         "/opt/jellyfin-local/media/TV Shows",
     ]
     db_list = databases or TARGET_DATABASES
+
+    def normalize_title(s: str) -> str:
+        cleaned = re.sub(r"\s*\(\s*\d{4}\s*\)\s*", "", s or "")
+        return re.sub(r"[^a-z0-9]", "", cleaned.lower())
 
     def score_path(p: str) -> int:
         score = 0
@@ -891,6 +895,8 @@ def deduplicate_media_strms(roots=None, databases=None):
     for root_dir in media_roots:
         if not os.path.isdir(root_dir):
             continue
+
+        # 1. Deduplicate by identical stream URL inside .strm files
         url_map = {}
         for dirpath, _, filenames in os.walk(root_dir):
             for fn in filenames:
@@ -930,7 +936,43 @@ def deduplicate_media_strms(roots=None, databases=None):
                         print(f"[DEDUP] Error removing file {dup}: {e}")
                 all_deleted_paths.append(dup)
 
-        # Also detect duplicate episodes in the same Season folder matching SxxExx
+        # 2. Deduplicate media folders matching the same normalized title (e.g. Movies/Shang-Chi (2021) vs Movies/Shang-Chi)
+        folder_groups = {}
+        try:
+            for entry in os.scandir(root_dir):
+                if entry.is_dir():
+                    norm_k = normalize_title(entry.name)
+                    if norm_k:
+                        folder_groups.setdefault(norm_k, []).append(entry.path)
+        except Exception:
+            pass
+
+        for norm_k, fpaths in folder_groups.items():
+            if len(fpaths) <= 1:
+                continue
+            def score_folder(p: str) -> int:
+                s = score_path(p)
+                try:
+                    for sub_f in os.listdir(p):
+                        if sub_f.lower().endswith(".strm") and os.path.getsize(os.path.join(p, sub_f)) > 0:
+                            s += 100
+                            break
+                except Exception:
+                    pass
+                return s
+            fpaths.sort(key=score_folder, reverse=True)
+            canon_folder = fpaths[0]
+            for dup_folder in fpaths[1:]:
+                if dup_folder in all_deleted_dirs:
+                    continue
+                print(f"[DEDUP] Removing duplicate media folder by title: '{dup_folder}' (retaining '{canon_folder}')")
+                try:
+                    shutil.rmtree(dup_folder, ignore_errors=True)
+                    all_deleted_dirs.append(dup_folder)
+                except Exception as e:
+                    print(f"[DEDUP] Error removing folder {dup_folder}: {e}")
+
+        # 3. Detect duplicate episodes in the same Season folder matching SxxExx
         ep_map = {}
         for dirpath, _, filenames in os.walk(root_dir):
             for fn in filenames:
@@ -981,33 +1023,41 @@ def deduplicate_media_strms(roots=None, databases=None):
             """)
             del_count += cur.rowcount
 
-            # Remove duplicate BaseItems rows having identical Name and Type
+            # Remove duplicate BaseItems rows matching same normalized name and type
             cur.execute("""
-                SELECT Name, type, COUNT(*) c
+                SELECT Id, Name, Path, type
                 FROM BaseItems
                 WHERE type LIKE '%Movie' OR type LIKE '%Series'
-                GROUP BY Name, type
-                HAVING c > 1
             """)
-            name_dups = cur.fetchall()
-            for name, itype, _ in name_dups:
-                cur.execute("SELECT Id, Path FROM BaseItems WHERE Name = ? AND type = ?", (name, itype))
-                dup_rows = cur.fetchall()
+            all_media_items = cur.fetchall()
+            title_groups = {}
+            for item_id, item_name, item_path, item_type in all_media_items:
+                if not item_name:
+                    continue
+                norm_key = (normalize_title(item_name), item_type)
+                title_groups.setdefault(norm_key, []).append((item_id, item_name, item_path))
+
+            for (norm_title, itype), candidates in title_groups.items():
+                if len(candidates) <= 1:
+                    continue
                 def score_db_row(r):
-                    p = (r[1] or "").lower()
+                    p = (r[2] or "").lower()
+                    name = (r[1] or "")
                     s = 0
-                    if os.path.exists(r[1] or ""): s += 100
+                    if os.path.exists(r[2] or ""): s += 200
+                    if re.search(r"\(\d{4}\)", name): s += 30
+                    if "-" in name: s += 10
                     if "spider-man" in p: s += 50
                     if "shang-chi" in p: s += 50
                     if "china-town" in p: s += 50
                     if "," in p or "." in p: s += 10
                     s += len(p)
                     return s
-                dup_rows.sort(key=score_db_row, reverse=True)
-                for redundant in dup_rows[1:]:
-                    print(f"[DEDUP] Removing duplicate BaseItems row by name: '{name}' (Id={redundant[0]}, Path={redundant[1]})")
+                candidates.sort(key=score_db_row, reverse=True)
+                for redundant in candidates[1:]:
+                    print(f"[DEDUP] Removing duplicate BaseItems row by normalized name: '{redundant[1]}' (Id={redundant[0]}, Path={redundant[2]})")
                     cur.execute("DELETE FROM BaseItems WHERE Id = ?", (redundant[0],))
-                    del_count += cur.rowcount
+                    del_count += 1
             conn.commit()
             conn.close()
             if del_count > 0:

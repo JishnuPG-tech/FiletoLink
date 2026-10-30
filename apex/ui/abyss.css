@@ -3257,9 +3257,11 @@ div[role="main"] {
 /* 9. Action Buttons Across ALL Settings & Dashboard */
 .MuiButton-contained,
 .MuiButton-containedPrimary,
-.type-interior button.raised:not([class*="delete"]):not([class*="cancel"]):not([class*="warn"]):not([class*="restart"]):not([class*="shutdown"]):not([class*="button-flat"]),
-.type-interior .button-submit,
-.settingsContainer button.raised {
+#dashboardPage button.raised:not([class*="delete"]):not([class*="cancel"]):not([class*="warn"]):not([class*="restart"]):not([class*="shutdown"]):not([class*="button-flat"]),
+.dashboardPage button.raised:not([class*="delete"]):not([class*="cancel"]):not([class*="warn"]):not([class*="restart"]):not([class*="shutdown"]):not([class*="button-flat"]),
+.settingsContainer button.raised,
+.formDialog button.raised,
+.type-interior .button-submit {
     background: rgba(255, 255, 255, 0.95) !important;
     color: #0e0e11 !important;
     border-radius: 50px !important;
@@ -3276,6 +3278,42 @@ div[role="main"] {
 .type-interior button.raised:hover {
     transform: translateY(-2px) !important;
     box-shadow: 0 4px 16px rgba(255, 255, 255, 0.2) !important;
+}
+
+
+/* Suppress floating Play All and Shuffle All in library collection views */
+.page:not(#itemDetailPage):not(#videoOsdPage) .btnPlay,
+.page:not(#itemDetailPage):not(#videoOsdPage) .btnShuffle,
+.viewSettings .btnPlay,
+.viewSettings .btnShuffle,
+.pageTitleWithDefaultButton .btnPlay,
+.pageTitleWithDefaultButton .btnShuffle,
+button[data-action="playall"],
+button[data-action="shuffleall"],
+.mainTabsContainer .btnPlay,
+.mainTabsContainer .btnShuffle,
+.headerRight .btnPlay,
+.headerRight .btnShuffle {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Hidden duplicate cards */
+.card.apex-duplicate-hidden {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex: 0 0 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
 }
 
 /* Restart button */
@@ -4566,78 +4604,89 @@ header .pageTitle,
 
 
 /* ========================================================
-   DETAIL PAGE: POSTER THUMBNAIL & METADATA SPACING FIX
-   Prevents poster from overlapping title/metadata text
-   Ensures title never breaks letter-by-letter in landscape or portrait
+   DETAIL PAGE: MOBILE PORTRAIT & DEFAULT CLEAN LAYOUT
+   Full-width title, zero text breaking or vertical letter stacking
    ======================================================== */
-#itemDetailPage .detailRibbon,
-.layout-mobile #itemDetailPage .detailRibbon,
-.layout-desktop #itemDetailPage .detailRibbon,
-.layout-tv #itemDetailPage .detailRibbon,
-.detailRibbon {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: flex-start !important;
-    gap: 20px !important;
-    padding-left: 20px !important;
-    padding-right: 20px !important;
-    padding-top: 16px !important;
-    margin-top: 0 !important;
-    box-sizing: border-box !important;
-    width: 100% !important;
-    max-width: 100% !important;
-}
+@media (orientation: portrait) {
+    #itemDetailPage .detailRibbon,
+    .layout-mobile #itemDetailPage .detailRibbon {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 16px 20px !important;
+        gap: 12px !important;
+        box-sizing: border-box !important;
+    }
 
-#itemDetailPage .detailImageContainer,
-.detailImageContainer {
-    position: relative !important;
-    flex: 0 0 150px !important;
-    width: 150px !important;
-    max-width: 150px !important;
-    min-width: 130px !important;
-    margin: 0 !important;
-    z-index: 2 !important;
-}
+    #itemDetailPage .infoWrapper,
+    .layout-mobile #itemDetailPage .infoWrapper {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
 
-#itemDetailPage .detailImageContainer .card,
-.layout-mobile #itemDetailPage .detailImageContainer .card,
-.layout-desktop #itemDetailPage .detailImageContainer .card,
-.layout-tv #itemDetailPage .detailImageContainer .card,
-.detailImageContainer .card {
-    position: relative !important;
-    top: auto !important;
-    left: auto !important;
-    margin: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    border-radius: 12px !important;
-}
+    /* On mobile portrait, hide redundant small poster so full-width backdrop and clean title shine */
+    .layout-mobile #itemDetailPage .detailImageContainer {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        pointer-events: none !important;
+    }
 
-#itemDetailPage .detailPagePrimaryContent,
-.layout-mobile #itemDetailPage .detailPagePrimaryContent,
-.layout-desktop #itemDetailPage .detailPagePrimaryContent,
-.layout-tv #itemDetailPage .detailPagePrimaryContent,
-.detailPagePrimaryContent,
-#itemDetailPage .detailPageContent {
-    flex: 1 1 auto !important;
-    min-width: 0 !important;
-    width: auto !important;
-    max-width: 100% !important;
-    padding-left: 0 !important;
-    margin-left: 0 !important;
-}
+    #itemDetailPage .nameContainer,
+    .layout-mobile #itemDetailPage .nameContainer {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin-bottom: 8px !important;
+    }
 
-#itemDetailPage .nameContainer,
-#itemDetailPage .itemName,
-#itemDetailPage .parentName,
-#itemDetailPage h1.itemName,
-.itemName {
-    white-space: normal !important;
-    word-break: normal !important;
-    overflow-wrap: break-word !important;
-    display: block !important;
-    width: auto !important;
-    max-width: 100% !important;
+    #itemDetailPage .itemName,
+    .layout-mobile #itemDetailPage .itemName,
+    #itemDetailPage h1.itemName {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        font-size: 1.65rem !important;
+        font-weight: 700 !important;
+        line-height: 1.25 !important;
+        color: #ffffff !important;
+        white-space: normal !important;
+        word-break: normal !important;
+        overflow-wrap: break-word !important;
+        letter-spacing: normal !important;
+    }
+
+    #itemDetailPage .itemMiscInfo,
+    .layout-mobile #itemDetailPage .itemMiscInfo {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+        width: 100% !important;
+        margin-bottom: 12px !important;
+    }
+
+    #itemDetailPage .mainDetailButtons,
+    .layout-mobile #itemDetailPage .mainDetailButtons {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        flex-wrap: wrap !important;
+        gap: 10px !important;
+        width: 100% !important;
+    }
 }
 
 /* Universal Abyss Spotlight Hero Banner Iframe */

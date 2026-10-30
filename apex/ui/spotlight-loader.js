@@ -901,21 +901,28 @@ function findHomeTab() {
 
   function deduplicateDomCards() {
     safe(function () {
-      var containers = document.querySelectorAll('.itemsContainer');
+      var containers = document.querySelectorAll(".itemsContainer");
       for (var i = 0; i < containers.length; i++) {
         var container = containers[i];
-        var cards = container.children;
+        var cards = container.querySelectorAll(":scope > .card, :scope > div > .card");
+        if (!cards || !cards.length) cards = container.children;
         var seenTitles = {};
         for (var j = 0; j < cards.length; j++) {
           var card = cards[j];
-          if (!card.classList || !card.classList.contains('card')) continue;
-          var titleEl = card.querySelector('.cardText-first, .cardTextCentered, .cardText, .cardText-secondary');
-          var title = (titleEl ? titleEl.textContent : (card.getAttribute('aria-label') || '')).trim().toLowerCase();
-          var normTitle = title.replace(/[^a-z0-9]/g, '');
+          if (!card.classList || !card.classList.contains("card")) continue;
+          var titleEl = card.querySelector(".cardText-first") || card.querySelector(".cardText:not(.cardText-secondary)") || card.querySelector(".cardTextCentered") || card.querySelector(".cardText");
+          var rawTitle = (titleEl ? titleEl.textContent : (card.getAttribute("aria-label") || "")).trim().toLowerCase();
+          var normTitle = rawTitle.replace(/\s*\(\s*\d{4}\s*\)\s*/g, "").replace(/[^a-z0-9]/g, "");
           if (!normTitle) continue;
           if (seenTitles[normTitle]) {
-            card.style.display = 'none';
-            card.style.visibility = 'hidden';
+            card.classList.add("apex-duplicate-hidden");
+            card.style.setProperty("display", "none", "important");
+            card.style.setProperty("visibility", "hidden", "important");
+            card.style.setProperty("width", "0px", "important");
+            card.style.setProperty("height", "0px", "important");
+            card.style.setProperty("flex", "0 0 0px", "important");
+            card.style.setProperty("margin", "0px", "important");
+            card.style.setProperty("padding", "0px", "important");
           } else {
             seenTitles[normTitle] = true;
           }
