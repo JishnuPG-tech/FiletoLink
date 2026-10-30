@@ -738,16 +738,16 @@ body {
 }
 
 @media (max-width: 768px) and (orientation: portrait) {
-	/* Mobile Full-Widescreen Backdrop: 16:9 ratio displays 100% of the image edge-to-edge without side cropping */
+	/* Mobile Cinematic Full-Height Backdrop with smooth downward vignette */
 	#backdrop {
 		position: absolute;
 		top: 0;
 		left: 0;
 		width: 100%;
-		height: 56.25vw;
-		max-height: 260px;
-		-webkit-mask-image: linear-gradient(to bottom, black 75%, transparent 100%);
-		mask-image: linear-gradient(to bottom, black 75%, transparent 100%);
+		height: 100%;
+		max-height: none;
+		-webkit-mask-image: linear-gradient(to bottom, black 50%, rgba(0, 0, 0, 0.7) 75%, transparent 100%);
+		mask-image: linear-gradient(to bottom, black 50%, rgba(0, 0, 0, 0.7) 75%, transparent 100%);
 		-webkit-mask-composite: source-over;
 		mask-composite: add;
 		overflow: hidden;

@@ -88,8 +88,8 @@
       "." + FRAME_CLASS + ":focus { outline: none; }" +
       "@media (min-width:1400px) { ." + FRAME_CLASS + " { height:60vh;max-height:720px; } }" +
       "@media (min-width:1920px) { ." + FRAME_CLASS + " { height:56vh;max-height:800px; } }" +
-      "@media (max-width:1024px) and (orientation:portrait) { ." + FRAME_CLASS + " { height:50vh;min-height:360px;max-height:480px; } }" +
-      "@media (max-width:768px) and (orientation:portrait) { ." + FRAME_CLASS + " { height:46vh;min-height:330px;max-height:430px; } }" +
+      "@media (max-width:1024px) and (orientation:portrait) { ." + FRAME_CLASS + " { height:64vh;min-height:480px;max-height:640px; } }" +
+      "@media (max-width:768px) and (orientation:portrait) { ." + FRAME_CLASS + " { height:68vh;min-height:500px;max-height:640px; } }" +
       "@media (orientation:landscape) and (max-height:540px) { ." + FRAME_CLASS + " { height:86vh;min-height:300px;max-height:460px; } }";
     document.head.appendChild(style);
   }

@@ -4897,16 +4897,25 @@ iframe.featurediframe {
     border: none !important;
     margin: 0 !important;
     padding: 0 !important;
-    min-height: 380px !important;
-    height: 52vh !important;
+    min-height: 520px !important;
+    height: 68vh !important;
+    max-height: 720px !important;
     opacity: 1 !important;
     visibility: visible !important;
 }
 
+@media (max-width: 768px) and (orientation: portrait) {
+    iframe.featurediframe {
+        height: 68vh !important;
+        min-height: 500px !important;
+        max-height: 640px !important;
+    }
+}
+
 @media (orientation: landscape) {
     iframe.featurediframe {
-        height: 70vh !important;
-        min-height: 340px !important;
+        height: 75vh !important;
+        min-height: 360px !important;
     }
 }
 
