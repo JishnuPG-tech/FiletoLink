@@ -233,9 +233,7 @@ class TelegramAIAdminRouter:
 
     def register_handlers(self, client: Client, group: int = -1) -> None:
         """Register /ai command, private conversational chat, and ai:* callback query handlers in group -1."""
-        cmd_filter = filters.command(["ai"]) | (
-            filters.private & filters.text & ~filters.command(["start", "help", "stream", "login", "restart", "cancel", "status_bot"])
-        )
+        cmd_filter = filters.command(["ai"])
         cmd_h = MessageHandler(self.handle_ai_command, filters=cmd_filter)
         cb_h = CallbackQueryHandler(self.handle_callback_query, filters=filters.regex(r"^ai:"))
 

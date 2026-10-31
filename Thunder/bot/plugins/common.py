@@ -278,3 +278,33 @@ async def ping_command(bot: Client, msg: Message):
         )
     except MessageNotModified:
         pass
+
+@StreamBot.on_message(
+    filters.private
+    & filters.text
+    & ~filters.command([
+        "start", "help", "about", "dc", "ping", "users",
+        "broadcast", "ban", "unban", "banned", "auth",
+        "deauth", "restart", "status_bot", "token", "count",
+        "channel", "del", "speedtest"
+    ])
+)
+async def fallback_text_handler(bot: Client, msg: Message):
+    """Provide helpful FileToLink usage when user sends plain text messages to @flashfilezbot."""
+    if not await check_banned(bot, msg):
+        return
+    txt = (
+        "⚡ **Flash File - File to Link Bot**\n\n"
+        "Send me any file (video, document, audio, photo) to get instant direct download & streaming links!\n\n"
+        "• Use `/help` for detailed instructions and features.\n"
+        "• Use `/about` to learn more about Flash File."
+    )
+    btns = [
+        [InlineKeyboardButton(MSG_BUTTON_GET_HELP, callback_data="help_command"),
+         InlineKeyboardButton(MSG_BUTTON_ABOUT, callback_data="about_command")]
+    ]
+    try:
+        await msg.reply_text(txt, reply_markup=InlineKeyboardMarkup(btns))
+    except FloodWait as e:
+        await asyncio.sleep(e.value)
+        await msg.reply_text(txt, reply_markup=InlineKeyboardMarkup(btns))

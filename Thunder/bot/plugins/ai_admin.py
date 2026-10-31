@@ -51,15 +51,20 @@ def get_stream_bot() -> Optional[Client]:
 
 
 def setup_ai_admin(client: Optional[Client] = None) -> Optional[TelegramAIAdminRouter]:
-    """Initialize and register AI Admin router if enabled and valid.
+    """Initialize and register AI Admin router if explicitly requested on an isolated client.
 
-    Idempotent: protects against duplicate handler registration.
-    Supports multiple Pyrogram clients (e.g. StreamBot and tg_app).
-    Fails closed if disabled, unconfigured, or invalid.
+    StreamBot (@flashfilezbot) is strictly a pure FileToLink bot with ZERO Jellyfin connection.
+    AI Admin is never registered on StreamBot.
     """
     global _REGISTERED, _REGISTERED_CLIENT_IDS, _ROUTER_INSTANCE
 
-    target_client = client or get_stream_bot()
+    # StreamBot (@flashfilezbot) must remain strictly pure FileToLink with ZERO Jellyfin connection.
+    stream_bot = get_stream_bot()
+    if client is None or (stream_bot is not None and client is stream_bot):
+        logger.info("@flashfilezbot is dedicated strictly to FileToLink. AI Admin Jellyfin router will NOT attach to StreamBot.")
+        return None
+
+    target_client = client
 
     if _ROUTER_INSTANCE is not None:
         if target_client is not None and id(target_client) not in _REGISTERED_CLIENT_IDS:
@@ -174,5 +179,4 @@ def reset_plugin_state() -> None:
     _ROUTER_INSTANCE = None
 
 
-# Trigger setup on module load if bot is available (standard Pyrogram plugin lifecycle)
-setup_ai_admin()
+# Note: Do not auto-register on module load. StreamBot (@flashfilezbot) is strictly FileToLink with zero Jellyfin connection.
