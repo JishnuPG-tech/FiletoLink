@@ -52,10 +52,10 @@ body {
 	position: absolute;
 	inset: 0;
 	background:
-		/* Seamless bottom fade directly to OLED pitch black #000000 */
-		linear-gradient(to top, #000000 0%, rgba(0, 0, 0, 0.88) 22%, rgba(0, 0, 0, 0.45) 48%, transparent 80%),
+		/* Seamless bottom fade that allows ambient colors to radiate down through content rails */
+		linear-gradient(to top, rgba(5, 5, 8, 0.82) 0%, rgba(5, 5, 8, 0.55) 25%, rgba(0, 0, 0, 0.22) 55%, transparent 82%),
 		/* Left side reading gradient ensuring text/metadata has 100% contrast */
-		linear-gradient(to right, #000000 0%, rgba(0, 0, 0, 0.8) 32%, rgba(0, 0, 0, 0.35) 58%, transparent 85%);
+		linear-gradient(to right, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.78) 32%, rgba(0, 0, 0, 0.35) 58%, transparent 85%);
 	pointer-events: none;
 }
 

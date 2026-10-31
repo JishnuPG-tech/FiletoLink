@@ -810,11 +810,10 @@
 				}
 
 				try {
-					const syncUrl = artwork.backdrop
-						? (artwork.primaryBackdrop ? itemImageUrls(item).primary : (artwork.usedThumb ? itemImageUrls(item).thumb : itemImageUrls(item).backdrop))
-						: null;
+					const syncUrl = artwork.backdrop || (artwork.primaryBackdrop ? itemImageUrls(item).primary : (artwork.usedThumb ? itemImageUrls(item).thumb : itemImageUrls(item).backdrop));
 					if (syncUrl) {
-						window.parent.postMessage({ type: 'abyss-spotlight', action: 'backdrop-sync', url: syncUrl }, window.location.origin);
+						const origin = (window.location && window.location.origin && window.location.origin !== 'null') ? window.location.origin : '*';
+						window.parent.postMessage({ type: 'abyss-spotlight', action: 'backdrop-sync', url: syncUrl }, origin);
 					}
 				} catch { /* parent sync is optional */ }
 				let episodePrefix = '';

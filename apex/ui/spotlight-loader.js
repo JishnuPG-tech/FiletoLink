@@ -24,6 +24,7 @@
   var backdropLayerA = null;
   var backdropLayerB = null;
   var activeBackdropLayer = null;
+  var currentBackdropUrl = null;
 
   function safe(fn) {
     // Runs fn and swallows/reports any error so one failure never kills the loader.
@@ -55,6 +56,16 @@
 
   function clearSpotlightBackdrop() {
     safe(function () {
+      currentBackdropUrl = null;
+      if (backdropLayerA) {
+        backdropLayerA.classList.remove("is-active");
+        backdropLayerA.style.backgroundImage = "";
+      }
+      if (backdropLayerB) {
+        backdropLayerB.classList.remove("is-active");
+        backdropLayerB.style.backgroundImage = "";
+      }
+      activeBackdropLayer = null;
       var els = document.querySelectorAll(BACKDROP_SELECTOR + "[" + BACKDROP_MARK_ATTR + "]");
       for (var i = 0; i < els.length; i++) {
         els[i].style.backgroundImage = "";
@@ -95,34 +106,37 @@
   }
 
   function installBackdropOverlay() {
-    if (backdropOverlay) return;
-    var container = document.querySelector(".backdropContainer");
-    if (!container || !container.parentNode) return;
+    if (backdropOverlay && backdropOverlay.isConnected) return;
+    var container = document.querySelector(".backgroundContainer") || document.querySelector(".backdropContainer") || document.body;
+    if (!container) return;
 
-    backdropOverlay = document.createElement("div");
-    backdropOverlay.id = "abyss-spotlight-backdrop";
-    backdropLayerA = document.createElement("div");
-    backdropLayerB = document.createElement("div");
-    backdropLayerA.className = "abyss-spotlight-backdrop-layer";
-    backdropLayerB.className = "abyss-spotlight-backdrop-layer";
-    backdropOverlay.appendChild(backdropLayerA);
-    backdropOverlay.appendChild(backdropLayerB);
+    if (!backdropOverlay) {
+      backdropOverlay = document.createElement("div");
+      backdropOverlay.id = "abyss-spotlight-backdrop";
+      backdropLayerA = document.createElement("div");
+      backdropLayerB = document.createElement("div");
+      backdropLayerA.className = "abyss-spotlight-backdrop-layer";
+      backdropLayerB.className = "abyss-spotlight-backdrop-layer";
+      backdropOverlay.appendChild(backdropLayerA);
+      backdropOverlay.appendChild(backdropLayerB);
+    }
 
-    container.parentNode.insertBefore(backdropOverlay, container.nextSibling);
-
-    var style = document.createElement("style");
-    style.id = "abyss-spotlight-backdrop-style";
-    style.textContent =
-      "#abyss-spotlight-backdrop{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .6s ease;}" +
-      "html.abyss-spotlight-visible #abyss-spotlight-backdrop{opacity:1;}" +
-      ".abyss-spotlight-backdrop-layer{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;" +
-      "transition:opacity .9s ease;filter:blur(var(--abyss-backdrop-blur,23px)) saturate(120%) contrast(120%) brightness(25%);}" +
-      ".abyss-spotlight-backdrop-layer.is-active{opacity:1;}";
-    document.head.appendChild(style);
+    if (!backdropOverlay.isConnected) {
+      if (container === document.body) {
+        document.body.insertBefore(backdropOverlay, document.body.firstChild);
+      } else if (container.parentNode) {
+        container.parentNode.insertBefore(backdropOverlay, container.nextSibling);
+      } else {
+        document.body.appendChild(backdropOverlay);
+      }
+    }
   }
 
   function setSpotlightBackdrop(url) {
-    if (!url || !backdropOverlay) return;
+    if (!url) return;
+    currentBackdropUrl = url;
+    installBackdropOverlay();
+    if (!backdropOverlay) return;
     safe(function () {
       var incoming = activeBackdropLayer === backdropLayerA ? backdropLayerB : backdropLayerA;
       var outgoing = activeBackdropLayer;
@@ -136,7 +150,7 @@
             if (outgoing && outgoing !== incoming) {
               setTimeout(function () {
                 outgoing.classList.remove("is-active");
-              }, 50);
+              }, 450);
             }
           });
           activeBackdropLayer = incoming;
@@ -244,7 +258,6 @@
   }
 
   window.addEventListener("message", function (event) {
-    if (!currentIframe || event.source !== currentIframe.contentWindow) return;
     if (!event.data || event.data.type !== "abyss-spotlight") return;
     if (event.data.action === "leave") {
       spotlightFocused = false;
@@ -292,7 +305,11 @@
         if (action !== lastAction) {
           postToFrame(iframe, action);
           lastAction = action;
-          if (action === "pause") clearSpotlightBackdrop();
+          if (action === "pause") {
+            clearSpotlightBackdrop();
+          } else if (action === "resume" && currentBackdropUrl) {
+            setSpotlightBackdrop(currentBackdropUrl);
+          }
         }
       });
     };
