@@ -57,8 +57,9 @@ class Var:
     PING_INTERVAL: int = int(os.getenv("PING_INTERVAL", "840"))
     NO_PORT: bool = str_to_bool(os.getenv("NO_PORT", "True"))
 
-    OWNER_ID: int = int(os.getenv("OWNER_ID", "0"))
 
+    raw_owner_id = os.getenv("OWNER_ID", "0").strip(" '\"")
+    OWNER_ID: int = int(raw_owner_id) if (raw_owner_id.isdigit() or (raw_owner_id.startswith("-") and raw_owner_id[1:].isdigit())) else 0
     if not OWNER_ID:
         logger.warning("WARNING: OWNER_ID is not set. No user will be granted owner access.")
 
@@ -109,3 +110,11 @@ class Var:
     MAX_FILES_PER_PERIOD: int = int(os.getenv("MAX_FILES_PER_PERIOD", "2"))
     RATE_LIMIT_PERIOD_MINUTES: int = int(os.getenv("RATE_LIMIT_PERIOD_MINUTES", "1"))
     MAX_QUEUE_SIZE: int = int(os.getenv("MAX_QUEUE_SIZE", "100"))
+
+    # Subscription & Payment Gateway (Dormant by default)
+    PAYMENT_ENABLED: bool = str_to_bool(os.getenv("PAYMENT", os.getenv("Payment", "False")))
+    SUB_PRICE: int = int(os.getenv("SUB_PRICE", "10"))
+    SUB_DURATION_DAYS: int = int(os.getenv("SUB_DURATION_DAYS", "30"))
+    UPI_ID: str = os.getenv("UPI_ID", "jishnupg2005-2@okaxis").strip()
+    UPI_NAME: str = os.getenv("UPI_NAME", "Flash File").strip()
+    ADMIN_CHANNEL: int = int(os.getenv("ADMIN_CHANNEL", "0"))

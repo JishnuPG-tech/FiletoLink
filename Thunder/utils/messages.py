@@ -397,3 +397,58 @@ MSG_SYSTEM_STATS = (
 )
 
 MSG_DB_STATS = "📊 **Database Statistics**\n\n> 👥 **Total Users:** `{total_users}`"
+
+# Payment & Subscription Messages
+MSG_SUB_PLAN_ACTIVE = (
+    "👑 **Flash File Premium Active**\n\n"
+    "👤 **Account:** `{user_name}` (`{user_id}`)\n"
+    "📅 **Valid Until:** `{expiry_date}`\n"
+    "⏳ **Remaining:** `{remaining_days} days`\n"
+    "⚡ **Tier:** `30-Day Monthly Pass (Unlimited)`\n\n"
+    "✨ You have unlimited streaming & high-speed direct downloads!"
+)
+
+MSG_SUB_PLAN_FREE = (
+    "⚡ **Flash File Premium Access**\n\n"
+    "Unlock unlimited ultra-fast streaming & direct download links:\n\n"
+    "💳 **Monthly Pass:** `₹{price} / 30 Days`\n"
+    "✨ Unlimited high-speed streaming links\n"
+    "⚡ Pure Google Pay UPI integration\n"
+    "📱 Compatible with VLC, MX Player, and Web\n"
+    "🎟 Optional 1-time file passes available\n\n"
+    "🔗 **UPI ID:** `{upi_id}`"
+)
+
+MSG_PAYWALL_GATE = (
+    "🔒 **Flash File Premium Access Required**\n\n"
+    "Direct streaming links for this bot require an active pass:\n\n"
+    "💎 **Monthly Pass:** `₹{price} / 30 Days` (Unlimited)\n"
+    "🎟 **1-Time Pass:** Request temporary access for this file\n\n"
+    "📲 **Pay via UPI:** `{upi_id}`\n"
+    "*(Supports Google Pay, PhonePe, Paytm, BHIM)*"
+)
+
+MSG_PROOF_INSTRUCTION = (
+    "📩 **Submit Payment Proof**\n\n"
+    "Please send your **Transaction ID / UTR Number** or reply to this message with a **screenshot of your payment**.\n\n"
+    "Admin will verify and activate your pass within minutes."
+)
+
+MSG_SUB_APPROVED_USER = (
+    "🎉 **Subscription Activated!**\n\n"
+    "Your **30-Day Monthly Pass** is now active!\n"
+    "📅 **Valid Until:** `{expiry_date}`\n\n"
+    "You can now send any video or document to generate instant stream and download links. Enjoy!"
+)
+
+MSG_TEMP_APPROVED_USER = (
+    "🎟 **Temporary Stream Pass Approved!**\n\n"
+    "You have been granted a **1-time temporary stream pass** (valid for 24 hours).\n\n"
+    "Send or forward your file again to generate your link!"
+)
+
+MSG_SUB_REJECTED_USER = (
+    "❌ **Access Request Not Approved**\n\n"
+    "Your payment proof or pass request could not be verified by admin.\n"
+    "If this is an error or you need help, please reach out to admin."
+)

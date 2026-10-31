@@ -1,3 +1,4 @@
+import secrets
 # Thunder/utils/database.py
 
 import datetime
@@ -20,6 +21,9 @@ class Database:
         self.restart_message_col: AsyncCollection = self.db.restart_message
         self.files_col: AsyncCollection = self.db.files
         self.file_ingest_locks_col: AsyncCollection = self.db.file_ingest_locks
+        self.subscriptions_col: AsyncCollection = self.db.subscriptions
+        self.temp_passes_col: AsyncCollection = self.db.temp_passes
+        self.sub_requests_col: AsyncCollection = self.db.subscription_requests
 
     async def _deduplicate_users(self) -> None:
         pipeline = [
@@ -57,6 +61,13 @@ class Database:
             await self.files_col.create_index("created_at")
             await self.files_col.create_index("last_seen_at")
             await self.file_ingest_locks_col.create_index("expires_at", expireAfterSeconds=0)
+            await self.subscriptions_col.create_index("user_id", unique=True)
+            await self.subscriptions_col.create_index("expires_at")
+            await self.subscriptions_col.create_index("status")
+            await self.temp_passes_col.create_index([("user_id", 1), ("file_id", 1)], unique=True)
+            await self.temp_passes_col.create_index("expires_at", expireAfterSeconds=0)
+            await self.sub_requests_col.create_index("request_id", unique=True)
+            await self.sub_requests_col.create_index("user_id")
 
             logger.debug("Database indexes ensured.")
             return True
@@ -445,6 +456,167 @@ class Database:
         except Exception as e:
             logger.error(f"Error checking ingest claim for {file_unique_id}: {e}", exc_info=True)
             raise
+
+
+    async def is_subscribed(self, user_id: int) -> bool:
+        try:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            doc = await self.subscriptions_col.find_one({
+                "user_id": user_id,
+                "status": "active",
+                "expires_at": {"$gt": now}
+            })
+            return bool(doc)
+        except Exception as e:
+            logger.error(f"Error checking subscription for user {user_id}: {e}", exc_info=True)
+            return False
+
+    async def get_subscription(self, user_id: int) -> Optional[Dict[str, Any]]:
+        try:
+            return await self.subscriptions_col.find_one({"user_id": user_id})
+        except Exception as e:
+            logger.error(f"Error getting subscription for user {user_id}: {e}", exc_info=True)
+            return None
+
+    async def add_subscription(self, user_id: int, days: int = 30, tx_ref: str = "", plan: str = "monthly") -> Dict[str, Any]:
+        try:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            existing = await self.get_subscription(user_id)
+            if existing and existing.get("status") == "active" and existing.get("expires_at") and existing["expires_at"] > now:
+                new_expiry = existing["expires_at"] + datetime.timedelta(days=days)
+            else:
+                new_expiry = now + datetime.timedelta(days=days)
+
+            doc = {
+                "user_id": user_id,
+                "plan": plan,
+                "status": "active",
+                "activated_at": now,
+                "expires_at": new_expiry,
+                "tx_ref": tx_ref or (existing.get("tx_ref", "") if existing else "")
+            }
+            await self.subscriptions_col.update_one(
+                {"user_id": user_id},
+                {"$set": doc},
+                upsert=True
+            )
+            logger.info(f"Subscription added for user {user_id}: valid until {new_expiry.isoformat()}")
+            return doc
+        except Exception as e:
+            logger.error(f"Error adding subscription for user {user_id}: {e}", exc_info=True)
+            raise
+
+    async def remove_subscription(self, user_id: int) -> bool:
+        try:
+            res = await self.subscriptions_col.update_one(
+                {"user_id": user_id},
+                {"$set": {"status": "revoked", "revoked_at": datetime.datetime.now(datetime.timezone.utc)}}
+            )
+            return res.modified_count > 0
+        except Exception as e:
+            logger.error(f"Error removing subscription for user {user_id}: {e}", exc_info=True)
+            return False
+
+    async def get_active_subscribers_count(self) -> int:
+        try:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            return await self.subscriptions_col.count_documents({
+                "status": "active",
+                "expires_at": {"$gt": now}
+            })
+        except Exception as e:
+            logger.error(f"Error counting subscribers: {e}", exc_info=True)
+            return 0
+
+    async def get_all_subscribers(self, limit: int = 50) -> list:
+        try:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            cursor = self.subscriptions_col.find({
+                "status": "active",
+                "expires_at": {"$gt": now}
+            }).sort("expires_at", -1).limit(limit)
+            return [doc async for doc in cursor]
+        except Exception as e:
+            logger.error(f"Error listing subscribers: {e}", exc_info=True)
+            return []
+
+    async def add_temp_pass(self, user_id: int, file_id: str, hours: int = 24) -> bool:
+        try:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            expiry = now + datetime.timedelta(hours=hours)
+            await self.temp_passes_col.update_one(
+                {"user_id": user_id, "file_id": str(file_id)},
+                {"$set": {"created_at": now, "expires_at": expiry, "used": False}},
+                upsert=True
+            )
+            logger.info(f"Temporary pass added for user {user_id}, file {file_id} (valid {hours}h)")
+            return True
+        except Exception as e:
+            logger.error(f"Error adding temp pass for {user_id}: {e}", exc_info=True)
+            return False
+
+    async def has_temp_pass(self, user_id: int, file_id: str) -> bool:
+        try:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            doc = await self.temp_passes_col.find_one({
+                "user_id": user_id,
+                "file_id": str(file_id),
+                "expires_at": {"$gt": now}
+            })
+            return bool(doc)
+        except Exception as e:
+            logger.error(f"Error checking temp pass for {user_id}: {e}", exc_info=True)
+            return False
+
+    async def create_sub_request(
+        self,
+        user_id: int,
+        user_name: str,
+        req_type: str,
+        file_id: Optional[str] = None,
+        tx_ref: Optional[str] = None,
+        proof_file_id: Optional[str] = None
+    ) -> str:
+        try:
+            req_id = secrets.token_hex(6)
+            doc = {
+                "request_id": req_id,
+                "user_id": user_id,
+                "user_name": user_name,
+                "req_type": req_type,
+                "file_id": str(file_id) if file_id else None,
+                "tx_ref": tx_ref,
+                "proof_file_id": proof_file_id,
+                "status": "pending",
+                "created_at": datetime.datetime.now(datetime.timezone.utc)
+            }
+            await self.sub_requests_col.insert_one(doc)
+            return req_id
+        except Exception as e:
+            logger.error(f"Error creating subscription request: {e}", exc_info=True)
+            raise
+
+    async def get_sub_request(self, request_id: str) -> Optional[Dict[str, Any]]:
+        try:
+            return await self.sub_requests_col.find_one({"request_id": request_id})
+        except Exception as e:
+            logger.error(f"Error fetching subscription request {request_id}: {e}", exc_info=True)
+            return None
+
+    async def update_sub_request_status(self, request_id: str, status: str, admin_id: int) -> bool:
+        try:
+            res = await self.sub_requests_col.update_one(
+                {"request_id": request_id},
+                {"$set": {
+                    "status": status,
+                    "decided_by": admin_id,
+                    "decided_at": datetime.datetime.now(datetime.timezone.utc)
+                }}
+            )
+            return res.modified_count > 0
+        except Exception as e:
+            logger.error(f"Error updating request {request_id}: {e}", exc_info=True)
+            return False
 
     async def close(self):
         if self._client:

@@ -19,7 +19,7 @@ from Thunder.utils.decorators import (check_banned, get_shortener_status,
 from Thunder.utils.force_channel import force_channel_check
 from Thunder.utils.logger import logger
 from Thunder.utils.messages import (
-    MSG_BATCH_LINKS_READY, MSG_BUTTON_DOWNLOAD, MSG_BUTTON_START_CHAT,
+    MSG_BATCH_LINKS_READY, MSG_PAYWALL_GATE, MSG_BUTTON_DOWNLOAD, MSG_BUTTON_START_CHAT,
     MSG_BUTTON_STREAM_NOW, MSG_CRITICAL_ERROR, MSG_DM_BATCH_PREFIX,
     MSG_DM_SINGLE_PREFIX, MSG_ERROR_DM_FAILED, MSG_ERROR_INVALID_NUMBER,
     MSG_ERROR_NO_FILE, MSG_ERROR_NOT_ADMIN, MSG_ERROR_NUMBER_RANGE,
@@ -62,13 +62,42 @@ def get_link_buttons(links):
         InlineKeyboardButton(MSG_BUTTON_DOWNLOAD, url=links['online_link'])
     ]])
 
-async def validate_request_common(client: Client, message: Message) -> Optional[bool]:
+
+async def send_paywall_card(client: Client, message: Message, file_id: Optional[str] = None):
+    try:
+        user_id = message.from_user.id
+        from Thunder.bot.plugins.subscription import get_plan_keyboard
+        text = MSG_PAYWALL_GATE.format(
+            price=Var.SUB_PRICE,
+            upi_id=Var.UPI_ID
+        )
+        keyboard = get_plan_keyboard(user_id, file_id=file_id)
+        await message.reply_text(text, reply_markup=keyboard, quote=True)
+    except Exception as e:
+        logger.error(f"Error sending paywall card: {e}", exc_info=True)
+
+async def validate_request_common(client: Client, message: Message, file_identifier: Optional[str] = None) -> Optional[bool]:
     if not await check_banned(client, message):
         return None
     if not await require_token(client, message):
         return None
     if not await force_channel_check(client, message):
         return None
+
+    # Subscription / Payment Paywall Gate (Dormant by default)
+    if Var.PAYMENT_ENABLED and message.from_user:
+        user_id = message.from_user.id
+        is_owner = user_id == Var.OWNER_ID
+        is_admin_user = hasattr(Var, 'ADMINS') and user_id in Var.ADMINS
+        if not (is_owner or is_admin_user):
+            is_sub = await db.is_subscribed(user_id)
+            has_temp = False
+            if not is_sub and file_identifier:
+                has_temp = await db.has_temp_pass(user_id, file_identifier)
+            if not (is_sub or has_temp):
+                await send_paywall_card(client, message, file_id=file_identifier)
+                return None
+
     return await get_shortener_status(client, message)
 
 
@@ -214,7 +243,13 @@ async def send_link(msg: Message, links: Dict[str, Any]):
 @StreamBot.on_message(filters.command("link") & ~filters.private)
 async def link_handler(bot: Client, msg: Message, **kwargs):
     async def _actual_link_handler(client: Client, message: Message, **handler_kwargs):
-        shortener_val = await validate_request_common(client, message)
+        media = (
+            message.document or message.video or message.photo or
+            message.audio or message.voice or message.animation or message.video_note
+        )
+        file_unique_id = getattr(media, "file_unique_id", str(message.id)) if media else str(message.id)
+
+        shortener_val = await validate_request_common(client, message, file_identifier=file_unique_id)
         if shortener_val is None:
             return
         if message.from_user and not await db.is_user_exist(message.from_user.id):
