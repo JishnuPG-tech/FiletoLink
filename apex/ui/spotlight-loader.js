@@ -872,9 +872,11 @@ function findHomeTab() {
       // 1.5 Suppress and purge floating Play / Shuffle buttons from catalog/library views
       var strayPlayBtns = document.querySelectorAll(
         ':is(.view, .page, [data-role="page"], .libraryPage):not(#itemDetailPage):not(#videoOsdPage) :is(.btnPlay, .btnShuffle, button[data-action="playall"], button[data-action="shuffleall"], button[title*="Play all" i], button[title*="Shuffle all" i]), ' +
-        '.viewSettings :is(.btnPlay, .btnShuffle, button[data-action="play"], button[data-action="shuffle"]), ' +
+        '.viewSettings :is(.btnPlay, .btnShuffle, button[data-action="playall"], button[data-action="shuffleall"], button[data-action="play"], button[data-action="shuffle"]), ' +
         '.pageTitleWithDefaultButton :is(.btnPlay, .btnShuffle), ' +
-        '.mainTabsContainer :is(.btnPlay, .btnShuffle)'
+        '.mainTabsContainer :is(.btnPlay, .btnShuffle), ' +
+        '#moviesPage :is(.btnPlay, .btnShuffle, button[data-action="playall"], button[data-action="shuffleall"]), ' +
+        '#tvShowsPage :is(.btnPlay, .btnShuffle, button[data-action="playall"], button[data-action="shuffleall"])'
       );
       for (var sp = 0; sp < strayPlayBtns.length; sp++) {
         strayPlayBtns[sp].style.setProperty("display", "none", "important");
@@ -949,30 +951,44 @@ function findHomeTab() {
   
   function normalizeContinueWatchingCards() {
     safe(function () {
-      var resumeContainers = document.querySelectorAll('.resumeSection, .nextUpSection, div[data-category="resume"], div[data-category="nextup"], #indexPage .itemsContainer-slider');
+      // 1. Hide redundant "My Media" folder row on Home feed
+      var myMedia = document.querySelectorAll(
+        '#indexPage .verticalSection:has([data-type="CollectionFolder"]), ' +
+        '#indexPage .verticalSection:has([data-type="UserView"]), ' +
+        '#indexPage .verticalSection:has(.card[data-type="CollectionFolder"]), ' +
+        '#indexPage .verticalSection:has(.card[data-type="UserView"]), ' +
+        '#indexPage [data-category="views"], ' +
+        '#indexPage .section0'
+      );
+      for (var mm = 0; mm < myMedia.length; mm++) {
+        myMedia[mm].style.setProperty("display", "none", "important");
+      }
+
+      // 2. Format Continue Watching and Next Up as true 16:9 widescreen landscape cards
+      var resumeContainers = document.querySelectorAll('.resumeSection, .nextUpSection, div[data-category="resume"], div[data-category="nextup"]');
       for (var rc = 0; rc < resumeContainers.length; rc++) {
         var cards = resumeContainers[rc].querySelectorAll('.card');
         for (var c = 0; c < cards.length; c++) {
           var card = cards[c];
-          card.classList.remove('backdropCard', 'overflowBackdropCard', 'smallBackdropCard');
-          card.classList.add('portraitCard');
-          card.style.width = '140px';
-          card.style.maxWidth = '140px';
-          card.style.minWidth = '140px';
-          card.style.flex = '0 0 140px';
+          card.classList.remove('portraitCard', 'overflowBackdropCard', 'smallBackdropCard');
+          card.classList.add('backdropCard');
+          card.style.width = '';
+          card.style.maxWidth = '';
+          card.style.minWidth = '';
+          card.style.flex = '';
           
           var padders = card.querySelectorAll('.cardPadder');
           for (var p = 0; p < padders.length; p++) {
-            padders[p].classList.remove('cardPadder-backdrop', 'cardPadder-overflowBackdrop', 'cardPadder-smallBackdrop');
-            padders[p].classList.add('cardPadder-portrait');
-            padders[p].style.paddingBottom = '150%';
-            padders[p].style.aspectRatio = '2 / 3';
+            padders[p].classList.remove('cardPadder-portrait');
+            padders[p].classList.add('cardPadder-backdrop');
+            padders[p].style.paddingBottom = '56.25%';
+            padders[p].style.aspectRatio = '16 / 9';
             padders[p].style.height = '0';
           }
 
           var scalables = card.querySelectorAll('.cardScalable');
           for (var s = 0; s < scalables.length; s++) {
-            scalables[s].style.aspectRatio = '2 / 3';
+            scalables[s].style.aspectRatio = '16 / 9';
             scalables[s].style.borderRadius = '12px';
             scalables[s].style.overflow = 'hidden';
           }

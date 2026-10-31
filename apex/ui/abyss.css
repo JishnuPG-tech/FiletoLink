@@ -4209,53 +4209,56 @@ button[data-action="search"] {
     margin-right: 14px !important;
 }
 
-/* 1. Continue Watching & Next Up: Strict Uniform 2:3 Vertical Rectangular Posters Across ALL Devices */
+/* 1. Continue Watching & Next Up: True 16:9 Widescreen Landscape Rails (Android TV & Modern Streaming) */
 .resumeSection .card,
 .nextUpSection .card,
 div[data-category="resume"] .card,
-div[data-category="nextup"] .card,
-.card[data-type="Episode"]:is(.resumeSection *, div[data-category="resume"] *, #indexPage *),
-.backdropCard:is(.resumeSection *, div[data-category="resume"] *, #indexPage *) {
-    width: 140px !important;
-    max-width: 140px !important;
-    min-width: 140px !important;
-    flex: 0 0 140px !important;
+div[data-category="nextup"] .card {
+    width: 230px !important;
+    max-width: 230px !important;
+    min-width: 230px !important;
+    flex: 0 0 230px !important;
+    scroll-snap-align: start !important;
 }
 
-/* Force 2:3 vertical aspect-ratio on cardPadder (150% padding-bottom overrides Jellyfin 56.25% 16:9) */
+@media (min-width: 800px) {
+    .resumeSection .card,
+    .nextUpSection .card,
+    div[data-category="resume"] .card,
+    div[data-category="nextup"] .card {
+        width: 275px !important;
+        max-width: 275px !important;
+        min-width: 275px !important;
+        flex: 0 0 275px !important;
+    }
+}
+
 .resumeSection .cardPadder,
 .nextUpSection .cardPadder,
 div[data-category="resume"] .cardPadder,
 div[data-category="nextup"] .cardPadder,
-#indexPage .itemsContainer-slider .cardPadder,
-.cardPadder:is(.resumeSection *, div[data-category="resume"] *, #indexPage *),
-.cardPadder-backdrop:is(.resumeSection *, div[data-category="resume"] *, #indexPage *),
-.cardPadder-overflowBackdrop:is(.resumeSection *, div[data-category="resume"] *, #indexPage *),
-.cardPadder-smallBackdrop:is(.resumeSection *, div[data-category="resume"] *, #indexPage *) {
-    padding-bottom: 150% !important;
-    aspect-ratio: 2 / 3 !important;
+.cardPadder-backdrop,
+.cardPadder-overflowBackdrop {
+    padding-bottom: 56.25% !important;
+    aspect-ratio: 16 / 9 !important;
     height: 0 !important;
 }
 
 .resumeSection .cardScalable,
 .nextUpSection .cardScalable,
 div[data-category="resume"] .cardScalable,
-div[data-category="nextup"] .cardScalable,
-.resumeSection .card[data-type="Episode"] .cardScalable,
-.nextUpSection .card[data-type="Episode"] .cardScalable,
-div[data-category="resume"] .card[data-type="Episode"] .cardScalable,
-div[data-category="nextup"] .card[data-type="Episode"] .cardScalable,
-.cardScalable:is(.resumeSection *, div[data-category="resume"] *, #indexPage *) {
-    aspect-ratio: 2 / 3 !important;
+div[data-category="nextup"] .cardScalable {
+    aspect-ratio: 16 / 9 !important;
     border-radius: 12px !important;
     overflow: hidden !important;
+    position: relative !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6) !important;
 }
 
 .resumeSection .cardImageContainer img,
 .nextUpSection .cardImageContainer img,
 div[data-category="resume"] .cardImageContainer img,
-div[data-category="nextup"] .cardImageContainer img,
-#indexPage .itemsContainer-slider .cardImageContainer img {
+div[data-category="nextup"] .cardImageContainer img {
     object-fit: cover !important;
     width: 100% !important;
     height: 100% !important;
@@ -4264,17 +4267,43 @@ div[data-category="nextup"] .cardImageContainer img,
     left: 0 !important;
 }
 
+/* Streaming Watch Progress Bar (Netflix / Android TV Red Glow) */
+.resumeSection .itemProgressBar,
+.nextUpSection .itemProgressBar,
+div[data-category="resume"] .itemProgressBar,
+div[data-category="nextup"] .itemProgressBar,
+#indexPage .itemProgressBar {
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 4px !important;
+    background: rgba(255, 255, 255, 0.22) !important;
+    border-radius: 0 0 12px 12px !important;
+    overflow: hidden !important;
+    z-index: 5 !important;
+}
+
+.resumeSection .itemProgressBarForeground,
+.nextUpSection .itemProgressBarForeground,
+div[data-category="resume"] .itemProgressBarForeground,
+div[data-category="nextup"] .itemProgressBarForeground,
+#indexPage .itemProgressBarForeground {
+    background: linear-gradient(90deg, #E50914 0%, #FF2E4D 100%) !important;
+    border-radius: 0 0 12px 12px !important;
+    height: 100% !important;
+    box-shadow: 0 0 8px rgba(229, 9, 20, 0.6) !important;
+}
+
 @media (max-width: 600px) {
     .resumeSection .card,
     .nextUpSection .card,
     div[data-category="resume"] .card,
-    div[data-category="nextup"] .card,
-    .card[data-type="Episode"]:is(.resumeSection *, div[data-category="resume"] *, #indexPage *),
-    .backdropCard:is(.resumeSection *, div[data-category="resume"] *, #indexPage *) {
-        width: 120px !important;
-        max-width: 120px !important;
-        min-width: 120px !important;
-        flex: 0 0 120px !important;
+    div[data-category="nextup"] .card {
+        width: 215px !important;
+        max-width: 215px !important;
+        min-width: 215px !important;
+        flex: 0 0 215px !important;
     }
 }
 
@@ -5718,4 +5747,138 @@ html.abyss-spotlight-visible #indexPage,
 html.abyss-spotlight-visible .homeSectionsContainer {
     position: relative;
     z-index: 1;
+}
+
+/* ========================================================
+   MODERN STREAMING UPGRADES: PURE ANDROID TV & STREAMING APP
+   ======================================================== */
+
+/* 1. Hide redundant "My Media" library folders row from Home feed */
+#indexPage .verticalSection:has([data-type="CollectionFolder"]),
+#indexPage .verticalSection:has([data-type="UserView"]),
+#indexPage .verticalSection:has(.card[data-type="CollectionFolder"]),
+#indexPage .verticalSection:has(.card[data-type="UserView"]),
+#indexPage [data-category="views"],
+#indexPage .section0 {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+}
+
+/* 2. Modernized Catalog Action Toolbar (Replaces stark white buttons with frosted glass) */
+.viewSettings,
+.libraryViewNav {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 8px !important;
+    padding: 8px 14px !important;
+    margin: 0 !important;
+}
+
+/* Suppress nonsensical Play All & Shuffle All on Movie and TV series catalog grids */
+.libraryPage :is(.btnPlay, .btnShuffle, button[data-action="playall"], button[data-action="shuffleall"], button[data-action="play"], button[data-action="shuffle"]),
+#moviesPage :is(.btnPlay, .btnShuffle, button[data-action="playall"], button[data-action="shuffleall"]),
+#tvShowsPage :is(.btnPlay, .btnShuffle, button[data-action="playall"], button[data-action="shuffleall"]),
+.viewSettings :is(.btnPlay, .btnShuffle, button[data-action="playall"], button[data-action="shuffleall"], button[data-action="play"], button[data-action="shuffle"]) {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
+}
+
+/* Frosted glass icon buttons for filters, sort, view toggles, and paging */
+.viewSettings button,
+.viewSettings .paper-icon-button-light,
+.libraryViewNav button,
+.listPaging button {
+    background: rgba(255, 255, 255, 0.08) !important;
+    backdrop-filter: blur(14px) !important;
+    -webkit-backdrop-filter: blur(14px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+    border-radius: 9999px !important;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.viewSettings button:hover,
+.viewSettings button:focus-visible,
+.libraryViewNav button:hover,
+.libraryViewNav button:focus-visible {
+    background: rgba(255, 255, 255, 0.22) !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+    color: #FFFFFF !important;
+    transform: scale(1.06) !important;
+}
+
+/* 3. Android TV Card Bento Focus & Hover Elevation */
+.itemsContainer .card:focus-visible,
+.itemsContainer .card:hover,
+.itemsContainer-slider .card:focus-visible,
+.itemsContainer-slider .card:hover {
+    transform: scale(1.04) translateY(-2px) !important;
+    z-index: 10 !important;
+    transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.24s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.itemsContainer .card:focus-visible .cardScalable,
+.itemsContainer .card:hover .cardScalable,
+.itemsContainer-slider .card:focus-visible .cardScalable,
+.itemsContainer-slider .card:hover .cardScalable {
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.85), 0 0 0 1.5px rgba(255, 255, 255, 0.35) !important;
+}
+
+/* 4. Streaming Typography: Multi-line clean title clamp instead of abrupt cutoffs */
+.cardText-first {
+    font-weight: 600 !important;
+    font-size: 0.88rem !important;
+    line-height: 1.25 !important;
+    color: #EDEDED !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: normal !important;
+    max-height: 2.5em !important;
+    margin-top: 6px !important;
+}
+
+.cardText-secondary {
+    font-size: 0.78rem !important;
+    color: rgba(255, 255, 255, 0.55) !important;
+    font-weight: 500 !important;
+    margin-top: 2px !important;
+}
+
+/* Section titles with modern streaming hierarchy */
+.sectionTitle {
+    font-family: "Google Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.01em !important;
+    font-size: 1.18rem !important;
+    color: #FFFFFF !important;
+    margin: 18px 0 10px 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+}
+
+.sectionTitleTextButton > .material-icons {
+    color: rgba(255, 255, 255, 0.45) !important;
+    font-size: 1.15rem !important;
+    margin-left: 4px !important;
+    transition: transform 0.2s ease, color 0.2s ease !important;
+}
+
+.sectionTitleTextButton:hover > .material-icons {
+    color: #FFFFFF !important;
+    transform: translateX(3px) !important;
 }
