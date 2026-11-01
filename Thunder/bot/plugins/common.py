@@ -286,10 +286,14 @@ async def ping_command(bot: Client, msg: Message):
         "start", "help", "about", "dc", "ping", "users",
         "broadcast", "ban", "unban", "banned", "auth",
         "deauth", "restart", "status_bot", "token", "count",
-        "channel", "del", "speedtest"
-    ])
+        "channel", "del", "speedtest",
+        "plan", "buy", "sub", "addsub", "remsub", "subscribers"
+    ]),
+    group=10
 )
 async def fallback_text_handler(bot: Client, msg: Message):
+    if msg.text and msg.text.startswith("/"):
+        return
     """Provide helpful FileToLink usage when user sends plain text messages to @flashfilezbot."""
     if not await check_banned(bot, msg):
         return

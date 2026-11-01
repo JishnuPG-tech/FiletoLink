@@ -60,15 +60,6 @@ async def plan_command_handler(client: Client, message: Message):
     user_id = message.from_user.id
     user_name = message.from_user.first_name or "User"
 
-    if not Var.PAYMENT_ENABLED:
-        await message.reply_text(
-            "⚡ **Flash File Service Status**\n\n"
-            "All streaming and download links are currently **100% Free**!\n"
-            "No active subscription or payment is required.",
-            quote=True
-        )
-        return
-
     sub = await db.get_subscription(user_id)
     now = datetime.datetime.now(datetime.timezone.utc)
 
@@ -90,6 +81,8 @@ async def plan_command_handler(client: Client, message: Message):
             price=Var.SUB_PRICE,
             upi_id=Var.UPI_ID
         )
+        if not Var.PAYMENT_ENABLED:
+            text += "\n\n*(ℹ️ Note: Payment gateway is in preview mode. Set PAYMENT=True to activate live paywall enforcement.)*" 
         keyboard = get_plan_keyboard(user_id)
 
     await message.reply_text(text, reply_markup=keyboard, quote=True)
@@ -393,8 +386,13 @@ async def reject_sub_callback(client: Client, query: CallbackQuery):
         logger.warning(f"Could not notify user {user_id} of rejected request: {e}")
 
 
-@StreamBot.on_message(filters.private & (filters.photo | filters.document | filters.text) & ~filters.command(["start", "help", "about", "plan", "buy", "sub"]))
+@StreamBot.on_message(
+    filters.private & (filters.photo | filters.document | filters.text),
+    group=5
+)
 async def proof_receiver_handler(client: Client, message: Message):
+    if message.text and message.text.startswith("/"):
+        return
     user_id = message.from_user.id if message.from_user else None
     if not user_id:
         return
