@@ -323,7 +323,12 @@ async def link_handler(bot: Client, msg: Message, **kwargs):
 )
 async def private_receive_handler(bot: Client, msg: Message, **kwargs):
     async def _actual_private_receive_handler(client: Client, message: Message, **handler_kwargs):
-        shortener_val = await validate_request_common(client, message)
+        media = (
+            message.document or message.video or message.photo or
+            message.audio or message.voice or message.animation or message.video_note
+        )
+        file_unique_id = getattr(media, "file_unique_id", str(message.id)) if media else str(message.id)
+        shortener_val = await validate_request_common(client, message, file_identifier=file_unique_id)
         if shortener_val is None:
             return
         if not message.from_user:
