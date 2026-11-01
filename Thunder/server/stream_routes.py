@@ -250,6 +250,38 @@ async def _serve_media_response(
     )
 
 
+@routes.get("/pay", allow_head=True)
+async def upi_redirect_handler(request: web.Request):
+    u = request.query.get("u", "")
+    note = f"FlashFile_Sub_{u}" if u else "FlashFile_Sub"
+    upi_uri = f"upi://pay?pa={Var.UPI_ID}&pn={quote(Var.UPI_NAME)}&am={Var.SUB_PRICE}&cu=INR&tn={note}"
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pay ₹{Var.SUB_PRICE} - Flash File</title>
+    <meta http-equiv="refresh" content="0; url={upi_uri}">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1115; color: #fff; text-align: center; padding: 40px 20px; }}
+        .card {{ max-width: 400px; margin: 0 auto; background: #181a20; border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }}
+        h2 {{ margin-top: 0; color: #4ade80; }}
+        .btn {{ display: block; background: #2563eb; color: #fff; text-decoration: none; padding: 14px 20px; border-radius: 12px; font-weight: bold; margin: 16px 0; }}
+        .upi-box {{ background: #232730; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 16px; margin: 15px 0; user-select: all; }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>⚡ Flash File Premium</h2>
+        <p>Redirecting to your UPI app (Google Pay, PhonePe, Paytm)...</p>
+        <a class="btn" href="{upi_uri}">Launch UPI App (₹{Var.SUB_PRICE})</a>
+        <p style="color: #94a3b8; font-size: 14px;">Or copy UPI ID manually:</p>
+        <div class="upi-box">{Var.UPI_ID}</div>
+    </div>
+</body>
+</html>"""
+    return web.Response(text=html, content_type="text/html")
+
 @routes.get("/", allow_head=True)
 async def root_redirect(request):
     return web.json_response({

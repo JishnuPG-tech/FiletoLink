@@ -36,13 +36,15 @@ def get_upi_link(user_id: int) -> str:
 
 
 def get_plan_keyboard(user_id: int, file_id: Optional[str] = None) -> InlineKeyboardMarkup:
-    upi_link = get_upi_link(user_id)
+    base_url = Var.URL.rstrip('/') if Var.URL else "https://jishnupg-filetolink.hf.space"
+    pay_url = f"{base_url}/pay?u={user_id}"
     buttons = [
         [
-            InlineKeyboardButton(f"💳 Pay ₹{Var.SUB_PRICE} via UPI", url=upi_link)
+            InlineKeyboardButton(f"💳 Pay ₹{Var.SUB_PRICE} via UPI App", url=pay_url)
         ],
         [
-            InlineKeyboardButton("📩 Submit Payment Proof", callback_data=f"proof_{user_id}")
+            InlineKeyboardButton("📋 Payment Details", callback_data=f"sub_pay_{user_id}"),
+            InlineKeyboardButton("📩 Submit Proof", callback_data=f"proof_{user_id}")
         ]
     ]
     if file_id:
@@ -57,35 +59,39 @@ def get_plan_keyboard(user_id: int, file_id: Optional[str] = None) -> InlineKeyb
 
 @StreamBot.on_message(filters.command(["plan", "buy", "sub"]) & filters.private)
 async def plan_command_handler(client: Client, message: Message):
-    user_id = message.from_user.id
-    user_name = message.from_user.first_name or "User"
+    try:
+        user_id = message.from_user.id
+        user_name = message.from_user.first_name or "User"
 
-    sub = await db.get_subscription(user_id)
-    now = datetime.datetime.now(datetime.timezone.utc)
+        sub = await db.get_subscription(user_id)
+        now = datetime.datetime.now(datetime.timezone.utc)
 
-    if sub and sub.get("status") == "active" and sub.get("expires_at") and sub["expires_at"] > now:
-        expires = sub["expires_at"]
-        remaining = max(1, (expires - now).days)
-        text = MSG_SUB_PLAN_ACTIVE.format(
-            user_name=user_name,
-            user_id=user_id,
-            expiry_date=expires.strftime("%Y-%m-%d %H:%M UTC"),
-            remaining_days=remaining
-        )
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Extend Subscription (₹10)", callback_data=f"sub_pay_{user_id}")],
-            [InlineKeyboardButton("❌ Close", callback_data="close_sub")]
-        ])
-    else:
-        text = MSG_SUB_PLAN_FREE.format(
-            price=Var.SUB_PRICE,
-            upi_id=Var.UPI_ID
-        )
-        if not Var.PAYMENT_ENABLED:
-            text += "\n\n*(ℹ️ Note: Payment gateway is in preview mode. Set PAYMENT=True to activate live paywall enforcement.)*" 
-        keyboard = get_plan_keyboard(user_id)
+        if sub and sub.get("status") == "active" and sub.get("expires_at") and sub["expires_at"] > now:
+            expires = sub["expires_at"]
+            remaining = max(1, (expires - now).days)
+            text = MSG_SUB_PLAN_ACTIVE.format(
+                user_name=user_name,
+                user_id=user_id,
+                expiry_date=expires.strftime("%Y-%m-%d %H:%M UTC"),
+                remaining_days=remaining
+            )
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"➕ Extend Subscription (₹{Var.SUB_PRICE})", callback_data=f"sub_pay_{user_id}")],
+                [InlineKeyboardButton("❌ Close", callback_data="close_sub")]
+            ])
+        else:
+            text = MSG_SUB_PLAN_FREE.format(
+                price=Var.SUB_PRICE,
+                upi_id=Var.UPI_ID
+            )
+            if not Var.PAYMENT_ENABLED:
+                text += "\n\n*(ℹ️ Note: Payment gateway is in preview mode. Set PAYMENT=True to activate live paywall enforcement.)*"
+            keyboard = get_plan_keyboard(user_id)
 
-    await message.reply_text(text, reply_markup=keyboard, quote=True)
+        await message.reply_text(text, reply_markup=keyboard, quote=True)
+    except Exception as e:
+        logger.error(f"Error in plan_command_handler: {e}", exc_info=True)
+        await message.reply_text(f"⚠️ Error displaying plan: {e}", quote=True)
 
 
 @StreamBot.on_message(filters.command("addsub") & filters.private)
@@ -189,17 +195,22 @@ async def close_sub_callback(client: Client, query: CallbackQuery):
 @StreamBot.on_callback_query(filters.regex(r"^sub_pay_(\d+)$"))
 async def sub_pay_callback(client: Client, query: CallbackQuery):
     user_id = int(query.matches[0].group(1))
-    upi_link = get_upi_link(user_id)
+    base_url = Var.URL.rstrip('/') if Var.URL else "https://jishnupg-filetolink.hf.space"
+    pay_url = f"{base_url}/pay?u={user_id}"
     text = (
-        "💳 **Pay ₹10 via UPI**\n\n"
+        "💳 **Flash File UPI Payment Details**\n\n"
+        f"**Amount:** `₹{Var.SUB_PRICE}` (30-Day Unlimited Access)\n"
         f"**UPI ID:** `{Var.UPI_ID}`\n"
         f"**Name:** `{Var.UPI_NAME}`\n"
-        f"**Amount:** `₹{Var.SUB_PRICE}`\n\n"
-        "Click the button below to launch Google Pay / PhonePe / Paytm / BHIM directly:"
+        f"**Reference Note:** `FlashFile_Sub_{user_id}`\n\n"
+        "**How to Pay:**\n"
+        "1. Tap the button below to launch Google Pay / PhonePe / Paytm.\n"
+        "2. Or copy the UPI ID above and pay `₹10` in any UPI app.\n"
+        "3. Once done, tap **'Submit Proof'** and send your screenshot or UTR."
     )
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"🚀 Open UPI App (₹{Var.SUB_PRICE})", url=upi_link)],
-        [InlineKeyboardButton("📩 Submit Proof / Tx ID", callback_data=f"proof_{user_id}")],
+        [InlineKeyboardButton(f"🚀 Open UPI App (₹{Var.SUB_PRICE})", url=pay_url)],
+        [InlineKeyboardButton("📩 Submit Payment Proof", callback_data=f"proof_{user_id}")],
         [InlineKeyboardButton("⬅️ Back", callback_data=f"plan_info_{user_id}")]
     ])
     await query.answer()
