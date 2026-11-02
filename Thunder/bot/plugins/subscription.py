@@ -23,14 +23,11 @@ from Thunder.vars import Var
 awaiting_proof = set()
 
 
-def get_upi_link(user_id: int) -> str:
-    note = f"FlashFile_Sub_{user_id}"
+def get_upi_link(user_id: int = 0) -> str:
     params = {
         "pa": Var.UPI_ID,
-        "pn": Var.UPI_NAME,
         "am": str(Var.SUB_PRICE),
-        "cu": "INR",
-        "tn": note
+        "cu": "INR"
     }
     return f"upi://pay?{urllib.parse.urlencode(params)}"
 
@@ -201,8 +198,7 @@ async def sub_pay_callback(client: Client, query: CallbackQuery):
         "💳 **Flash File UPI Payment Details**\n\n"
         f"**Amount:** `₹{Var.SUB_PRICE}` (30-Day Unlimited Access)\n"
         f"**UPI ID:** `{Var.UPI_ID}`\n"
-        f"**Name:** `{Var.UPI_NAME}`\n"
-        f"**Reference Note:** `FlashFile_Sub_{user_id}`\n\n"
+
         "**How to Pay:**\n"
         "1. Tap the button below to launch Google Pay / PhonePe / Paytm.\n"
         "2. Or copy the UPI ID above and pay `₹10` in any UPI app.\n"

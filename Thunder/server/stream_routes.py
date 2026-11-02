@@ -252,9 +252,7 @@ async def _serve_media_response(
 
 @routes.get("/pay", allow_head=True)
 async def upi_redirect_handler(request: web.Request):
-    u = request.query.get("u", "")
-    note = f"FlashFile_Sub_{u}" if u else "FlashFile_Sub"
-    upi_uri = f"upi://pay?pa={Var.UPI_ID}&pn={quote(Var.UPI_NAME)}&am={Var.SUB_PRICE}&cu=INR&tn={note}"
+    upi_uri = f"upi://pay?pa={Var.UPI_ID}&am={Var.SUB_PRICE}&cu=INR"
     html = f"""<!DOCTYPE html>
 <html>
 <head>
