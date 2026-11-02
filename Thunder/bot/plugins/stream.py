@@ -72,7 +72,17 @@ async def send_paywall_card(client: Client, message: Message, file_id: Optional[
             upi_id=Var.UPI_ID
         )
         keyboard = get_plan_keyboard(user_id, file_id=file_id)
-        await message.reply_text(text, reply_markup=keyboard, quote=True)
+        from Thunder.template.qr_asset import get_merchant_qr_path
+        qr_path = get_merchant_qr_path()
+        if qr_path and os.path.exists(qr_path):
+            await message.reply_photo(
+                photo=qr_path,
+                caption=text,
+                reply_markup=keyboard,
+                quote=True
+            )
+        else:
+            await message.reply_text(text, reply_markup=keyboard, quote=True)
     except Exception as e:
         logger.error(f"Error sending paywall card: {e}", exc_info=True)
 

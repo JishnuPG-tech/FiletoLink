@@ -85,7 +85,17 @@ async def plan_command_handler(client: Client, message: Message):
                 text += "\n\n*(ℹ️ Note: Payment gateway is in preview mode. Set PAYMENT=True to activate live paywall enforcement.)*"
             keyboard = get_plan_keyboard(user_id)
 
-        await message.reply_text(text, reply_markup=keyboard, quote=True)
+        from Thunder.template.qr_asset import get_merchant_qr_path
+        qr_path = get_merchant_qr_path()
+        if qr_path and os.path.exists(qr_path):
+            await message.reply_photo(
+                photo=qr_path,
+                caption=text,
+                reply_markup=keyboard,
+                quote=True
+            )
+        else:
+            await message.reply_text(text, reply_markup=keyboard, quote=True)
     except Exception as e:
         logger.error(f"Error in plan_command_handler: {e}", exc_info=True)
         await message.reply_text(f"⚠️ Error displaying plan: {e}", quote=True)

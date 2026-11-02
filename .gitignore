@@ -29,3 +29,4 @@ wheels/
 *.egg
 Thunder/logs/
 *.log
+Thunder/template/gpay_merchant_qr.png
