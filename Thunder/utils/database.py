@@ -24,6 +24,7 @@ class Database:
         self.subscriptions_col: AsyncCollection = self.db.subscriptions
         self.temp_passes_col: AsyncCollection = self.db.temp_passes
         self.sub_requests_col: AsyncCollection = self.db.subscription_requests
+        self.ott_posts_col: AsyncCollection = self.db.ott_posts
 
     async def _deduplicate_users(self) -> None:
         pipeline = [
@@ -68,6 +69,7 @@ class Database:
             await self.temp_passes_col.create_index("expires_at", expireAfterSeconds=0)
             await self.sub_requests_col.create_index("request_id", unique=True)
             await self.sub_requests_col.create_index("user_id")
+            await self.ott_posts_col.create_index([("tmdb_id", 1), ("media_type", 1)], unique=True)
 
             logger.debug("Database indexes ensured.")
             return True
@@ -617,6 +619,38 @@ class Database:
         except Exception as e:
             logger.error(f"Error updating request {request_id}: {e}", exc_info=True)
             return False
+
+
+    async def is_ott_posted(self, tmdb_id: int, media_type: str = "movie") -> bool:
+        try:
+            doc = await self.ott_posts_col.find_one({"tmdb_id": tmdb_id, "media_type": media_type})
+            return doc is not None
+        except Exception as e:
+            logger.error(f"Error checking is_ott_posted: {e}", exc_info=True)
+            return False
+
+    async def mark_ott_posted(self, tmdb_id: int, media_type: str, title: str, platform: str = "") -> None:
+        try:
+            await self.ott_posts_col.update_one(
+                {"tmdb_id": tmdb_id, "media_type": media_type},
+                {"$set": {
+                    "tmdb_id": tmdb_id,
+                    "media_type": media_type,
+                    "title": title,
+                    "platform": platform,
+                    "posted_at": datetime.datetime.now(datetime.timezone.utc)
+                }},
+                upsert=True
+            )
+        except Exception as e:
+            logger.error(f"Error in mark_ott_posted: {e}", exc_info=True)
+
+    async def get_ott_posted_count(self) -> int:
+        try:
+            return await self.ott_posts_col.count_documents({})
+        except Exception as e:
+            logger.error(f"Error counting ott posts: {e}", exc_info=True)
+            return 0
 
     async def close(self):
         if self._client:

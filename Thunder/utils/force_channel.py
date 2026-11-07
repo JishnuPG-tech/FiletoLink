@@ -3,6 +3,7 @@
 import asyncio
 
 from pyrogram import Client
+from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors import FloodWait, UserNotParticipant
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
@@ -40,44 +41,57 @@ async def force_channel_check(client: Client, message: Message):
     if not Var.FORCE_CHANNEL_ID:
         return True
     
-    if message.from_user is None:
+    if message.from_user is None or message.from_user.id == Var.OWNER_ID:
         return True
+
+    user_id = message.from_user.id
 
     try:
         while True:
             try:
-                member = await client.get_chat_member(Var.FORCE_CHANNEL_ID, message.from_user.id)
+                member = await client.get_chat_member(Var.FORCE_CHANNEL_ID, user_id)
                 if member is None:
-                    logger.error(f"Failed to get chat member for {message.from_user.id} in force channel {Var.FORCE_CHANNEL_ID} after retries.")
-                    return False
+                    logger.error(f"Failed to get chat member for {user_id} in force channel {Var.FORCE_CHANNEL_ID}")
+                    raise UserNotParticipant()
+                
+                # Strict check: If user left, was kicked, or is banned
+                if getattr(member, "status", None) in (ChatMemberStatus.LEFT, ChatMemberStatus.BANNED):
+                    raise UserNotParticipant()
+                    
                 return True
             except FloodWait as e:
                 logger.debug(f"FloodWait in force_channel_check, sleeping for {e.value}s")
                 await asyncio.sleep(e.value)
     except UserNotParticipant:
         link, title = await get_force_info(client)
-        if link and title:
-            try:
-                await message.reply_text(
-                    MSG_COMMUNITY_CHANNEL.format(channel_title=title),
-                    reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("Join", url=link)
-                    ]])
-                )
-            except FloodWait as e:
-                await asyncio.sleep(e.value)
-                await message.reply_text(
-                    MSG_COMMUNITY_CHANNEL.format(channel_title=title),
-                    reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("Join", url=link)
-                    ]])
-                )
-        else:
-            try:
-                await message.reply_text("You must join the channel to use this bot.")
-            except FloodWait as e:
-                await asyncio.sleep(e.value)
-                await message.reply_text("You must join the channel to use this bot.")
+        channel_name = title or "our Updates Channel"
+        
+        buttons = []
+        if link:
+            buttons.append([InlineKeyboardButton(f"📢 Join {channel_name}", url=link)])
+        buttons.append([InlineKeyboardButton("🔄 Joined! Check Again", callback_data=f"chk_fsub_{user_id}")])
+        
+        text = (
+            f"⚠️ **Access Restricted!**\n\n"
+            f"You must be an active subscriber of **{channel_name}** to use this bot.\n\n"
+            f"👉 **Step 1:** Tap the button below to join our channel.\n"
+            f"👉 **Step 2:** Tap **'Joined! Check Again'** to continue.\n\n"
+            f"*(ℹ️ Note: If you leave the channel, your access is immediately revoked.)*"
+        )
+        
+        try:
+            await message.reply_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(buttons),
+                quote=True
+            )
+        except FloodWait as e:
+            await asyncio.sleep(e.value)
+            await message.reply_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(buttons),
+                quote=True
+            )
         return False
     except Exception as e:
         logger.error(f"Error checking force channel: {e}", exc_info=True)

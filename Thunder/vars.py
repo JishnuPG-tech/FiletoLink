@@ -117,3 +117,23 @@ class Var:
     SUB_DURATION_DAYS: int = int(os.getenv("SUB_DURATION_DAYS", "30"))
     UPI_ID: str = os.getenv("UPI_ID", "8590731979@okbizaxis").strip()
     ADMIN_CHANNEL: int = int(os.getenv("ADMIN_CHANNEL", "0"))
+
+    # TMDB & OTT Channel Autopilot
+    TMDB_API_KEY: str = os.getenv("TMDB_API_KEY", "").strip()
+    OTT_AUTOPILOT: bool = str_to_bool(os.getenv("OTT_AUTOPILOT", "True"))
+    OTT_CHANNEL_ID: Optional[int] = None
+    ott_channel_env = os.getenv("OTT_CHANNEL_ID", "").strip()
+    if ott_channel_env:
+        try:
+            OTT_CHANNEL_ID = int(ott_channel_env)
+        except ValueError:
+            logger.warning(f"Invalid OTT_CHANNEL_ID '{ott_channel_env}'; must be an integer.")
+
+    OTT_REGION: str = os.getenv("OTT_REGION", "IN").strip().upper()
+    OTT_SCHEDULE_HOUR: int = int(os.getenv("OTT_SCHEDULE_HOUR", "9"))
+    OTT_SCHEDULE_MINUTE: int = int(os.getenv("OTT_SCHEDULE_MINUTE", "0"))
+    OTT_TIMEZONE_OFFSET: float = float(os.getenv("OTT_TIMEZONE_OFFSET", "5.5"))
+
+    # Channel Welcome System
+    WELCOME_CHANNEL_ENABLED: bool = str_to_bool(os.getenv("WELCOME_CHANNEL_ENABLED", "True"))
+    WELCOME_AUTO_DELETE_SECONDS: int = int(os.getenv("WELCOME_AUTO_DELETE_SECONDS", "60"))

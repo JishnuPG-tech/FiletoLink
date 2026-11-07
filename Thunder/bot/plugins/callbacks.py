@@ -211,6 +211,45 @@ async def cancel_broadcast(client: Client, callback_query: CallbackQuery):
             await asyncio.sleep(e.value)
             await callback_query.answer("An error occurred. Please try again.", show_alert=True)
 
+@StreamBot.on_callback_query(filters.regex(r"^chk_fsub_(\d+)$"))
+async def check_force_sub_callback(client: Client, callback_query: CallbackQuery):
+    try:
+        user_id = int(callback_query.matches[0].group(1))
+        if callback_query.from_user.id != user_id:
+            return await callback_query.answer("⚠️ This button is not for you.", show_alert=True)
+
+        if not Var.FORCE_CHANNEL_ID:
+            await callback_query.answer("✅ Channel check is not required.", show_alert=True)
+            try:
+                await callback_query.message.delete()
+            except Exception:
+                pass
+            return
+
+        from pyrogram.enums import ChatMemberStatus
+        from pyrogram.errors import UserNotParticipant
+
+        try:
+            member = await client.get_chat_member(Var.FORCE_CHANNEL_ID, user_id)
+            if member and getattr(member, "status", None) not in (ChatMemberStatus.LEFT, ChatMemberStatus.BANNED):
+                await callback_query.answer("✅ Channel membership verified! You can now send files or generate links.", show_alert=True)
+                try:
+                    await callback_query.message.delete()
+                except Exception:
+                    pass
+                return
+            else:
+                await callback_query.answer("❌ You have not joined the channel yet! Please join first.", show_alert=True)
+        except UserNotParticipant:
+            await callback_query.answer("❌ You have not joined the channel yet! Please join first.", show_alert=True)
+    except Exception as e:
+        logger.error(f"Error in check_force_sub_callback: {e}", exc_info=True)
+        try:
+            await callback_query.answer("Error verifying membership. Please try again.", show_alert=True)
+        except Exception:
+            pass
+
+
 @StreamBot.on_callback_query()
 async def fallback_callback(client: Client, callback_query: CallbackQuery):
     try:
