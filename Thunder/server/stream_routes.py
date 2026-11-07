@@ -1,3 +1,4 @@
+import mimetypes
 # Thunder/server/stream_routes.py
 
 import re
@@ -182,8 +183,17 @@ async def _serve_media_response(
     if start == 0 and end == file_size - 1:
         range_header = ""
 
-    mime_type = file_info.get('mime_type') or 'application/octet-stream'
-    filename = _resolve_filename(file_info, mime_type)
+    raw_mime = file_info.get('mime_type')
+    filename = _resolve_filename(file_info, raw_mime or "")
+    mime_type = raw_mime
+    if not mime_type or mime_type in ('application/octet-stream', 'application/x-tgm'):
+        guessed, _ = mimetypes.guess_type(filename)
+        if guessed:
+            mime_type = guessed
+        elif filename.lower().endswith('.mkv'):
+            mime_type = 'video/x-matroska'
+    if not mime_type:
+        mime_type = 'application/octet-stream'
     disposition = get_content_disposition(request)
 
     headers = {

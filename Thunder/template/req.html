@@ -241,75 +241,115 @@
             box-shadow: 0 0 12px var(--accent-glow) !important;
         }
 
-        /* Claude-Style Sleek Video Buffering Loader */
-        .art-custom-loader {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 14px;
-            user-select: none;
+        /* Minimal Linear Buffering Bar (No Logo, No Text) */
+        .art-custom-loader-bar {
+            width: 160px;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: 99px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 0 12px rgba(0, 0, 0, 0.7);
             pointer-events: none;
         }
-        .loader-ring {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: rgba(255, 59, 92, 0.08);
-            border: 1px solid rgba(255, 59, 92, 0.25);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--accent-brand);
-            position: relative;
-            box-shadow: 0 0 30px rgba(255, 59, 92, 0.2);
-            animation: ringPulse 2s ease-in-out infinite;
-        }
-        .loader-ring::after {
-            content: '';
+        .loader-bar-line {
             position: absolute;
-            inset: -3px;
-            border-radius: 50%;
-            border: 2px solid transparent;
-            border-top-color: var(--accent-brand);
-            border-right-color: rgba(255, 59, 92, 0.4);
-            animation: ringSpin 1.1s linear infinite;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 45%;
+            background: linear-gradient(90deg, transparent, #ff3b5c, #ff758c, transparent);
+            border-radius: 99px;
+            animation: barSlide 1.25s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
-        .loader-caption {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-family: var(--font-body);
-            font-size: 0.84rem;
-            font-weight: 500;
-            color: var(--text-primary);
-            letter-spacing: 0.015em;
-            background: rgba(15, 17, 26, 0.85);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            padding: 5px 14px;
-            border-radius: 20px;
-            border: 1px solid var(--border-glass);
-        }
-        .loader-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--accent-brand);
-            box-shadow: 0 0 8px var(--accent-brand);
-            animation: dotFade 1.2s infinite;
+        @keyframes barSlide {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(350%); }
         }
 
-        @keyframes ringSpin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+        /* Smart Codec Notice Banner */
+        .codec-notice-banner {
+            background: rgba(30, 34, 50, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-md);
+            padding: 0.9rem 1.2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }
-        @keyframes ringPulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
+        @media (min-width: 768px) {
+            .codec-notice-banner {
+                flex-direction: row;
+                align-items: center;
+                justify-content: space-between;
+            }
         }
-        @keyframes dotFade {
-            0%, 100% { opacity: 1; }
+        .codec-notice-left {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .codec-notice-icon {
+            color: #38bdf8;
+            flex-shrink: 0;
+        }
+        .codec-notice-text {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+        .codec-notice-text strong {
+            color: #fff;
+            display: block;
+            margin-bottom: 2px;
+        }
+        .codec-notice-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+        .btn-codec-vlc {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            background: rgba(255, 59, 92, 0.15);
+            border: 1px solid rgba(255, 59, 92, 0.35);
+            color: #fff;
+            padding: 0.5rem 0.9rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.82rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        .btn-codec-vlc:hover {
+            background: rgba(255, 59, 92, 0.28);
+            border-color: rgba(255, 59, 92, 0.55);
+            transform: translateY(-1px);
+        }
+        .btn-codec-mx {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border-glass);
+            color: var(--text-primary);
+            padding: 0.5rem 0.9rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.82rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        .btn-codec-mx:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: var(--border-hover);
+            transform: translateY(-1px);
+        }
             50% { opacity: 0.35; }
         }
 
@@ -631,6 +671,31 @@
             <div id="artplayer-container"></div>
         </main>
 
+        <!-- Smart Codec Notice Banner (For MKV / HEVC / Dolby AC3 Files) -->
+        <div class="codec-notice-banner" id="codecBanner">
+            <div class="codec-notice-left">
+                <div class="codec-notice-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                </div>
+                <div class="codec-notice-text">
+                    <strong>Black screen or no audio?</strong>
+                    <span>Web browsers cannot decode MKV (HEVC / Dolby AC3) tracks. Tap below to stream directly in your favorite media player:</span>
+                </div>
+            </div>
+            <div class="codec-notice-actions">
+                <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;end" class="btn-codec-vlc" title="Play with hardware acceleration in VLC">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                    <span>VLC Mobile</span>
+                </a>
+                <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.mxtech.videoplayer.ad;S.title={{ file_name | urlencode }};end" class="btn-codec-mx">
+                    <span>MX Player</span>
+                </a>
+                <a href="vlc://{{ src|safe }}" class="btn-codec-mx" title="Desktop VLC Player">
+                    <span>Desktop VLC</span>
+                </a>
+            </div>
+        </div>
+
         <!-- Media Info & Primary Actions -->
         <section class="media-header-card">
             <div class="media-meta-left">
@@ -773,6 +838,18 @@
             controls: [
                 {
                     position: 'right',
+                    html: '<button style="background:none;border:none;color:#fff;cursor:pointer;padding:0 7px;display:flex;align-items:center;" title="Play in VLC Player"><svg style="width:18px;height:18px;color:#38bdf8;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>',
+                    click: function () {
+                        const isAndroid = /Android/i.test(navigator.userAgent);
+                        if (isAndroid) {
+                            window.location.href = "intent:" + videoSrc + "#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;end";
+                        } else {
+                            window.location.href = "vlc://" + videoSrc;
+                        }
+                    },
+                },
+                {
+                    position: 'right',
                     html: '<button style="background:none;border:none;color:#fff;cursor:pointer;padding:0 7px;display:flex;align-items:center;" title="Copy Stream URL"><svg style="width:18px;height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>',
                     click: function () {
                         copyStreamLink();
@@ -784,17 +861,7 @@
                 }
             ],
             icons: {
-                loading: `
-                    <div class="art-custom-loader">
-                        <div class="loader-ring">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                        </div>
-                        <div class="loader-caption">
-                            <span class="loader-dot"></span>
-                            <span>Buffering Stream</span>
-                        </div>
-                    </div>
-                `,
+                loading: '<div class="art-custom-loader-bar"><div class="loader-bar-line"></div></div>',
             },
         });
 
