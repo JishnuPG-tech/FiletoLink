@@ -1,6 +1,7 @@
 # Thunder/utils/force_channel.py
 
 import asyncio
+from typing import Dict, Tuple
 
 from pyrogram import Client
 from pyrogram.enums import ChatMemberStatus
@@ -13,6 +14,9 @@ from Thunder.vars import Var
 
 _force_link = None
 _force_title = None
+
+# Tracks pending user file messages waiting for channel membership join: user_id -> (chat_id, message_id)
+PENDING_FSUB_REQUESTS: Dict[int, Tuple[int, int]] = {}
 
 async def get_force_info(bot: Client):
     global _force_link, _force_title
@@ -66,17 +70,21 @@ async def force_channel_check(client: Client, message: Message):
         link, title = await get_force_info(client)
         channel_name = title or "our Updates Channel"
         
+        # Save pending file request so we can auto-send the link right after they join!
+        if message.chat and message.id:
+            PENDING_FSUB_REQUESTS[user_id] = (message.chat.id, message.id)
+
         buttons = []
         if link:
             buttons.append([InlineKeyboardButton(f"📢 Join {channel_name}", url=link)])
-        buttons.append([InlineKeyboardButton("🔄 Joined! Check Again", callback_data=f"chk_fsub_{user_id}")])
+        buttons.append([InlineKeyboardButton("🔄 Joined! Check Again", callback_data=f"chk_fsub_{user_id}_{message.id}")])
         
         text = (
             f"⚠️ **Access Restricted!**\n\n"
-            f"You must be an active subscriber of **{channel_name}** to use this bot.\n\n"
-            f"👉 **Step 1:** Tap the button below to join our channel.\n"
-            f"👉 **Step 2:** Tap **'Joined! Check Again'** to continue.\n\n"
-            f"*(ℹ️ Note: If you leave the channel, your access is immediately revoked.)*"
+            f"You must be an active subscriber of **{channel_name}** to get links.\n\n"
+            f"👉 **Step 1:** Tap **'Join {channel_name}'** below.\n"
+            f"👉 **Step 2:** Tap **'Joined! Check Again'** to immediately get your link!\n\n"
+            f"*(ℹ️ Note: If you leave the channel, your access will be revoked.)*"
         )
         
         try:

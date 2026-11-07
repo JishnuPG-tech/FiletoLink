@@ -211,10 +211,17 @@ async def cancel_broadcast(client: Client, callback_query: CallbackQuery):
             await asyncio.sleep(e.value)
             await callback_query.answer("An error occurred. Please try again.", show_alert=True)
 
-@StreamBot.on_callback_query(filters.regex(r"^chk_fsub_(\d+)$"))
+@StreamBot.on_callback_query(filters.regex(r"^chk_fsub_(\d+)(?:_(\d+))?$"))
 async def check_force_sub_callback(client: Client, callback_query: CallbackQuery):
     try:
         user_id = int(callback_query.matches[0].group(1))
+        orig_msg_id = None
+        if callback_query.matches[0].group(2):
+            try:
+                orig_msg_id = int(callback_query.matches[0].group(2))
+            except Exception:
+                orig_msg_id = None
+
         if callback_query.from_user.id != user_id:
             return await callback_query.answer("⚠️ This button is not for you.", show_alert=True)
 
@@ -228,13 +235,39 @@ async def check_force_sub_callback(client: Client, callback_query: CallbackQuery
 
         from pyrogram.enums import ChatMemberStatus
         from pyrogram.errors import UserNotParticipant
+        from Thunder.utils.force_channel import PENDING_FSUB_REQUESTS
 
         try:
             member = await client.get_chat_member(Var.FORCE_CHANNEL_ID, user_id)
             if member and getattr(member, "status", None) not in (ChatMemberStatus.LEFT, ChatMemberStatus.BANNED):
-                await callback_query.answer("✅ Channel membership verified! You can now send files or generate links.", show_alert=True)
+                await callback_query.answer("✅ Channel membership verified! Generating link...", show_alert=False)
+
+                # Determine which message to process
+                target_chat_id = callback_query.message.chat.id
+                target_msg_id = orig_msg_id
+                if not target_msg_id and user_id in PENDING_FSUB_REQUESTS:
+                    target_chat_id, target_msg_id = PENDING_FSUB_REQUESTS.pop(user_id)
+                elif user_id in PENDING_FSUB_REQUESTS:
+                    PENDING_FSUB_REQUESTS.pop(user_id, None)
+
+                if target_msg_id:
+                    try:
+                        orig_msg = await client.get_messages(chat_id=target_chat_id, message_ids=target_msg_id)
+                        if orig_msg and (orig_msg.document or orig_msg.video or orig_msg.audio or orig_msg.photo):
+                            await callback_query.message.edit_text("⚡ **Channel verified! Processing your file instantly...**")
+                            from Thunder.bot.plugins.stream import get_shortener_status, process_single
+                            shortener_val = await get_shortener_status(client, orig_msg)
+                            await process_single(client, orig_msg, orig_msg, callback_query.message, shortener_val)
+                            return
+                    except Exception as e:
+                        logger.error(f"Error re-processing file after fsub callback for {user_id}: {e}", exc_info=True)
+
                 try:
-                    await callback_query.message.delete()
+                    await callback_query.message.edit_text(
+                        "✅ **Channel membership verified!**\n\n"
+                        "You now have full access to Flash File.\n"
+                        "Send or forward any file or video to get instant direct links!"
+                    )
                 except Exception:
                     pass
                 return
