@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>{{ heading }}</title>
-    <meta name="theme-color" content="#090a0f">
+    <meta name="theme-color" content="#08090d">
 
     <!-- Logo & Favicon -->
     <link rel="icon" type="image/png" href="https://cdn.jsdelivr.net/gh/fyaz05/Resources@main/FileToLink/logo.png">
@@ -25,21 +25,28 @@
     <!-- Artplayer Modern Video Engine -->
     <script src="https://cdn.jsdelivr.net/npm/artplayer@5.1.1/dist/artplayer.js"></script>
 
+    <!-- StringTune Cutting-Edge Web Motion Engine -->
+    <script src="https://cdn.jsdelivr.net/npm/@fiddle-digital/string-tune@1.2.7/dist/index.js"></script>
+
+    <!-- Lightweight QR Code Generator -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
     <style>
         :root {
-            --bg-base: #090a0f;
+            --bg-base: #08090d;
             --bg-surface: rgba(16, 18, 27, 0.78);
             --bg-card: rgba(22, 25, 38, 0.88);
             --bg-glass-input: rgba(255, 255, 255, 0.04);
             --border-glass: rgba(255, 255, 255, 0.08);
             --border-hover: rgba(255, 255, 255, 0.18);
             
-            /* Claude & Cinema Palette */
+            /* Claude & Obsidian Cinema Palette */
             --accent-brand: #ff3b5c;
             --accent-gradient: linear-gradient(135deg, #ff3b5c 0%, #e02447 100%);
             --accent-glow: rgba(255, 59, 92, 0.28);
             --accent-cyan: #38bdf8;
             --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
             
             --text-primary: #f8fafc;
             --text-secondary: #94a3b8;
@@ -76,7 +83,7 @@
             line-height: 1.5;
         }
 
-        /* Subtle Ambient Backlight Glow */
+        /* Ambient Glow & Parallax Canvas */
         .ambient-glow {
             position: fixed;
             top: -150px;
@@ -85,7 +92,7 @@
             width: 90vw;
             height: 380px;
             max-width: 1100px;
-            background: radial-gradient(ellipse at center, var(--accent-glow) 0%, rgba(9, 10, 15, 0) 70%);
+            background: radial-gradient(ellipse at center, var(--accent-glow) 0%, rgba(8, 9, 13, 0) 70%);
             filter: blur(100px);
             z-index: 0;
             pointer-events: none;
@@ -170,6 +177,12 @@
             line-height: 1;
         }
 
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+        }
+
         /* File Title Pill Header */
         .file-pill {
             display: inline-flex;
@@ -179,8 +192,14 @@
             border: 1px solid var(--border-glass);
             padding: 0.45rem 0.9rem;
             border-radius: 30px;
-            max-width: 60%;
+            max-width: 280px;
             overflow: hidden;
+        }
+
+        @media (min-width: 640px) {
+            .file-pill {
+                max-width: 480px;
+            }
         }
 
         .live-dot {
@@ -201,14 +220,59 @@
             white-space: nowrap;
         }
 
-        /* Cinema Video Player Stage */
+        .btn-qr-beam {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-glass);
+            color: var(--text-primary);
+            padding: 0.45rem 0.85rem;
+            border-radius: 30px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .btn-qr-beam:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: var(--border-hover);
+        }
+        .btn-qr-beam svg {
+            width: 14px;
+            height: 14px;
+            stroke-width: 2.2;
+        }
+
+        /* Cinema Video Player Stage with Dynamic Ambilight */
+        .player-stage-wrap {
+            position: relative;
+            width: 100%;
+        }
+
+        .ambilight-canvas {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(1.06);
+            width: 100%;
+            height: 100%;
+            filter: blur(65px) brightness(1.2) saturate(1.4);
+            opacity: 0.65;
+            z-index: 0;
+            pointer-events: none;
+            transition: opacity 0.6s ease;
+            border-radius: var(--radius-xl);
+        }
+
         .player-stage {
             position: relative;
+            z-index: 1;
             width: 100%;
             border-radius: var(--radius-xl);
             overflow: hidden;
             background: #000;
-            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.85),
+            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.9),
                         0 0 0 1px var(--border-glass);
             aspect-ratio: 16 / 9;
             max-height: 76vh;
@@ -219,12 +283,12 @@
             height: 100%;
         }
 
-        /* Polish Artplayer Skin */
+        /* Artplayer Skin */
         .art-video-player {
             font-family: var(--font-body) !important;
         }
         .art-bottom {
-            background: linear-gradient(to top, rgba(9, 10, 15, 0.95) 0%, rgba(9, 10, 15, 0.6) 65%, transparent 100%) !important;
+            background: linear-gradient(to top, rgba(8, 9, 13, 0.95) 0%, rgba(8, 9, 13, 0.6) 65%, transparent 100%) !important;
             padding: 0 14px 10px !important;
         }
         .art-control-progress-loaded {
@@ -241,7 +305,7 @@
             box-shadow: 0 0 12px var(--accent-glow) !important;
         }
 
-        /* Minimal Linear Buffering Bar (No Logo, No Text) */
+        /* Minimal Linear Glowing Buffer Bar (No Logo, No Text) */
         .art-custom-loader-bar {
             width: 160px;
             height: 3px;
@@ -269,17 +333,17 @@
 
         /* Smart Codec Notice Banner */
         .codec-notice-banner {
-            background: rgba(30, 34, 50, 0.85);
+            background: rgba(26, 30, 46, 0.88);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: var(--radius-md);
-            padding: 0.9rem 1.2rem;
+            padding: 0.9rem 1.25rem;
             display: flex;
             flex-direction: column;
-            gap: 0.75rem;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            gap: 0.85rem;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
         }
-        @media (min-width: 768px) {
+        @media (min-width: 820px) {
             .codec-notice-banner {
                 flex-direction: row;
                 align-items: center;
@@ -319,7 +383,7 @@
             background: rgba(255, 59, 92, 0.15);
             border: 1px solid rgba(255, 59, 92, 0.35);
             color: #fff;
-            padding: 0.5rem 0.9rem;
+            padding: 0.52rem 0.95rem;
             border-radius: var(--radius-sm);
             font-size: 0.82rem;
             font-weight: 600;
@@ -338,7 +402,7 @@
             background: rgba(255, 255, 255, 0.06);
             border: 1px solid var(--border-glass);
             color: var(--text-primary);
-            padding: 0.5rem 0.9rem;
+            padding: 0.52rem 0.95rem;
             border-radius: var(--radius-sm);
             font-size: 0.82rem;
             font-weight: 500;
@@ -349,8 +413,6 @@
             background: rgba(255, 255, 255, 0.12);
             border-color: var(--border-hover);
             transform: translateY(-1px);
-        }
-            50% { opacity: 0.35; }
         }
 
         /* Media Card & Primary Controls */
@@ -609,6 +671,76 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.4);
         }
 
+        /* QR Beam Modal */
+        .qr-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+        .qr-modal-backdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .qr-modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-hover);
+            border-radius: 20px;
+            padding: 2rem;
+            max-width: 380px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.9);
+            transform: scale(0.95);
+            transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .qr-modal-backdrop.open .qr-modal {
+            transform: scale(1);
+        }
+        .qr-title {
+            font-family: var(--font-display);
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 0.35rem;
+        }
+        .qr-sub {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+        }
+        .qr-canvas-box {
+            background: #fff;
+            padding: 14px;
+            border-radius: 14px;
+            display: inline-block;
+            margin-bottom: 1.25rem;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+        .qr-canvas-box canvas {
+            display: block;
+        }
+        .btn-close-qr {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-glass);
+            color: var(--text-primary);
+            padding: 0.65rem 1.5rem;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 0.9rem;
+            width: 100%;
+        }
+
         /* Toast Popup */
         .toast {
             position: fixed;
@@ -645,45 +777,56 @@
 </head>
 
 <body>
-    <div class="ambient-glow" aria-hidden="true"></div>
+    <div class="ambient-glow" aria-hidden="true" string="parallax" string-factor="0.12"></div>
 
     <div class="app-container">
         <!-- Masthead -->
         <header class="masthead">
             <a href="/" class="brand-badge">
-                <div class="brand-icon-wrap">
+                <div class="brand-icon-wrap" string="magnetic">
                     <!-- Lucide Zap Icon -->
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                 </div>
                 <div class="brand-text">
-                    <span class="brand-title">Thunder</span>
-                    <span class="brand-serif">Cinema</span>
+                    <span class="brand-title">Flash</span>
+                    <span class="brand-serif">File</span>
                 </div>
             </a>
-            <div class="file-pill">
-                <span class="live-dot"></span>
-                <span class="file-pill-title">{{ file_name }}</span>
+            
+            <div class="header-actions">
+                <div class="file-pill">
+                    <span class="live-dot"></span>
+                    <span class="file-pill-title" title="{{ file_name }}">{{ file_name }}</span>
+                </div>
+                <button class="btn-qr-beam" id="openQrBtn" title="Beam to Phone or Smart TV">
+                    <!-- Lucide QrCode -->
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
+                    <span>Beam</span>
+                </button>
             </div>
         </header>
 
-        <!-- Modern Artplayer Stage -->
-        <main class="player-stage">
-            <div id="artplayer-container"></div>
-        </main>
+        <!-- Modern Cinema Player Stage with Dynamic Ambilight -->
+        <div class="player-stage-wrap">
+            <canvas id="ambilightCanvas" class="ambilight-canvas" aria-hidden="true"></canvas>
+            <main class="player-stage">
+                <div id="artplayer-container"></div>
+            </main>
+        </div>
 
         <!-- Smart Codec Notice Banner (For MKV / HEVC / Dolby AC3 Files) -->
         <div class="codec-notice-banner" id="codecBanner">
             <div class="codec-notice-left">
                 <div class="codec-notice-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 </div>
                 <div class="codec-notice-text">
                     <strong>Black screen or no audio?</strong>
-                    <span>Web browsers cannot decode MKV (HEVC / Dolby AC3) tracks. Tap below to stream directly in your favorite media player:</span>
+                    <span>MKV container with HEVC/AC3 codecs requires hardware player decoding. Tap below to launch seamlessly:</span>
                 </div>
             </div>
             <div class="codec-notice-actions">
-                <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;end" class="btn-codec-vlc" title="Play with hardware acceleration in VLC">
+                <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;end" class="btn-codec-vlc" string="magnetic" title="Play with hardware acceleration in VLC">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="6 3 20 12 6 21 6 3"/></svg>
                     <span>VLC Mobile</span>
                 </a>
@@ -720,13 +863,13 @@
             </div>
 
             <div class="actions-group">
-                <a href="{{ src|safe }}" download="{{ file_name }}" class="btn btn-primary" id="downloadDirectBtn">
+                <a href="{{ src|safe }}" download="{{ file_name }}" class="btn btn-primary" id="downloadDirectBtn" string="magnetic">
                     <!-- Lucide Download -->
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                     <span>Download</span>
                 </a>
 
-                <button class="btn btn-glass" id="copyStreamUrlBtn">
+                <button class="btn btn-glass" id="copyStreamUrlBtn" string="magnetic">
                     <!-- Lucide Copy -->
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                     <span>Copy Stream Link</span>
@@ -794,6 +937,16 @@
         </footer>
     </div>
 
+    <!-- QR Beam Modal -->
+    <div class="qr-modal-backdrop" id="qrModalBackdrop">
+        <div class="qr-modal">
+            <h3 class="qr-title">Beam to Device</h3>
+            <p class="qr-sub">Scan with phone camera or Android TV to stream instantly</p>
+            <div class="qr-canvas-box" id="qrCanvasBox"></div>
+            <button class="btn-close-qr" id="closeQrBtn">Close</button>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div class="toast" id="toastBox">
         <!-- Lucide Check Circle -->
@@ -801,7 +954,7 @@
         <span id="toastMsg">Direct stream link copied to clipboard!</span>
     </div>
 
-    <!-- Artplayer Modern Configuration -->
+    <!-- Artplayer Modern Configuration & Ambilight Engine -->
     <script>
         const videoSrc = {{ src | tojson }};
         const fileName = {{ file_name | tojson }};
@@ -865,6 +1018,61 @@
             },
         });
 
+        // Dynamic Real-Time Ambilight Ambient Backlight Engine
+        const ambilightCanvas = document.getElementById('ambilightCanvas');
+        if (ambilightCanvas) {
+            const ctx = ambilightCanvas.getContext('2d');
+            ambilightCanvas.width = 64;
+            ambilightCanvas.height = 36;
+            let ambilightActive = false;
+
+            function renderAmbilight() {
+                if (!ambilightActive) return;
+                const v = art.video;
+                if (v && !v.paused && !v.ended && v.readyState >= 2 && v.videoWidth > 0) {
+                    try {
+                        ctx.drawImage(v, 0, 0, ambilightCanvas.width, ambilightCanvas.height);
+                    } catch (e) {}
+                }
+                requestAnimationFrame(renderAmbilight);
+            }
+
+            art.on('play', () => {
+                ambilightActive = true;
+                ambilightCanvas.style.opacity = '0.7';
+                renderAmbilight();
+            });
+
+            art.on('pause', () => {
+                ambilightActive = false;
+                ambilightCanvas.style.opacity = '0.35';
+            });
+        }
+
+        // QR Beam Modal Logic
+        const qrBackdrop = document.getElementById('qrModalBackdrop');
+        const qrCanvasBox = document.getElementById('qrCanvasBox');
+        let qrGenerated = false;
+
+        document.getElementById('openQrBtn').addEventListener('click', () => {
+            if (!qrGenerated && window.QRCode) {
+                QRCode.toCanvas(window.location.href, { width: 200, margin: 1, color: { dark: '#08090d', light: '#ffffff' } }, function (err, canvas) {
+                    if (!err && canvas) {
+                        qrCanvasBox.appendChild(canvas);
+                        qrGenerated = true;
+                    }
+                });
+            }
+            qrBackdrop.classList.add('open');
+        });
+
+        document.getElementById('closeQrBtn').addEventListener('click', () => {
+            qrBackdrop.classList.remove('open');
+        });
+        qrBackdrop.addEventListener('click', (e) => {
+            if (e.target === qrBackdrop) qrBackdrop.classList.remove('open');
+        });
+
         // Copy Link Action with Toast
         function showToast(msg) {
             const toast = document.getElementById('toastBox');
@@ -890,6 +1098,21 @@
         }
 
         document.getElementById('copyStreamUrlBtn').addEventListener('click', copyStreamLink);
+
+        // StringTune Initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                const ST = window.StringTune?.StringTune || window.StringTune;
+                if (ST && typeof ST.getInstance === 'function') {
+                    const st = ST.getInstance();
+                    if (window.StringTune?.StringMagnetic) st.use(window.StringTune.StringMagnetic);
+                    if (window.StringTune?.StringParallax) st.use(window.StringTune.StringParallax);
+                    st.start(60);
+                }
+            } catch (err) {
+                console.debug("StringTune initialized:", err);
+            }
+        });
     </script>
 </body>
 

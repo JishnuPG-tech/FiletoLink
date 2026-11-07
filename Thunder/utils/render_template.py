@@ -65,3 +65,8 @@ async def render_page(message_id: int, secure_hash: str, requested_action: str |
             exc_info=True
         )
         raise
+
+
+async def render_home_page(context: dict) -> str:
+    template = template_env.get_template('index.html')
+    return await template.render_async(**context)

@@ -292,6 +292,24 @@ async def upi_redirect_handler(request: web.Request):
 
 @routes.get("/", allow_head=True)
 async def root_redirect(request):
+    accept_header = request.headers.get("Accept", "")
+    if ("text/html" in accept_header or "*/*" in accept_header) and request.method == "GET":
+        from Thunder.utils.render_template import render_home_page
+        uptime = time.time() - StartTime
+        bot_user = getattr(StreamBot, "username", None) or Var.NAME
+        context = {
+            "version": __version__,
+            "bot_username": bot_user,
+            "uptime": get_readable_time(uptime),
+            "clients_count": len(multi_clients),
+            "app_url": (Var.URL or "").rstrip('/')
+        }
+        try:
+            html = await render_home_page(context)
+            return web.Response(text=html, content_type="text/html")
+        except Exception as e:
+            logger.error(f"Error rendering home portal: {e}", exc_info=True)
+
     return web.json_response({
         "server": {
             "status": "operational",
