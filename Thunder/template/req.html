@@ -242,14 +242,29 @@
         }
 
         /* Minimal Linear Buffering Bar (No Logo, No Text) */
+        .art-loading {
+            background: transparent !important;
+            pointer-events: none !important;
+        }
+        .art-loading-icon {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        .art-loading-icon svg {
+            display: none !important;
+        }
+        .art-loading-text {
+            display: none !important;
+        }
         .art-custom-loader-bar {
-            width: 160px;
+            width: 150px;
             height: 3px;
-            background: rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.14);
             border-radius: 99px;
             overflow: hidden;
             position: relative;
-            box-shadow: 0 0 12px rgba(0, 0, 0, 0.7);
+            box-shadow: 0 0 14px rgba(0, 0, 0, 0.8);
             pointer-events: none;
         }
         .loader-bar-line {
@@ -349,8 +364,6 @@
             background: rgba(255, 255, 255, 0.12);
             border-color: var(--border-hover);
             transform: translateY(-1px);
-        }
-            50% { opacity: 0.35; }
         }
 
         /* Media Card & Primary Controls */
@@ -675,24 +688,27 @@
         <div class="codec-notice-banner" id="codecBanner">
             <div class="codec-notice-left">
                 <div class="codec-notice-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 </div>
                 <div class="codec-notice-text">
                     <strong>Black screen or no audio?</strong>
-                    <span>Web browsers cannot decode MKV (HEVC / Dolby AC3) tracks. Tap below to stream directly in your favorite media player:</span>
+                    <span>Web browsers (Chrome / Brave) lack decoders for MKV Dolby AC-3 / HEVC tracks. Stream in an external player with 100% sound & video:</span>
                 </div>
             </div>
             <div class="codec-notice-actions">
-                <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;end" class="btn-codec-vlc" title="Play with hardware acceleration in VLC">
+                <button type="button" class="btn-codec-vlc" onclick="generateM3uStream()" title="Open in VLC / PotPlayer via instant M3U stream">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                    <span>Play via M3U (VLC / PotPlayer)</span>
+                </button>
+                <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;end" class="btn-codec-mx" title="Play with hardware acceleration in VLC Mobile">
                     <span>VLC Mobile</span>
                 </a>
-                <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.mxtech.videoplayer.ad;S.title={{ file_name | urlencode }};end" class="btn-codec-mx">
+                <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.mxtech.videoplayer.ad;S.title={{ file_name | urlencode }};end" class="btn-codec-mx" title="Play in MX Player">
                     <span>MX Player</span>
                 </a>
-                <a href="vlc://{{ src|safe }}" class="btn-codec-mx" title="Desktop VLC Player">
-                    <span>Desktop VLC</span>
-                </a>
+                <button type="button" class="btn-codec-mx" onclick="copyStreamLink()" title="Copy direct stream link">
+                    <span>Copy Link</span>
+                </button>
             </div>
         </div>
 
@@ -775,11 +791,11 @@
                     <span>Infuse (iOS)</span>
                 </a>
 
-                <!-- Desktop VLC / Network Stream -->
-                <a href="vlc://{{ src|safe }}" class="player-btn">
+                <!-- Desktop VLC / PotPlayer via M3U -->
+                <button type="button" class="player-btn" onclick="generateM3uStream()" style="cursor:pointer;font-family:inherit;">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="15" x="2" y="7" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
-                    <span>Desktop VLC</span>
-                </a>
+                    <span>Desktop VLC / PotPlayer</span>
+                </button>
             </div>
         </section>
 
@@ -863,6 +879,43 @@
             icons: {
                 loading: '<div class="art-custom-loader-bar"><div class="loader-bar-line"></div></div>',
             },
+        });
+
+        // Generate and launch M3U stream file for Desktop VLC / PotPlayer / MPC-HC
+        function generateM3uStream() {
+            const m3uContent = '#EXTM3U\n#EXTINF:-1,' + fileName + '\n' + videoSrc + '\n';
+            const blob = new Blob([m3uContent], { type: 'audio/x-mpegurl' });
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = (fileName.replace(/\.[^/.]+$/, '') || 'stream') + '.m3u';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
+            showToast('Opening M3U stream in your default player (VLC / PotPlayer)...');
+        }
+
+        // Highlight codec banner on MKV or blank screen detection
+        if (fileName.toLowerCase().endsWith('.mkv')) {
+            const banner = document.getElementById('codecBanner');
+            if (banner) {
+                banner.style.borderLeftColor = '#ff3b5c';
+            }
+        }
+
+        art.on('video:playing', () => {
+            setTimeout(() => {
+                if (!art.video) return;
+                const quality = art.video.getVideoPlaybackQuality ? art.video.getVideoPlaybackQuality() : null;
+                const decoded = quality ? quality.totalVideoFrames : (art.video.webkitDecodedFrameCount || 0);
+                if (art.video.currentTime > 2 && decoded === 0) {
+                    const banner = document.getElementById('codecBanner');
+                    if (banner) {
+                        banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+            }, 3000);
         });
 
         // Copy Link Action with Toast
