@@ -3,947 +3,357 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ heading }}</title>
-    <meta name="theme-color" content="#090a0f">
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#faf9f7">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#030304">
 
     <!-- Logo & Favicon -->
-    <link rel="icon" type="image/png" href="https://cdn.jsdelivr.net/gh/fyaz05/Resources@main/FileToLink/logo.png">
+    <link rel="icon" type="image/jpeg" href="https://cdn.jsdelivr.net/gh/fyaz05/Resources@main/FileToLink/logo.png">
     <link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/gh/fyaz05/Resources@main/FileToLink/logo.png">
 
-    <!-- Open Graph SEO -->
-    <meta name="description" content="Stream '{{ file_name }}' in lossless quality with hardware acceleration and mobile app support.">
-    <meta property="og:type" content="video.other">
-    <meta property="og:title" content="{{ file_name }}">
-    <meta property="og:description" content="Lossless direct stream & instant download for {{ file_name }}.">
+    <!-- SEO & Social Sharing (Open Graph) -->
+    <meta name="description"
+        content="A premium cinema experience for '{{ file_name }}'. Stream in high quality with advanced controls.">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="{{ file_name }} — Cinema">
+    <meta property="og:description"
+        content="Stream '{{ file_name }}' in a beautiful, atmospheric environment with professional playback controls.">
+    <meta property="og:image" content="https://cdn.jsdelivr.net/gh/fyaz05/Resources@main/FileToLink/logo.png">
 
-    <!-- Professional Claude-Style & Modern UI Fonts -->
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ file_name }} — Cinema">
+    <meta name="twitter:description" content="Stream '{{ file_name }}' in a beautiful, atmospheric environment.">
+    <meta name="twitter:image" content="https://cdn.jsdelivr.net/gh/fyaz05/Resources@main/FileToLink/logo.png">
+
+    <!-- Vidstack Player -->
+    <link rel="stylesheet" href="https://cdn.vidstack.io/player/theme.css" />
+    <link rel="stylesheet" href="https://cdn.vidstack.io/player/video.css" />
+    <script type="module" src="https://cdn.vidstack.io/player"></script>
+
+    <!-- Typography: Outfit (geometric display) + DM Sans (refined body) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500&display=swap"
+        rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500&display=swap"
+            rel="stylesheet">
+    </noscript>
 
-    <!-- Artplayer Modern Video Engine -->
-    <script src="https://cdn.jsdelivr.net/npm/artplayer@5.1.1/dist/artplayer.js"></script>
-
-    <style>
-        :root {
-            --bg-base: #090a0f;
-            --bg-surface: rgba(16, 18, 27, 0.78);
-            --bg-card: rgba(22, 25, 38, 0.88);
-            --bg-glass-input: rgba(255, 255, 255, 0.04);
-            --border-glass: rgba(255, 255, 255, 0.08);
-            --border-hover: rgba(255, 255, 255, 0.18);
-            
-            /* Claude & Cinema Palette */
-            --accent-brand: #ff3b5c;
-            --accent-gradient: linear-gradient(135deg, #ff3b5c 0%, #e02447 100%);
-            --accent-glow: rgba(255, 59, 92, 0.28);
-            --accent-cyan: #38bdf8;
-            --accent-emerald: #10b981;
-            
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            
-            --radius-xl: 18px;
-            --radius-lg: 14px;
-            --radius-md: 10px;
-            --radius-sm: 7px;
-            
-            --font-serif: 'Instrument Serif', Georgia, serif;
-            --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-            --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            --font-mono: 'JetBrains Mono', monospace;
-        }
-
-        *, *::before, *::after {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            background-color: var(--bg-base);
-            color: var(--text-primary);
-            font-family: var(--font-body);
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow-x: hidden;
-            position: relative;
-            line-height: 1.5;
-        }
-
-        /* Subtle Ambient Backlight Glow */
-        .ambient-glow {
-            position: fixed;
-            top: -150px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 90vw;
-            height: 380px;
-            max-width: 1100px;
-            background: radial-gradient(ellipse at center, var(--accent-glow) 0%, rgba(9, 10, 15, 0) 70%);
-            filter: blur(100px);
-            z-index: 0;
-            pointer-events: none;
-            opacity: 0.55;
-        }
-
-        /* App Container */
-        .app-container {
-            position: relative;
-            z-index: 1;
-            width: 100%;
-            max-width: 1240px;
-            margin: 0 auto;
-            padding: 1rem 1rem 3.5rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1.25rem;
-        }
-
-        @media (min-width: 768px) {
-            .app-container {
-                padding: 1.75rem 1.75rem 4.5rem;
-                gap: 1.5rem;
-            }
-        }
-
-        /* Masthead / Header Bar */
-        .masthead {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            padding: 0.85rem 1.25rem;
-            background: var(--bg-surface);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--border-glass);
-            border-radius: var(--radius-lg);
-        }
-
-        .brand-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.75rem;
-            text-decoration: none;
-            color: #fff;
-        }
-
-        .brand-icon-wrap {
-            width: 34px;
-            height: 34px;
-            border-radius: 9px;
-            background: var(--accent-gradient);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            box-shadow: 0 4px 12px var(--accent-glow);
-            flex-shrink: 0;
-        }
-
-        .brand-text {
-            display: flex;
-            align-items: baseline;
-            gap: 0.35rem;
-        }
-
-        .brand-title {
-            font-family: var(--font-display);
-            font-weight: 700;
-            font-size: 1.15rem;
-            letter-spacing: -0.025em;
-            color: #ffffff;
-        }
-
-        .brand-serif {
-            font-family: var(--font-serif);
-            font-style: italic;
-            font-size: 1.3rem;
-            color: var(--accent-brand);
-            font-weight: 400;
-            line-height: 1;
-        }
-
-        /* File Title Pill Header */
-        .file-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.6rem;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid var(--border-glass);
-            padding: 0.45rem 0.9rem;
-            border-radius: 30px;
-            max-width: 60%;
-            overflow: hidden;
-        }
-
-        .live-dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: var(--accent-emerald);
-            box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
-            flex-shrink: 0;
-        }
-
-        .file-pill-title {
-            font-family: var(--font-mono);
-            font-size: 0.82rem;
-            color: var(--text-secondary);
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        /* Cinema Video Player Stage */
-        .player-stage {
-            position: relative;
-            width: 100%;
-            border-radius: var(--radius-xl);
-            overflow: hidden;
-            background: #000;
-            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.85),
-                        0 0 0 1px var(--border-glass);
-            aspect-ratio: 16 / 9;
-            max-height: 76vh;
-        }
-
-        #artplayer-container {
-            width: 100%;
-            height: 100%;
-        }
-
-        /* Polish Artplayer Skin */
-        .art-video-player {
-            font-family: var(--font-body) !important;
-        }
-        .art-bottom {
-            background: linear-gradient(to top, rgba(9, 10, 15, 0.95) 0%, rgba(9, 10, 15, 0.6) 65%, transparent 100%) !important;
-            padding: 0 14px 10px !important;
-        }
-        .art-control-progress-loaded {
-            background: rgba(255, 255, 255, 0.22) !important;
-            border-radius: 2px !important;
-        }
-        .art-control-progress-played {
-            background: var(--accent-gradient) !important;
-            border-radius: 2px !important;
-        }
-        .art-control-progress-indicator {
-            background: #fff !important;
-            border: 2px solid var(--accent-brand) !important;
-            box-shadow: 0 0 12px var(--accent-glow) !important;
-        }
-
-        /* Minimal Linear Buffering Bar (No Logo, No Text) */
-        .art-loading {
-            background: transparent !important;
-            pointer-events: none !important;
-        }
-        .art-loading-icon {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-        }
-        .art-loading-icon svg {
-            display: none !important;
-        }
-        .art-loading-text {
-            display: none !important;
-        }
-        .art-custom-loader-bar {
-            width: 150px;
-            height: 3px;
-            background: rgba(255, 255, 255, 0.14);
-            border-radius: 99px;
-            overflow: hidden;
-            position: relative;
-            box-shadow: 0 0 14px rgba(0, 0, 0, 0.8);
-            pointer-events: none;
-        }
-        .loader-bar-line {
-            position: absolute;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            width: 45%;
-            background: linear-gradient(90deg, transparent, #ff3b5c, #ff758c, transparent);
-            border-radius: 99px;
-            animation: barSlide 1.25s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-        }
-        @keyframes barSlide {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(350%); }
-        }
-
-        /* Smart Codec Notice Banner */
-        .codec-notice-banner {
-            background: rgba(30, 34, 50, 0.85);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: var(--radius-md);
-            padding: 0.9rem 1.2rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-        }
-        @media (min-width: 768px) {
-            .codec-notice-banner {
-                flex-direction: row;
-                align-items: center;
-                justify-content: space-between;
-            }
-        }
-        .codec-notice-left {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-        .codec-notice-icon {
-            color: #38bdf8;
-            flex-shrink: 0;
-        }
-        .codec-notice-text {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
-        .codec-notice-text strong {
-            color: #fff;
-            display: block;
-            margin-bottom: 2px;
-        }
-        .codec-notice-actions {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            flex-shrink: 0;
-            flex-wrap: wrap;
-        }
-        .btn-codec-vlc {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            background: rgba(255, 59, 92, 0.15);
-            border: 1px solid rgba(255, 59, 92, 0.35);
-            color: #fff;
-            padding: 0.5rem 0.9rem;
-            border-radius: var(--radius-sm);
-            font-size: 0.82rem;
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.2s ease;
-        }
-        .btn-codec-vlc:hover {
-            background: rgba(255, 59, 92, 0.28);
-            border-color: rgba(255, 59, 92, 0.55);
-            transform: translateY(-1px);
-        }
-        .btn-codec-mx {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid var(--border-glass);
-            color: var(--text-primary);
-            padding: 0.5rem 0.9rem;
-            border-radius: var(--radius-sm);
-            font-size: 0.82rem;
-            font-weight: 500;
-            text-decoration: none;
-            transition: all 0.2s ease;
-        }
-        .btn-codec-mx:hover {
-            background: rgba(255, 255, 255, 0.12);
-            border-color: var(--border-hover);
-            transform: translateY(-1px);
-        }
-
-        /* Media Card & Primary Controls */
-        .media-header-card {
-            background: var(--bg-card);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--border-glass);
-            border-radius: var(--radius-lg);
-            padding: 1.25rem 1.5rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1.25rem;
-        }
-
-        @media (min-width: 820px) {
-            .media-header-card {
-                flex-direction: row;
-                align-items: center;
-                justify-content: space-between;
-                gap: 2rem;
-            }
-        }
-
-        .media-meta-left {
-            display: flex;
-            flex-direction: column;
-            gap: 0.6rem;
-            overflow: hidden;
-            flex: 1;
-        }
-
-        .media-filename {
-            font-family: var(--font-display);
-            font-size: 1.18rem;
-            font-weight: 600;
-            color: #ffffff;
-            word-break: break-word;
-            line-height: 1.4;
-            letter-spacing: -0.015em;
-        }
-
-        .media-tags {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            flex-wrap: wrap;
-        }
-
-        .tag-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--border-glass);
-            padding: 0.25rem 0.65rem;
-            border-radius: 20px;
-            font-size: 0.78rem;
-            font-weight: 500;
-            color: var(--text-secondary);
-        }
-
-        .tag-pill svg {
-            width: 14px;
-            height: 14px;
-            stroke-width: 2;
-        }
-
-        .tag-pill.badge-speed {
-            color: #34d399;
-            background: rgba(16, 185, 129, 0.08);
-            border-color: rgba(16, 185, 129, 0.22);
-        }
-
-        .tag-pill.badge-speed svg {
-            color: #34d399;
-        }
-
-        /* Action Buttons Group */
-        .actions-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0.75rem;
-            width: 100%;
-        }
-
-        @media (min-width: 820px) {
-            .actions-group {
-                display: flex;
-                width: auto;
-                flex-shrink: 0;
-            }
-        }
-
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.55rem;
-            font-family: var(--font-display);
-            font-size: 0.9rem;
-            font-weight: 600;
-            padding: 0.75rem 1.35rem;
-            border-radius: var(--radius-md);
-            text-decoration: none;
-            cursor: pointer;
-            transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-            border: 1px solid transparent;
-            user-select: none;
-            letter-spacing: -0.01em;
-        }
-
-        .btn svg {
-            width: 17px;
-            height: 17px;
-            stroke-width: 2.2;
-            flex-shrink: 0;
-        }
-
-        .btn-primary {
-            background: var(--accent-gradient);
-            color: #ffffff;
-            box-shadow: 0 4px 18px var(--accent-glow);
-        }
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(255, 59, 92, 0.45);
-            filter: brightness(1.08);
-        }
-
-        .btn-glass {
-            background: rgba(255, 255, 255, 0.06);
-            color: var(--text-primary);
-            border-color: var(--border-glass);
-        }
-        .btn-glass:hover {
-            background: rgba(255, 255, 255, 0.12);
-            border-color: var(--border-hover);
-            transform: translateY(-2px);
-        }
-
-        /* External 1-Tap App Launchers */
-        .external-players-card {
-            background: var(--bg-surface);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--border-glass);
-            border-radius: var(--radius-lg);
-            padding: 1.25rem 1.5rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1.1rem;
-        }
-
-        .section-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .section-title {
-            font-family: var(--font-display);
-            font-size: 0.88rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--text-secondary);
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-        }
-
-        .section-title svg {
-            color: var(--accent-brand);
-            width: 16px;
-            height: 16px;
-        }
-
-        .player-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 0.75rem;
-        }
-
-        @media (min-width: 640px) {
-            .player-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
-        }
-        @media (min-width: 980px) {
-            .player-grid {
-                grid-template-columns: repeat(6, 1fr);
-            }
-        }
-
-        .player-btn {
-            display: flex;
-            align-items: center;
-            gap: 0.65rem;
-            background: rgba(255, 255, 255, 0.035);
-            border: 1px solid var(--border-glass);
-            color: var(--text-primary);
-            text-decoration: none;
-            padding: 0.7rem 0.95rem;
-            border-radius: var(--radius-md);
-            font-size: 0.85rem;
-            font-weight: 500;
-            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .player-btn:hover {
-            background: rgba(255, 255, 255, 0.08);
-            border-color: var(--border-hover);
-            transform: translateY(-2px);
-        }
-        .player-btn svg {
-            width: 17px;
-            height: 17px;
-            color: var(--accent-cyan);
-            stroke-width: 2;
-            flex-shrink: 0;
-        }
-
-        /* Keyboard Shortcuts Legend */
-        .desktop-shortcuts {
-            display: none;
-            background: rgba(0, 0, 0, 0.32);
-            border: 1px solid var(--border-glass);
-            border-radius: var(--radius-md);
-            padding: 0.8rem 1.25rem;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 0.78rem;
-            color: var(--text-muted);
-        }
-
-        @media (min-width: 820px) {
-            .desktop-shortcuts {
-                display: flex;
-            }
-        }
-
-        .shortcut-item {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-        }
-
-        kbd {
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.16);
-            padding: 0.15rem 0.5rem;
-            border-radius: 5px;
-            font-size: 0.73rem;
-            font-family: var(--font-mono);
-            color: #fff;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
-        }
-
-        /* Toast Popup */
-        .toast {
-            position: fixed;
-            bottom: 2rem;
-            left: 50%;
-            transform: translateX(-50%) translateY(100px);
-            background: #111420;
-            border: 1px solid var(--border-hover);
-            color: #fff;
-            padding: 0.7rem 1.4rem;
-            border-radius: 30px;
-            font-size: 0.88rem;
-            font-weight: 500;
-            box-shadow: 0 16px 36px rgba(0,0,0,0.6);
-            opacity: 0;
-            pointer-events: none;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-            z-index: 999;
-            display: flex;
-            align-items: center;
-            gap: 0.65rem;
-        }
-        .toast.show {
-            transform: translateX(-50%) translateY(0);
-            opacity: 1;
-        }
-        .toast svg {
-            color: var(--accent-emerald);
-            width: 18px;
-            height: 18px;
-            stroke-width: 2.2;
-        }
-    </style>
+    <!-- Styles (CDN-hosted) -->
+    <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/fyaz05/Resources@main/FileToLink/Obsidian%20Ember/styles.css">
 </head>
 
 <body>
-    <div class="ambient-glow" aria-hidden="true"></div>
+    <!-- Atmospheric Background -->
+    <div class="atmosphere" aria-hidden="true">
+        <div class="gradient-mesh"></div>
+        <div class="noise"></div>
+        <div class="vignette"></div>
+    </div>
 
-    <div class="app-container">
+    <!-- Main Viewport -->
+    <main class="viewport">
         <!-- Masthead -->
         <header class="masthead">
-            <a href="/" class="brand-badge">
-                <div class="brand-icon-wrap">
-                    <!-- Lucide Zap Icon -->
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <div class="title-group">
+                <h1 class="title">{{ file_name }}</h1>
+                <div class="file-meta" id="fileMeta">
+                    <span class="meta-tag" id="metaDuration">
+                        <svg viewBox="0 0 24 24">
+                            <path
+                                d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
+                        </svg>
+                        <span>Loading...</span>
+                    </span>
+                    <span class="meta-tag" id="metaResolution">
+                        <svg viewBox="0 0 24 24">
+                            <path
+                                d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM9 8h2v8H9zm4 0h2v8h-2z" />
+                        </svg>
+                        <span>Loading...</span>
+                    </span>
                 </div>
-                <div class="brand-text">
-                    <span class="brand-title">Thunder</span>
-                    <span class="brand-serif">Cinema</span>
-                </div>
-            </a>
-            <div class="file-pill">
-                <span class="live-dot"></span>
-                <span class="file-pill-title">{{ file_name }}</span>
             </div>
+            <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                <!-- Sun icon (shown in dark mode) -->
+                <svg class="icon-sun" viewBox="0 0 24 24">
+                    <path
+                        d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z" />
+                </svg>
+                <!-- Moon icon (shown in light mode) -->
+                <svg class="icon-moon" viewBox="0 0 24 24">
+                    <path
+                        d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z" />
+                </svg>
+            </button>
         </header>
 
-        <!-- Modern Artplayer Stage -->
-        <main class="player-stage">
-            <div id="artplayer-container"></div>
-        </main>
-
-        <!-- Smart Codec Notice Banner (For MKV / HEVC / Dolby AC3 Files) -->
-        <div class="codec-notice-banner" id="codecBanner">
-            <div class="codec-notice-left">
-                <div class="codec-notice-icon">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <!-- Cinema Screen -->
+        <section class="cinema">
+            <div class="screen">
+                <div class="player-background-message">
+                    <svg class="bg-msg-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM9.5 7.5v9l7-4.5-7-4.5z" />
+                    </svg>
+                    <span class="bg-msg-title">If video not playing</span>
+                    <span class="bg-msg-sub">Use External Player</span>
                 </div>
-                <div class="codec-notice-text">
-                    <strong>Black screen or no audio?</strong>
-                    <span>Web browsers (Chrome / Brave) lack decoders for MKV Dolby AC-3 / HEVC tracks. Stream in an external player with 100% sound & video:</span>
-                </div>
+                <media-player id="player" title="{{ file_name }}" playsinline keyTarget="document">
+                    <media-provider></media-provider>
+                    <media-video-layout></media-video-layout>
+                </media-player>
             </div>
-            <div class="codec-notice-actions">
-                <button type="button" class="btn-codec-vlc" onclick="generateM3uStream()" title="Open in VLC / PotPlayer via instant M3U stream">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                    <span>Play via M3U (VLC / PotPlayer)</span>
-                </button>
-                <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;end" class="btn-codec-mx" title="Play with hardware acceleration in VLC Mobile">
-                    <span>VLC Mobile</span>
-                </a>
-                <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.mxtech.videoplayer.ad;S.title={{ file_name | urlencode }};end" class="btn-codec-mx" title="Play in MX Player">
-                    <span>MX Player</span>
-                </a>
-                <button type="button" class="btn-codec-mx" onclick="copyStreamLink()" title="Copy direct stream link">
-                    <span>Copy Link</span>
-                </button>
-            </div>
-        </div>
+        </section>
 
-        <!-- Media Info & Primary Actions -->
-        <section class="media-header-card">
-            <div class="media-meta-left">
-                <h1 class="media-filename">{{ file_name }}</h1>
-                <div class="media-tags">
-                    <span class="tag-pill badge-speed">
-                        <!-- Lucide Zap -->
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                        Direct Byte-Range CDN
-                    </span>
-                    <span class="tag-pill">
-                        <!-- Lucide Cpu / HW Decode -->
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
-                        Hardware Acceleration
-                    </span>
-                    <span class="tag-pill">
-                        <!-- Lucide Sparkles -->
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>
-                        Lossless Original
-                    </span>
-                </div>
-            </div>
-
-            <div class="actions-group">
-                <a href="{{ src|safe }}" download="{{ file_name }}" class="btn btn-primary" id="downloadDirectBtn">
-                    <!-- Lucide Download -->
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        <!-- Command Bar -->
+        <nav class="command-bar">
+            <div class="command-glass">
+                <a href="{{ src|safe }}" download="{{ file_name }}" class="cmd-btn primary" id="downloadBtn">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+                    </svg>
                     <span>Download</span>
                 </a>
 
-                <button class="btn btn-glass" id="copyStreamUrlBtn">
-                    <!-- Lucide Copy -->
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                    <span>Copy Stream Link</span>
+                <div class="cmd-divider"></div>
+
+                <button class="cmd-btn" id="copyBtn" aria-label="Copy Link">
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+                    </svg>
+                    <span>Copy Link</span>
+                </button>
+
+                <div class="cmd-divider"></div>
+
+                <button class="cmd-btn drawer-trigger" id="playersToggle" aria-expanded="false"
+                    aria-controls="playersDrawer" aria-label="Open in external player">
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM9.5 7.5v9l7-4.5-7-4.5z" />
+                    </svg>
+                    <span>Open In</span>
+                    <svg class="chevron" viewBox="0 0 24 24">
+                        <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z" />
+                    </svg>
                 </button>
             </div>
-        </section>
+        </nav>
 
-        <!-- External 1-Tap App Launchers (Mobile & Desktop) -->
-        <section class="external-players-card">
-            <div class="section-header">
-                <span class="section-title">
-                    <!-- Lucide External Link -->
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
-                    1-Tap Play in External Player (No Download Needed)
-                </span>
+        <!-- External Players Drawer -->
+        <aside class="drawer" id="playersDrawer">
+            <div class="drawer-panel" id="drawerPanel" role="region" aria-labelledby="playersToggle">
+                <!-- Android -->
+                <div class="player-group" id="androidGroup">
+                    <div class="group-label">Android</div>
+                    <div class="player-grid">
+                        <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;end"
+                            class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            VLC
+                        </a>
+                        <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.mxtech.videoplayer.ad;S.title={{ file_name | urlencode }};end"
+                            class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            MX Player
+                        </a>
+                        <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.mxtech.videoplayer.pro;S.title={{ file_name | urlencode }};end"
+                            class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            MX Player Pro
+                        </a>
+                        <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.young.simple.player;end"
+                            class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            Splayer
+                        </a>
+                        <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=dev.anilbeesetti.nextplayer;S.title={{ file_name | urlencode }};end"
+                            class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            Next Player
+                        </a>
+                        <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.courville.nova;S.title={{ file_name | urlencode }};end"
+                            class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            Nova Player
+                        </a>
+                        <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=is.xyz.mpv;S.title={{ file_name | urlencode }};end"
+                            class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            MPV-Android
+                        </a>
+                        <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.brouken.player;end"
+                            class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            Just Player
+                        </a>
+                        <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.newin.nplayer.pro;end"
+                            class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            nPlayer
+                        </a>
+                    </div>
+                </div>
+
+                <!-- iOS -->
+                <div class="player-group" id="iosGroup">
+                    <div class="group-label">iOS / iPadOS</div>
+                    <div class="player-grid">
+                        <a href="vlc-x-callback://x-callback-url/stream?url={{ src|safe }}" class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            VLC
+                        </a>
+                        <a href="infuse://x-callback-url/play?url={{ src|safe }}" class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            Infuse
+                        </a>
+                        <a href="nplayer://weblink?url={{ src|safe }}" class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            nPlayer
+                        </a>
+                        <a href="outplayer://{{ src|safe }}" class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            Outplayer
+                        </a>
+                        <a href="oplayer://{{ src|safe }}" class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            OPlayer
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Desktop -->
+                <div class="player-group" id="desktopGroup">
+                    <div class="group-label">Desktop</div>
+                    <div class="player-grid">
+                        <a href="vlc://{{ src|safe }}" class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            VLC
+                        </a>
+                        <a href="potplayer://{{ src|safe }}" class="player-link" data-os="windows">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            PotPlayer
+                        </a>
+                        <a href="iina://weblink?url={{ src|safe }}" class="player-link" data-os="mac">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            IINA
+                        </a>
+                        <a href="mpv://{{ src|safe }}" class="player-link">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            MPV
+                        </a>
+                        <a href="kmplayer://{{ src|safe }}" class="player-link" data-os="windows">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            KMPlayer
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Footer Group -->
+        <footer class="footer-group">
+            <!-- Keyboard Hints -->
+            <div class="keyboard-hints" id="keyboardHints">
+                <div class="hints-row">
+                    <div class="hint">
+                        <kbd>Space</kbd>
+                        <span>Play / Pause</span>
+                    </div>
+                    <div class="hint">
+                        <kbd>←</kbd><kbd>→</kbd>
+                        <span>Seek</span>
+                    </div>
+                    <div class="hint">
+                        <kbd>↑</kbd><kbd>↓</kbd>
+                        <span>Volume</span>
+                    </div>
+                    <div class="hint">
+                        <kbd>F</kbd>
+                        <span>Fullscreen</span>
+                    </div>
+                    <div class="hint">
+                        <kbd>M</kbd>
+                        <span>Mute</span>
+                    </div>
+                    <div class="hint">
+                        <kbd>&lt;</kbd><kbd>&gt;</kbd>
+                        <span>Speed</span>
+                    </div>
+                </div>
             </div>
 
-            <div class="player-grid">
-                <!-- Android VLC -->
-                <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;end" class="player-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                    <span>VLC Mobile</span>
+            <!-- Copyright -->
+            <div class="copyright-footer">
+                <span>&copy; <span id="copyrightYear"></span> Thunder</span>
+                <span class="footer-separator">•</span>
+                <a href="https://github.com/fyaz05/FileToLink" target="_blank" rel="noopener noreferrer"
+                    class="footer-link" aria-label="GitHub">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5c.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34c-.46-1.16-1.11-1.47-1.11-1.47c-.91-.62.07-.6.07-.6c1 .07 1.53 1.03 1.53 1.03c.87 1.52 2.34 1.07 2.91.83c.09-.65.35-1.09.63-1.34c-2.22-.25-4.55-1.11-4.55-4.92c0-1.11.38-2 1.03-2.71c-.1-.25-.45-1.29.1-2.64c0 0 .84-.27 2.75 1.02c.79-.22 1.65-.33 2.5-.33s1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02c.55 1.35.2 2.39.1 2.64c.65.71 1.03 1.6 1.03 2.71c0 3.82-2.34 4.66-4.57 4.91c.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2" />
+                    </svg>
+                    GitHub
                 </a>
-
-                <!-- Android MX Player -->
-                <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.mxtech.videoplayer.ad;S.title={{ file_name | urlencode }};end" class="player-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                    <span>MX Player</span>
-                </a>
-
-                <!-- Android MX Player Pro -->
-                <a href="intent:{{ src|safe }}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.mxtech.videoplayer.pro;S.title={{ file_name | urlencode }};end" class="player-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                    <span>MX Player Pro</span>
-                </a>
-
-                <!-- iOS VLC -->
-                <a href="vlc-x-callback://x-callback-url/stream?url={{ src|safe }}" class="player-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                    <span>iOS VLC</span>
-                </a>
-
-                <!-- iOS Infuse -->
-                <a href="infuse://x-callback-url/play?url={{ src|safe }}" class="player-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                    <span>Infuse (iOS)</span>
-                </a>
-
-                <!-- Desktop VLC / PotPlayer via M3U -->
-                <button type="button" class="player-btn" onclick="generateM3uStream()" style="cursor:pointer;font-family:inherit;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="15" x="2" y="7" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
-                    <span>Desktop VLC / PotPlayer</span>
-                </button>
             </div>
-        </section>
-
-        <!-- Desktop Keyboard Shortcuts Legend -->
-        <footer class="desktop-shortcuts">
-            <span class="shortcut-item"><kbd>Space</kbd> Play / Pause</span>
-            <span class="shortcut-item"><kbd>←</kbd> <kbd>→</kbd> Seek 10s</span>
-            <span class="shortcut-item"><kbd>↑</kbd> <kbd>↓</kbd> Volume</span>
-            <span class="shortcut-item"><kbd>F</kbd> Fullscreen</span>
-            <span class="shortcut-item"><kbd>M</kbd> Mute</span>
-            <span class="shortcut-item"><kbd>P</kbd> Picture in Picture</span>
         </footer>
-    </div>
+    </main>
 
-    <!-- Toast Notification -->
-    <div class="toast" id="toastBox">
-        <!-- Lucide Check Circle -->
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        <span id="toastMsg">Direct stream link copied to clipboard!</span>
-    </div>
+    <!-- Toast Stack -->
+    <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
-    <!-- Artplayer Modern Configuration -->
+    <!-- Config for external script (template injection happens here) -->
     <script>
-        const videoSrc = {{ src | tojson }};
-        const fileName = {{ file_name | tojson }};
-
-        // Initialize Artplayer with Claude / Netflix Cinema styling
-        const art = new Artplayer({
-            container: '#artplayer-container',
-            url: videoSrc,
-            title: fileName,
-            poster: '',
-            volume: 0.85,
-            isLive: false,
-            muted: false,
-            autoplay: false,
-            pip: true,
-            autoSize: true,
-            autoMini: true,
-            screenshot: true,
-            setting: true,
-            loop: false,
-            flip: true,
-            playbackRate: true,
-            aspectRatio: true,
-            fullscreen: true,
-            fullscreenWeb: true,
-            miniProgressBar: true,
-            mutex: true,
-            backdrop: true,
-            playsInline: true,
-            autoPlayback: true,
-            theme: '#ff3b5c',
-            lang: navigator.language.toLowerCase(),
-            hotkey: true,
-            controls: [
-                {
-                    position: 'right',
-                    html: '<button style="background:none;border:none;color:#fff;cursor:pointer;padding:0 7px;display:flex;align-items:center;" title="Play in VLC Player"><svg style="width:18px;height:18px;color:#38bdf8;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>',
-                    click: function () {
-                        const isAndroid = /Android/i.test(navigator.userAgent);
-                        if (isAndroid) {
-                            window.location.href = "intent:" + videoSrc + "#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;end";
-                        } else {
-                            window.location.href = "vlc://" + videoSrc;
-                        }
-                    },
-                },
-                {
-                    position: 'right',
-                    html: '<button style="background:none;border:none;color:#fff;cursor:pointer;padding:0 7px;display:flex;align-items:center;" title="Copy Stream URL"><svg style="width:18px;height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>',
-                    click: function () {
-                        copyStreamLink();
-                    },
-                },
-                {
-                    position: 'right',
-                    html: '<a href="' + videoSrc + '" download="' + fileName + '" style="color:#fff;text-decoration:none;padding:0 7px;display:flex;align-items:center;" title="Direct Download"><svg style="width:18px;height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></a>',
-                }
-            ],
-            icons: {
-                loading: '<div class="art-custom-loader-bar"><div class="loader-bar-line"></div></div>',
-            },
-        });
-
-        // Generate and launch M3U stream file for Desktop VLC / PotPlayer / MPC-HC
-        function generateM3uStream() {
-            const m3uContent = '#EXTM3U\n#EXTINF:-1,' + fileName + '\n' + videoSrc + '\n';
-            const blob = new Blob([m3uContent], { type: 'audio/x-mpegurl' });
-            const blobUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            a.download = (fileName.replace(/\.[^/.]+$/, '') || 'stream') + '.m3u';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
-            showToast('Opening M3U stream in your default player (VLC / PotPlayer)...');
-        }
-
-        // Highlight codec banner on MKV or blank screen detection
-        if (fileName.toLowerCase().endsWith('.mkv')) {
-            const banner = document.getElementById('codecBanner');
-            if (banner) {
-                banner.style.borderLeftColor = '#ff3b5c';
-            }
-        }
-
-        art.on('video:playing', () => {
-            setTimeout(() => {
-                if (!art.video) return;
-                const quality = art.video.getVideoPlaybackQuality ? art.video.getVideoPlaybackQuality() : null;
-                const decoded = quality ? quality.totalVideoFrames : (art.video.webkitDecodedFrameCount || 0);
-                if (art.video.currentTime > 2 && decoded === 0) {
-                    const banner = document.getElementById('codecBanner');
-                    if (banner) {
-                        banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                }
-            }, 3000);
-        });
-
-        // Copy Link Action with Toast
-        function showToast(msg) {
-            const toast = document.getElementById('toastBox');
-            document.getElementById('toastMsg').innerText = msg;
-            toast.classList.add('show');
-            setTimeout(() => {
-                toast.classList.remove('show');
-            }, 3000);
-        }
-
-        function copyStreamLink() {
-            navigator.clipboard.writeText(videoSrc).then(() => {
-                showToast("Direct stream link copied to clipboard!");
-            }).catch(() => {
-                const temp = document.createElement("input");
-                temp.value = videoSrc;
-                document.body.appendChild(temp);
-                temp.select();
-                document.execCommand("copy");
-                document.body.removeChild(temp);
-                showToast("Direct stream link copied to clipboard!");
-            });
-        }
-
-        document.getElementById('copyStreamUrlBtn').addEventListener('click', copyStreamLink);
+        window.__CINEMA_CONFIG__ = { src: {{ src | tojson }} };
     </script>
+    <!-- Main Script (CDN-hosted) -->
+    <script src="https://cdn.jsdelivr.net/gh/fyaz05/Resources@main/FileToLink/Obsidian%20Ember/script.js"></script>
 </body>
 
 </html>
