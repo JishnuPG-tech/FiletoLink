@@ -1,3 +1,5 @@
+# Thunder/utils/commands.py
+
 from pyrogram.types import BotCommand
 
 from Thunder.bot import StreamBot
@@ -24,13 +26,19 @@ def get_commands():
         "users": "(Admin) Show the total number of users",
         "authorize": "(Admin) Grant permanent access to a user",
         "deauthorize": "(Admin) Remove permanent access from a user",
-                "listauth": "(Admin) List all authorized users",
-        "plan": "View subscription status or purchase monthly plan",
-        "buy": "Purchase ₹10/month subscription pass",
-        "addsub": "(Admin) Grant subscription to a user",
-        "remsub": "(Admin) Revoke subscription from a user",
-        "subscribers": "(Admin) View active subscriber count"
+        "listauth": "(Admin) List all authorized users",
     }
+
+    # Only expose subscription and payment commands when PAYMENT_ENABLED is True
+    if Var.PAYMENT_ENABLED:
+        command_descriptions.update({
+            "plan": "View subscription status or purchase monthly plan",
+            "buy": "Purchase ₹10/month subscription pass",
+            "addsub": "(Admin) Grant subscription to a user",
+            "remsub": "(Admin) Revoke subscription from a user",
+            "subscribers": "(Admin) View active subscriber count",
+        })
+
     return [BotCommand(name, desc) for name, desc in command_descriptions.items()]
 
 async def set_commands():

@@ -56,6 +56,8 @@ def get_plan_keyboard(user_id: int, file_id: Optional[str] = None) -> InlineKeyb
 
 @StreamBot.on_message(filters.command(["plan", "buy", "sub"]) & filters.private)
 async def plan_command_handler(client: Client, message: Message):
+    if not Var.PAYMENT_ENABLED:
+        return
     try:
         user_id = message.from_user.id
         user_name = message.from_user.first_name or "User"
@@ -103,6 +105,8 @@ async def plan_command_handler(client: Client, message: Message):
 
 @StreamBot.on_message(filters.command("addsub") & filters.private)
 async def addsub_command_handler(client: Client, message: Message):
+    if not Var.PAYMENT_ENABLED:
+        return
     sender_id = message.from_user.id
     is_owner = sender_id == Var.OWNER_ID
     is_admin = hasattr(Var, "ADMINS") and sender_id in Var.ADMINS
@@ -142,6 +146,8 @@ async def addsub_command_handler(client: Client, message: Message):
 
 @StreamBot.on_message(filters.command("remsub") & filters.private)
 async def remsub_command_handler(client: Client, message: Message):
+    if not Var.PAYMENT_ENABLED:
+        return
     sender_id = message.from_user.id
     is_owner = sender_id == Var.OWNER_ID
     is_admin = hasattr(Var, "ADMINS") and sender_id in Var.ADMINS
@@ -169,6 +175,8 @@ async def remsub_command_handler(client: Client, message: Message):
 
 @StreamBot.on_message(filters.command("subscribers") & filters.private)
 async def subscribers_command_handler(client: Client, message: Message):
+    if not Var.PAYMENT_ENABLED:
+        return
     sender_id = message.from_user.id
     is_owner = sender_id == Var.OWNER_ID
     is_admin = hasattr(Var, "ADMINS") and sender_id in Var.ADMINS
@@ -408,6 +416,8 @@ async def reject_sub_callback(client: Client, query: CallbackQuery):
     group=5
 )
 async def proof_receiver_handler(client: Client, message: Message):
+    if not Var.PAYMENT_ENABLED:
+        return
     if message.text and message.text.startswith("/"):
         return
     user_id = message.from_user.id if message.from_user else None
