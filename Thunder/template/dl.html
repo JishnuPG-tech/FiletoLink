@@ -7,24 +7,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Downloading {{ file_name }}</title>
     <meta http-equiv="refresh" content="2;url={{ src|safe }}">
+    
+    <!-- Professional Claude-Style & Modern UI Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
+    
     <style>
         :root {
-            --bg-base: #07080c;
-            --bg-card: rgba(22, 25, 38, 0.85);
-            --border-glass: rgba(255, 255, 255, 0.1);
-            --accent: #e50914;
-            --accent-glow: rgba(229, 9, 20, 0.3);
-            --text-main: #f3f4f6;
-            --text-muted: #9ca3af;
+            --bg-base: #090a0f;
+            --bg-card: rgba(22, 25, 38, 0.9);
+            --border-glass: rgba(255, 255, 255, 0.08);
+            --accent: #ff3b5c;
+            --accent-gradient: linear-gradient(135deg, #ff3b5c 0%, #e02447 100%);
+            --accent-glow: rgba(255, 59, 92, 0.32);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --font-serif: 'Instrument Serif', Georgia, serif;
+            --font-display: 'Plus Jakarta Sans', sans-serif;
+            --font-body: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             background-color: var(--bg-base);
-            color: var(--text-main);
-            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            -webkit-font-smoothing: antialiased;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -35,12 +44,13 @@
         }
         .ambient {
             position: absolute;
-            width: 500px;
-            height: 500px;
+            width: 520px;
+            height: 520px;
             background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
-            filter: blur(80px);
+            filter: blur(90px);
             z-index: 0;
             pointer-events: none;
+            opacity: 0.6;
         }
         .container {
             position: relative;
@@ -49,79 +59,114 @@
             width: 100%;
             background: var(--bg-card);
             border: 1px solid var(--border-glass);
-            border-radius: 20px;
-            padding: 2.5rem 2rem;
+            border-radius: 22px;
+            padding: 2.75rem 2.25rem;
             text-align: center;
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7);
-            backdrop-filter: blur(20px);
+            box-shadow: 0 30px 60px -15px rgba(0,0,0,0.85);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
         }
-        .bolt-icon {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-            display: inline-block;
-            animation: pulse 1.5s infinite;
+        .icon-badge {
+            width: 68px;
+            height: 68px;
+            border-radius: 20px;
+            background: rgba(255, 59, 92, 0.1);
+            border: 1px solid rgba(255, 59, 92, 0.3);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+            margin-bottom: 1.35rem;
+            box-shadow: 0 8px 24px var(--accent-glow);
+            position: relative;
+            animation: pulseRing 2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
         }
-        @keyframes pulse {
+        .icon-badge svg {
+            width: 32px;
+            height: 32px;
+            stroke-width: 2.2;
+            color: var(--accent);
+        }
+        @keyframes pulseRing {
             0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
+            50% { transform: scale(1.06); }
         }
         h1 {
-            font-family: 'Outfit', sans-serif;
-            font-size: 1.5rem;
+            font-family: var(--font-display);
+            font-size: 1.55rem;
             font-weight: 700;
-            margin-bottom: 0.75rem;
-            color: #fff;
+            margin-bottom: 0.4rem;
+            color: #ffffff;
+            letter-spacing: -0.02em;
+        }
+        .subtitle {
+            font-family: var(--font-serif);
+            font-style: italic;
+            font-size: 1.25rem;
+            color: var(--accent);
+            margin-bottom: 1.25rem;
         }
         .file-box {
             background: rgba(255, 255, 255, 0.04);
             border: 1px solid var(--border-glass);
             border-radius: 12px;
-            padding: 1rem;
-            margin: 1.25rem 0;
+            padding: 1rem 1.25rem;
+            margin: 1.25rem 0 1.5rem;
             word-break: break-all;
-            font-size: 0.95rem;
-            font-weight: 500;
-            color: var(--text-muted);
+            font-family: var(--font-mono);
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+            line-height: 1.45;
         }
         p {
-            color: var(--text-muted);
-            font-size: 0.95rem;
-            margin-bottom: 1.5rem;
+            color: var(--text-secondary);
+            font-size: 0.92rem;
+            margin-bottom: 1.75rem;
             line-height: 1.5;
         }
         .btn-download {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 0.5rem;
-            background: var(--accent);
+            gap: 0.6rem;
+            background: var(--accent-gradient);
             color: #fff;
             text-decoration: none;
+            font-family: var(--font-display);
             font-weight: 600;
-            font-size: 1rem;
-            padding: 0.85rem 2rem;
-            border-radius: 10px;
-            transition: all 0.2s ease;
-            box-shadow: 0 4px 15px rgba(229, 9, 20, 0.35);
+            font-size: 0.98rem;
+            padding: 0.9rem 2rem;
+            border-radius: 12px;
+            transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 4px 18px var(--accent-glow);
             width: 100%;
         }
         .btn-download:hover {
-            background: #b80710;
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(229, 9, 20, 0.5);
+            box-shadow: 0 8px 24px rgba(255, 59, 92, 0.45);
+            filter: brightness(1.08);
+        }
+        .btn-download svg {
+            width: 18px;
+            height: 18px;
+            stroke-width: 2.2;
         }
     </style>
 </head>
 <body>
     <div class="ambient"></div>
     <div class="container">
-        <div class="bolt-icon">⚡</div>
-        <h1>Starting High-Speed Download</h1>
+        <div class="icon-badge">
+            <!-- Lucide Download Cloud -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        </div>
+        <h1>High-Speed Download</h1>
+        <div class="subtitle">Direct CDN Byte-Range Delivery</div>
         <div class="file-box">{{ file_name }}</div>
-        <p>Your download should begin automatically in a few seconds.<br>If it does not start, tap the button below:</p>
+        <p>Your high-speed download will begin automatically in a moment. If it doesn't start, tap the button below.</p>
         <a href="{{ src|safe }}" download="{{ file_name }}" class="btn-download">
-            <svg style="width:20px;height:20px;fill:currentColor;" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-            Click to Download Now
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            <span>Download Now</span>
         </a>
     </div>
 </body>
