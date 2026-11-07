@@ -652,6 +652,24 @@ class Database:
             logger.error(f"Error counting ott posts: {e}", exc_info=True)
             return 0
 
+    async def get_weekly_files_count(self) -> int:
+        try:
+            one_week_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=7)
+            count = await self.files_col.count_documents({"created_at": {"$gte": one_week_ago}})
+            if count == 0:
+                count = await self.files_col.count_documents({})
+            return count
+        except Exception as e:
+            logger.error(f"Error in get_weekly_files_count: {e}", exc_info=True)
+            return 0
+
+    async def get_total_files_count(self) -> int:
+        try:
+            return await self.files_col.count_documents({})
+        except Exception as e:
+            logger.error(f"Error in get_total_files_count: {e}", exc_info=True)
+            return 0
+
     async def close(self):
         if self._client:
             await self._client.close()

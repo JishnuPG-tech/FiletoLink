@@ -137,3 +137,17 @@ class Var:
     # Channel Welcome System
     WELCOME_CHANNEL_ENABLED: bool = str_to_bool(os.getenv("WELCOME_CHANNEL_ENABLED", "True"))
     WELCOME_AUTO_DELETE_SECONDS: int = int(os.getenv("WELCOME_AUTO_DELETE_SECONDS", "60"))
+
+    # Weekly Server Milestone Card
+    MILESTONE_ENABLED: bool = str_to_bool(os.getenv("MILESTONE_ENABLED", "True"))
+    MILESTONE_CHANNEL_ID: Optional[int] = None
+    milestone_channel_env = os.getenv("MILESTONE_CHANNEL_ID", "").strip()
+    if milestone_channel_env:
+        try:
+            MILESTONE_CHANNEL_ID = int(milestone_channel_env)
+        except ValueError:
+            logger.warning(f"Invalid MILESTONE_CHANNEL_ID '{milestone_channel_env}'; must be an integer.")
+
+    MILESTONE_DAY: int = int(os.getenv("MILESTONE_DAY", "6"))  # 6 = Sunday
+    MILESTONE_HOUR: int = int(os.getenv("MILESTONE_HOUR", "20"))  # 20:00 = 8:00 PM
+    MILESTONE_MINUTE: int = int(os.getenv("MILESTONE_MINUTE", "0"))
