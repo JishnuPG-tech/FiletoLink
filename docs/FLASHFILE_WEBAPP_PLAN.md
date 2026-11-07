@@ -23,7 +23,7 @@ The reviewed source snapshot contains:
 
 The `webapp/` directory in this snapshot is not yet a complete frontend application. It has a particle component but no frontend `package.json`, Vite configuration, app entry point, route tree, or component system. The root Dockerfile also does not build a React application today. The existing page is therefore a design starting point, not proof that a complete React webapp is already wired into the deployed service.
 
-The source branch requires care before integration. GitHub's current `main` ref was observed at `513653d5455cf89a1ec856c83297d8f709237378`, while the reviewed Spirit UI snapshot is `93d5c263e1d104e485aec0096bffd2da36bf2930`. This feature branch starts from the latter so that it preserves the newer UI work. Reconcile the branch history before merging or deploying.
+The source branch requires care before integration. GitHub's current `main` ref was observed at `513653d5455cf89a1ec856c83297d8f709237378`, while the reviewed Spirit UI snapshot is `93d5c263e1d104e485aec0096bffd2da36bf2930`. GitHub's compare reports the branch histories as diverged: this feature branch is 7 commits ahead and 1 commit behind `main`. This branch intentionally preserves the newer UI snapshot; reconcile the main-only commit before merging or deploying.
 
 One additional routing constraint is important: the Thunder root route currently returns a machine-readable status object. Do not replace that response casually, because uptime checks or integrations may depend on it. Mount the first app release under `/app/` and preserve `/status`, streaming, and watch routes until the gateway health contract is reviewed.
 
