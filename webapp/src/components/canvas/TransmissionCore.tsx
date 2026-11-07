@@ -7,6 +7,24 @@ interface SpiritParticlesProps {
 }
 
 /**
+ * Read the shared FlashFile particle tokens from the document theme.
+ * The fallbacks keep this effect usable if it is embedded outside the main shell.
+ */
+const readThemeColor = (token: string, fallback: string): THREE.Color => {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+  const value = raw && !raw.includes('var(') ? raw : fallback;
+
+  try {
+    return new THREE.Color(value);
+  } catch {
+    return new THREE.Color(fallback);
+  }
+};
+
+const getPixelRatio = (viewportWidth: number): number =>
+  Math.min(window.devicePixelRatio || 1, viewportWidth < 640 ? 1.25 : 1.75);
+
+/**
  * Three.js "The Spirit" (particle-love.com by Edan Kwan) Curl-Noise WebGL Engine
  * Themed to FlashFile Obsidian & Crimson-Coral Palette.
  *
@@ -65,7 +83,7 @@ export const SpiritParticles: React.FC<SpiritParticlesProps> = ({
       powerPreference: 'high-performance',
     });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(getPixelRatio(width));
 
     // 3. GLSL Shaders for Curl Noise Spirit
     const vertexShader = `
@@ -207,12 +225,13 @@ export const SpiritParticles: React.FC<SpiritParticlesProps> = ({
 
     // 4. Geometry & Attributes
     const geometry = new THREE.BufferGeometry();
-    const origins = new Float32Array(particleCount * 3);
-    const offsets = new Float32Array(particleCount);
-    const speeds = new Float32Array(particleCount);
-    const scales = new Float32Array(particleCount);
+    const effectiveParticleCount = Math.min(particleCount, width < 640 ? 240 : width < 1024 ? 420 : 650);
+    const origins = new Float32Array(effectiveParticleCount * 3);
+    const offsets = new Float32Array(effectiveParticleCount);
+    const speeds = new Float32Array(effectiveParticleCount);
+    const scales = new Float32Array(effectiveParticleCount);
 
-    for (let i = 0; i < particleCount; i++) {
+    for (let i = 0; i < effectiveParticleCount; i++) {
       const radius = 1.2 + Math.random() * 2.8;
       const theta = Math.random() * Math.PI * 2;
       const ySpread = (Math.random() - 0.5) * 2.2;
@@ -232,14 +251,25 @@ export const SpiritParticles: React.FC<SpiritParticlesProps> = ({
     geometry.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
     geometry.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
 
-    // 5. Shader Material with FlashFile Theme Colors
+    // 5. Shader Material reads the same tokens as the rest of the webapp.
     const uniforms = {
       uTime: { value: 0 },
       uMouse: { value: new THREE.Vector3(0, 0, 0) },
-      uColor1: { value: new THREE.Color(0xff3b5c) }, // Crimson
-      uColor2: { value: new THREE.Color(0xe11d48) }, // Deep Coral
-      uColor3: { value: new THREE.Color(0x38bdf8) }, // Electric Cyan
+      uColor1: { value: readThemeColor('--particle-color-primary', '#ff3b5c') },
+      uColor2: { value: readThemeColor('--particle-color-secondary', '#e02447') },
+      uColor3: { value: readThemeColor('--particle-color-highlight', '#38bdf8') },
     };
+
+    const syncThemeColors = () => {
+      uniforms.uColor1.value.copy(readThemeColor('--particle-color-primary', '#ff3b5c'));
+      uniforms.uColor2.value.copy(readThemeColor('--particle-color-secondary', '#e02447'));
+      uniforms.uColor3.value.copy(readThemeColor('--particle-color-highlight', '#38bdf8'));
+    };
+    const themeObserver = new MutationObserver(syncThemeColors);
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class', 'data-theme', 'style'],
+    });
 
     const material = new THREE.ShaderMaterial({
       vertexShader,
@@ -307,7 +337,7 @@ export const SpiritParticles: React.FC<SpiritParticlesProps> = ({
       camera.aspect = newWidth / newHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(newWidth, newHeight);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setPixelRatio(getPixelRatio(newWidth));
     };
     window.addEventListener('resize', onResize, { passive: true });
 
@@ -315,7 +345,10 @@ export const SpiritParticles: React.FC<SpiritParticlesProps> = ({
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('resize', onResize);
       observer.disconnect();
+      themeObserver.disconnect();
       if (animId) cancelAnimationFrame(animId);
+      geometry.dispose();
+      material.dispose();
       renderer.dispose();
     };
   }, [particleCount]);
@@ -329,7 +362,11 @@ export const SpiritParticles: React.FC<SpiritParticlesProps> = ({
       <canvas ref={canvasRef} className="w-full h-full block opacity-90 transition-opacity duration-700" />
       <div
         ref={fallbackRef}
-        className="hidden absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(255,59,92,0.22)_0%,rgba(56,189,248,0.08)_45%,transparent_70%)] blur-[80px]"
+        className="hidden absolute inset-0 blur-[80px]"
+        style={{
+          background:
+            'radial-gradient(circle at 50% 45%, var(--particle-glow-primary, var(--accent-glow, rgba(255,59,92,0.22))) 0%, var(--particle-glow-secondary, rgba(56,189,248,0.08)) 45%, transparent 70%)',
+        }}
       />
     </div>
   );
