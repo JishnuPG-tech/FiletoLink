@@ -33,6 +33,13 @@
             --accent-glow: rgba(255, 59, 92, 0.28);
             --accent-cyan: #38bdf8;
             --accent-emerald: #10b981;
+
+            /* Shared particle tokens. Change these with the webapp theme, not inside GLSL. */
+            --particle-color-primary: #ff3b5c;
+            --particle-color-secondary: #e02447;
+            --particle-color-highlight: #38bdf8;
+            --particle-glow-primary: rgba(255, 59, 92, 0.22);
+            --particle-glow-secondary: rgba(56, 189, 248, 0.08);
             
             --text-primary: #f8fafc;
             --text-secondary: #94a3b8;
@@ -193,7 +200,7 @@
             display: none;
             position: absolute;
             inset: 0;
-            background: radial-gradient(circle at 50% 45%, rgba(255, 59, 92, 0.22) 0%, rgba(56, 189, 248, 0.08) 45%, transparent 70%);
+            background: radial-gradient(circle at 50% 45%, var(--particle-glow-primary, var(--accent-glow)) 0%, var(--particle-glow-secondary, rgba(56, 189, 248, 0.08)) 45%, transparent 70%);
             filter: blur(80px);
         }
         .hero-section {
@@ -852,7 +859,8 @@
             `;
 
             // 4. Generate The Spirit Particles Geometry
-            const particleCount = 650; // Optimized particle budget for locked 60-120 FPS
+            // Adaptive budget: keep mobile GPUs responsive while preserving the full desktop effect.
+            const particleCount = window.innerWidth < 640 ? 220 : (window.innerWidth < 1024 ? 420 : 650);
             const geometry = new THREE.BufferGeometry();
             
             const origins = new Float32Array(particleCount * 3);
@@ -881,14 +889,35 @@
             geometry.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
             geometry.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
 
-            // 5. Shader Material with FlashFile Theme Colors
+            // Read the palette from CSS tokens so the background follows the active theme.
+            const readThemeColor = (token, fallback) => {
+                const raw = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+                const value = raw && !raw.includes('var(') ? raw : fallback;
+                try {
+                    return new THREE.Color(value);
+                } catch (e) {
+                    return new THREE.Color(fallback);
+                }
+            };
+
             const uniforms = {
                 uTime: { value: 0 },
                 uMouse: { value: new THREE.Vector3(0, 0, 0) },
-                uColor1: { value: new THREE.Color(0xff3b5c) }, // Crimson
-                uColor2: { value: new THREE.Color(0xe11d48) }, // Deep Coral
-                uColor3: { value: new THREE.Color(0x38bdf8) }  // Electric Cyan
+                uColor1: { value: readThemeColor('--particle-color-primary', '#ff3b5c') },
+                uColor2: { value: readThemeColor('--particle-color-secondary', '#e02447') },
+                uColor3: { value: readThemeColor('--particle-color-highlight', '#38bdf8') }
             };
+
+            const syncThemeColors = () => {
+                uniforms.uColor1.value.copy(readThemeColor('--particle-color-primary', '#ff3b5c'));
+                uniforms.uColor2.value.copy(readThemeColor('--particle-color-secondary', '#e02447'));
+                uniforms.uColor3.value.copy(readThemeColor('--particle-color-highlight', '#38bdf8'));
+            };
+            const themeObserver = new MutationObserver(syncThemeColors);
+            themeObserver.observe(document.documentElement, {
+                attributes: true,
+                attributeFilter: ['class', 'data-theme', 'style']
+            });
 
             const material = new THREE.ShaderMaterial({
                 vertexShader: vertexShader,
