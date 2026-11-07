@@ -10,6 +10,7 @@ def get_commands():
     command_descriptions = {
         "start": "Start the bot and get a welcome message",
         "link": "(Group) Generate a direct link for a file or batch",
+        "batch": "Generate streaming links for multiple files or series",
         "dc": "Retrieve the data center (DC) information of a user or file",
         "ping": "Check the bot's status and response time",
         "about": "Get information about the bot",
