@@ -25,7 +25,7 @@ The `webapp/` directory in this snapshot is not yet a complete frontend applicat
 
 The source branch requires care before integration. GitHub's current `main` ref was observed at `513653d5455cf89a1ec856c83297d8f709237378`, while the reviewed Spirit UI snapshot is `93d5c263e1d104e485aec0096bffd2da36bf2930`. GitHub's compare reports the branch histories as diverged: this feature branch is 7 commits ahead and 1 commit behind `main`. This branch intentionally preserves the newer UI snapshot; reconcile the main-only commit before merging or deploying.
 
-One additional routing constraint is important: the Thunder root route currently returns a machine-readable status object. Do not replace that response casually, because uptime checks or integrations may depend on it. Mount the first app release under `/app/` and preserve `/status`, streaming, and watch routes until the gateway health contract is reviewed.
+One additional routing constraint is important: Thunder's root handler negotiates on the request `Accept` header. In the reviewed source, browser-like HTML requests are intended to render `index.html`, while non-HTML requests receive a machine-readable JSON status object. A direct Firecrawl probe received JSON, so confirm the real browser route during integration rather than assuming the landing page is live. Keep this compatibility behavior and mount the actual workspace under `/app/`; preserve `/status`, streaming, watch, webhook, and admin routes.
 
 ## 3. Product goals
 
