@@ -32,7 +32,7 @@ const getPixelRatio = (viewportWidth: number): number =>
  * - Analytical 3D Simplex & Curl Noise evaluated on GPU in GLSL vertex shader
  * - Organic fluid turbulence & life-cycle fade
  * - Smooth spring mouse dampening & cursor attraction
- * - IntersectionObserver loop optimization for 60-120 FPS battery-friendly performance
+ * - IntersectionObserver pausing when the hero is off-screen to avoid unnecessary GPU work
  * - Graceful fallback for prefers-reduced-motion and non-WebGL environments
  */
 export const SpiritParticles: React.FC<SpiritParticlesProps> = ({
