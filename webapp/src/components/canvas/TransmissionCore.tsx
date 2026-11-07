@@ -1,23 +1,25 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
-interface TransmissionCoreProps {
+interface SpiritParticlesProps {
   className?: string;
-  workerCount?: number;
+  particleCount?: number;
 }
 
 /**
- * Three.js WebGL Transmission Core Component
+ * Three.js "The Spirit" (particle-love.com by Edan Kwan) Curl-Noise WebGL Engine
+ * Themed to FlashFile Obsidian & Crimson-Coral Palette.
+ *
  * Features:
- * - Central rotating icosahedron geodesic wireframe with inner glowing point lattice
- * - Orbiting worker node satellites with dynamic line tethers
- * - 500 subtle glowing micro-particles with spring mouse dampening
- * - Battery-friendly IntersectionObserver (pauses animation when out of view)
- * - Prefers-reduced-motion & WebGL support fallback
+ * - Analytical 3D Simplex & Curl Noise evaluated on GPU in GLSL vertex shader
+ * - Organic fluid turbulence & life-cycle fade
+ * - Smooth spring mouse dampening & cursor attraction
+ * - IntersectionObserver loop optimization for 60-120 FPS battery-friendly performance
+ * - Graceful fallback for prefers-reduced-motion and non-WebGL environments
  */
-export const TransmissionCore: React.FC<TransmissionCoreProps> = ({
+export const SpiritParticles: React.FC<SpiritParticlesProps> = ({
   className = '',
-  workerCount = 6,
+  particleCount = 650,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -29,7 +31,7 @@ export const TransmissionCore: React.FC<TransmissionCoreProps> = ({
     const fallback = fallbackRef.current;
     if (!container || !canvas) return;
 
-    // 1. Accessibility & WebGL Check
+    // 1. Accessibility & WebGL check
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const hasWebGL = (() => {
       try {
@@ -49,12 +51,12 @@ export const TransmissionCore: React.FC<TransmissionCoreProps> = ({
       return;
     }
 
-    // 2. Scene & Renderer Setup
+    // 2. Scene & Camera setup
     const scene = new THREE.Scene();
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || 650;
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    camera.position.set(0, 0, 11);
+    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
+    camera.position.set(0, 0, 7.5);
 
     const renderer = new THREE.WebGLRenderer({
       canvas: canvas,
@@ -65,124 +67,203 @@ export const TransmissionCore: React.FC<TransmissionCoreProps> = ({
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
-    const sceneGroup = new THREE.Group();
-    scene.add(sceneGroup);
+    // 3. GLSL Shaders for Curl Noise Spirit
+    const vertexShader = `
+      uniform float uTime;
+      uniform vec3 uMouse;
+      
+      attribute vec3 aOrigin;
+      attribute float aOffset;
+      attribute float aSpeed;
+      attribute float aScale;
+      
+      varying float vLife;
+      varying vec3 vPos;
 
-    // 3. Central Transmission Core (Geodesic Wireframe + Glowing Points)
-    const coreGroup = new THREE.Group();
-    sceneGroup.add(coreGroup);
+      vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+      vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
 
-    const outerGeo = new THREE.IcosahedronGeometry(2.1, 1);
-    const outerMat = new THREE.MeshBasicMaterial({
-      color: 0xff3b5c,
-      wireframe: true,
+      float snoise(vec3 v){
+        const vec2  C = vec2(1.0/6.0, 1.0/3.0);
+        const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+
+        vec3 i  = floor(v + dot(v, C.yyy));
+        vec3 x0 = v - i + dot(i, C.xxx);
+
+        vec3 g = step(x0.yzx, x0.xyz);
+        vec3 l = 1.0 - g;
+        vec3 i1 = min( g.xyz, l.zxy );
+        vec3 i2 = max( g.xyz, l.zxy );
+
+        vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+        vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+        vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
+
+        i = mod(i, 289.0 );
+        vec4 p = permute( permute( permute( 
+                   i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                 + i.y + vec4(0.0, i1.y, i2.y, 1.0 )) 
+                 + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+
+        float n_ = 0.142857142857;
+        vec3  ns = n_ * D.wyz - D.xzx;
+
+        vec4 j = p - 49.0 * floor(p * ns.z *ns.z);
+
+        vec4 x_ = floor(j * ns.z);
+        vec4 y_ = floor(j - 7.0 * x_ );
+
+        vec4 x = x_ *ns.x + ns.yyyy;
+        vec4 y = y_ *ns.x + ns.yyyy;
+        vec4 h = 1.0 - abs(x) - abs(y);
+
+        vec4 b0 = vec4( x.xy, y.xy );
+        vec4 b1 = vec4( x.zw, y.zw );
+
+        vec4 s0 = floor(b0)*2.0 + 1.0;
+        vec4 s1 = floor(b1)*2.0 + 1.0;
+        vec4 sh = -step(h, vec4(0.0));
+
+        vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+        vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+
+        vec3 p0 = vec3(a0.xy,h.x);
+        vec3 p1 = vec3(a0.zw,h.y);
+        vec3 p2 = vec3(a1.xy,h.z);
+        vec3 p3 = vec3(a1.zw,h.w);
+
+        vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+        p0 *= norm.x;
+        p1 *= norm.y;
+        p2 *= norm.z;
+        p3 *= norm.w;
+
+        vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+        m = m * m;
+        return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+      }
+
+      vec3 curlNoise(vec3 p) {
+        const float e = 0.1;
+        float dx = snoise(p + vec3(e, 0.0, 0.0)) - snoise(p - vec3(e, 0.0, 0.0));
+        float dy = snoise(p + vec3(0.0, e, 0.0)) - snoise(p - vec3(0.0, e, 0.0));
+        float dz = snoise(p + vec3(0.0, 0.0, e)) - snoise(p - vec3(0.0, 0.0, e));
+        vec3 n1 = vec3(dx, dy, dz) / (2.0 * e);
+
+        vec3 p2 = p + vec3(17.3, 41.8, 83.1);
+        dx = snoise(p2 + vec3(e, 0.0, 0.0)) - snoise(p2 - vec3(e, 0.0, 0.0));
+        dy = snoise(p2 + vec3(0.0, e, 0.0)) - snoise(p2 - vec3(0.0, e, 0.0));
+        dz = snoise(p2 + vec3(0.0, 0.0, e)) - snoise(p2 - vec3(0.0, 0.0, e));
+        vec3 n2 = vec3(dx, dy, dz) / (2.0 * e);
+
+        return cross(n1, n2);
+      }
+
+      void main() {
+          float t = fract((uTime * aSpeed * 0.1) + aOffset);
+          vLife = sin(t * 3.14159265);
+
+          vec3 pos = aOrigin;
+          vec3 flow = curlNoise(pos * 0.38 + vec3(0.0, uTime * 0.09, sin(uTime * 0.05)));
+          pos += flow * (t * 3.8);
+
+          vec3 toMouse = uMouse - pos;
+          float dist = length(toMouse);
+          if (dist < 4.2) {
+              float attract = (1.0 - dist / 4.2);
+              pos += normalize(toMouse) * attract * attract * 1.5 * vLife;
+          }
+
+          vPos = pos;
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = (aScale * 42.0 / -mvPosition.z) * smoothstep(0.0, 0.2, vLife);
+          gl_Position = projectionMatrix * mvPosition;
+      }
+    `;
+
+    const fragmentShader = `
+      uniform vec3 uColor1;
+      uniform vec3 uColor2;
+      uniform vec3 uColor3;
+
+      varying float vLife;
+      varying vec3 vPos;
+
+      void main() {
+          vec2 coord = gl_PointCoord - vec2(0.5);
+          float dist = length(coord);
+          if (dist > 0.5) discard;
+
+          float alpha = smoothstep(0.5, 0.0, dist) * vLife * 0.78;
+
+          vec3 col = mix(uColor1, uColor2, vLife);
+          if (vLife > 0.82) {
+              col = mix(col, uColor3, (vLife - 0.82) * 5.5);
+          }
+
+          gl_FragColor = vec4(col, alpha);
+      }
+    `;
+
+    // 4. Geometry & Attributes
+    const geometry = new THREE.BufferGeometry();
+    const origins = new Float32Array(particleCount * 3);
+    const offsets = new Float32Array(particleCount);
+    const speeds = new Float32Array(particleCount);
+    const scales = new Float32Array(particleCount);
+
+    for (let i = 0; i < particleCount; i++) {
+      const radius = 1.2 + Math.random() * 2.8;
+      const theta = Math.random() * Math.PI * 2;
+      const ySpread = (Math.random() - 0.5) * 2.2;
+
+      origins[i * 3] = Math.cos(theta) * radius;
+      origins[i * 3 + 1] = ySpread + Math.sin(theta * 2.0) * 0.5;
+      origins[i * 3 + 2] = Math.sin(theta) * radius;
+
+      offsets[i] = Math.random();
+      speeds[i] = 0.7 + Math.random() * 0.8;
+      scales[i] = 0.8 + Math.random() * 1.4;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(origins, 3));
+    geometry.setAttribute('aOrigin', new THREE.BufferAttribute(origins, 3));
+    geometry.setAttribute('aOffset', new THREE.BufferAttribute(offsets, 1));
+    geometry.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
+    geometry.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
+
+    // 5. Shader Material with FlashFile Theme Colors
+    const uniforms = {
+      uTime: { value: 0 },
+      uMouse: { value: new THREE.Vector3(0, 0, 0) },
+      uColor1: { value: new THREE.Color(0xff3b5c) }, // Crimson
+      uColor2: { value: new THREE.Color(0xe11d48) }, // Deep Coral
+      uColor3: { value: new THREE.Color(0x38bdf8) }, // Electric Cyan
+    };
+
+    const material = new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
+      uniforms,
       transparent: true,
-      opacity: 0.32,
-    });
-    const outerMesh = new THREE.Mesh(outerGeo, outerMat);
-    coreGroup.add(outerMesh);
-
-    const innerGeo = new THREE.IcosahedronGeometry(1.35, 2);
-    const innerMat = new THREE.PointsMaterial({
-      color: 0xff526d,
-      size: 2.2,
-      transparent: true,
-      opacity: 0.85,
+      depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
-    const innerPoints = new THREE.Points(innerGeo, innerMat);
-    coreGroup.add(innerPoints);
 
-    const centerSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(0.35, 12, 12),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 })
-    );
-    coreGroup.add(centerSphere);
+    const spiritMesh = new THREE.Points(geometry, material);
+    scene.add(spiritMesh);
 
-    // 4. Orbiting Worker Satellites (Multi-Client Bots)
-    const satellites: Array<{ group: THREE.Group; angle: number; speed: number; orbitTilt: number }> = [];
-    const satGroup = new THREE.Group();
-    sceneGroup.add(satGroup);
-    const satRadius = 3.8;
+    // 6. Smooth Spring Cursor Dampening
+    let targetMouseX = 0, targetMouseY = 0;
+    let currentMouseX = 0, currentMouseY = 0;
 
-    const tetherPositions = new Float32Array(workerCount * 6);
-    const tetherGeo = new THREE.BufferGeometry();
-    tetherGeo.setAttribute('position', new THREE.BufferAttribute(tetherPositions, 3));
-    const tetherLines = new THREE.LineSegments(
-      tetherGeo,
-      new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.18 })
-    );
-    satGroup.add(tetherLines);
-
-    const colors = [0x38bdf8, 0x10b981, 0xff3b5c, 0x38bdf8, 0xf59e0b, 0x10b981];
-    for (let i = 0; i < workerCount; i++) {
-      const satNode = new THREE.Group();
-      satNode.add(
-        new THREE.Mesh(
-          new THREE.SphereGeometry(0.12, 10, 10),
-          new THREE.MeshBasicMaterial({ color: colors[i % colors.length] })
-        )
-      );
-
-      const haloGeo = new THREE.BufferGeometry();
-      haloGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
-      satNode.add(
-        new THREE.Points(
-          haloGeo,
-          new THREE.PointsMaterial({
-            color: colors[i % colors.length],
-            size: 5.5,
-            transparent: true,
-            opacity: 0.75,
-            blending: THREE.AdditiveBlending,
-          })
-        )
-      );
-
-      satGroup.add(satNode);
-      satellites.push({
-        group: satNode,
-        angle: (i / workerCount) * Math.PI * 2,
-        speed: 0.35 + (i % 2) * 0.1,
-        orbitTilt: i % 3 === 0 ? 0.3 : -0.25,
-      });
-    }
-
-    // 5. Interactive Particle Constellation (500 Particles)
-    const particleCount = 500;
-    const posArray = new Float32Array(particleCount * 3);
-    for (let i = 0; i < particleCount * 3; i += 3) {
-      const r = 2.4 + Math.random() * 4.6;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(Math.random() * 2 - 1);
-      posArray[i] = r * Math.sin(phi) * Math.cos(theta);
-      posArray[i + 1] = r * Math.sin(phi) * Math.sin(theta) * 0.65;
-      posArray[i + 2] = r * Math.cos(phi);
-    }
-    const particleGeo = new THREE.BufferGeometry();
-    particleGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-    const particlesMesh = new THREE.Points(
-      particleGeo,
-      new THREE.PointsMaterial({
-        color: 0x94a3b8,
-        size: 1.6,
-        transparent: true,
-        opacity: 0.42,
-        blending: THREE.AdditiveBlending,
-      })
-    );
-    sceneGroup.add(particlesMesh);
-
-    // 6. Smooth Spring Mouse Tracking
-    let targetX = 0, targetY = 0;
-    let currentX = 0, currentY = 0;
-    const handleMouseMove = (e: MouseEvent) => {
-      targetX = (e.clientX / window.innerWidth) * 2 - 1;
-      targetY = -(e.clientY / window.innerHeight) * 2 + 1;
+    const onMouseMove = (e: MouseEvent) => {
+      targetMouseX = ((e.clientX / window.innerWidth) * 2 - 1) * 3.8;
+      targetMouseY = (-(e.clientY / window.innerHeight) * 2 + 1) * 2.2;
     };
-    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    window.addEventListener('mousemove', onMouseMove, { passive: true });
 
-    // 7. Battery Optimization (IntersectionObserver)
+    // 7. Battery & GPU Optimization with IntersectionObserver
     let isVisible = true;
     let animId: number | null = null;
     const observer = new IntersectionObserver(
@@ -206,43 +287,21 @@ export const TransmissionCore: React.FC<TransmissionCoreProps> = ({
       animId = requestAnimationFrame(animate);
 
       const time = clock.getElapsedTime();
+      uniforms.uTime.value = time;
 
-      // Core rotation & gentle pulse
-      outerMesh.rotation.y = time * 0.22;
-      outerMesh.rotation.x = time * 0.14;
-      innerPoints.rotation.y = -time * 0.35;
-      const pulse = 1 + Math.sin(time * 2.2) * 0.035;
-      coreGroup.scale.set(pulse, pulse, pulse);
+      currentMouseX += (targetMouseX - currentMouseX) * 0.05;
+      currentMouseY += (targetMouseY - currentMouseY) * 0.05;
+      uniforms.uMouse.value.set(currentMouseX, currentMouseY, 0);
 
-      // Satellites update & tethers
-      const posAttr = tetherLines.geometry.attributes.position as THREE.BufferAttribute;
-      satellites.forEach((sat, i) => {
-        const currentAngle = sat.angle + time * sat.speed;
-        const x = Math.cos(currentAngle) * satRadius;
-        const z = Math.sin(currentAngle) * satRadius;
-        const y = Math.sin(time * 1.6 + i) * 0.45 + x * sat.orbitTilt * 0.3;
-
-        sat.group.position.set(x, y, z);
-        posAttr.setXYZ(i * 2, 0, 0, 0);
-        posAttr.setXYZ(i * 2 + 1, x, y, z);
-      });
-      posAttr.needsUpdate = true;
-
-      // Particle slow drift
-      particlesMesh.rotation.y = time * 0.04;
-
-      // Spring mouse interpolation
-      currentX += (targetX - currentX) * 0.045;
-      currentY += (targetY - currentY) * 0.045;
-      sceneGroup.rotation.y = currentX * 0.32;
-      sceneGroup.rotation.x = currentY * 0.22;
+      spiritMesh.rotation.y = time * 0.06;
+      spiritMesh.rotation.z = Math.sin(time * 0.04) * 0.08;
 
       renderer.render(scene, camera);
     };
     animate();
 
     // 9. Resize Handling
-    const handleResize = () => {
+    const onResize = () => {
       const newWidth = container.clientWidth || window.innerWidth;
       const newHeight = container.clientHeight || 650;
       camera.aspect = newWidth / newHeight;
@@ -250,16 +309,16 @@ export const TransmissionCore: React.FC<TransmissionCoreProps> = ({
       renderer.setSize(newWidth, newHeight);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     };
-    window.addEventListener('resize', handleResize, { passive: true });
+    window.addEventListener('resize', onResize, { passive: true });
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('resize', onResize);
       observer.disconnect();
       if (animId) cancelAnimationFrame(animId);
       renderer.dispose();
     };
-  }, [workerCount]);
+  }, [particleCount]);
 
   return (
     <div
