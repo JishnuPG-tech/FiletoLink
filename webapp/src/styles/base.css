@@ -18,38 +18,51 @@
     background-color: var(--ff-bg);
     color: var(--ff-text);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    overflow-x: hidden;
   }
 
-  /* Custom subtle scrollbar */
+  /* Custom subtle obsidian scrollbar */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: var(--ff-bg);
+    background: #08090D;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--ff-surface-strong);
+    background: #171A23;
     border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--ff-border-strong);
+    background: #252A38;
   }
 }
 
 @layer utilities {
   .glass-panel {
-    background-color: var(--ff-surface-glass);
+    background-color: rgba(17, 19, 27, 0.72);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--ff-border);
   }
 
+  .glass-panel-glow {
+    background-color: rgba(17, 19, 27, 0.72);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 59, 92, 0.22);
+    box-shadow: 0 0 30px -10px rgba(255, 59, 92, 0.18);
+  }
+
   .text-glow-accent {
-    text-shadow: 0 0 24px var(--ff-accent-soft);
+    text-shadow: 0 0 24px rgba(255, 59, 92, 0.45);
   }
 
   .text-glow-signal {
-    text-shadow: 0 0 24px var(--ff-signal-soft);
+    text-shadow: 0 0 24px rgba(56, 189, 248, 0.45);
+  }
+
+  .text-glow-purple {
+    text-shadow: 0 0 24px rgba(139, 92, 246, 0.45);
   }
 }

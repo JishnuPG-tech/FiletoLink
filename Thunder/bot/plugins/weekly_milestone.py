@@ -161,8 +161,12 @@ async def milestone_scheduler_worker():
             await asyncio.sleep(60)
 
 
-# Start Scheduler on module load
-asyncio.create_task(milestone_scheduler_worker())
+# Start Scheduler safely on module load or active loop
+try:
+    loop = asyncio.get_running_loop()
+    loop.create_task(milestone_scheduler_worker())
+except RuntimeError:
+    pass
 
 
 # =========================================================================

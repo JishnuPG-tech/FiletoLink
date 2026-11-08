@@ -52,7 +52,7 @@ class Var:
         logger.critical("BIN_CHANNEL is required")
         raise ValueError("BIN_CHANNEL is required")
 
-    PORT: int = int(os.getenv("PORT", "8080"))
+    PORT: int = int(os.getenv("FILETOLINK_PORT", os.getenv("PORT", "8080")))
     BIND_ADDRESS: str = os.getenv("BIND_ADDRESS", "0.0.0.0")
     PING_INTERVAL: int = int(os.getenv("PING_INTERVAL", "840"))
     NO_PORT: bool = str_to_bool(os.getenv("NO_PORT", "True"))

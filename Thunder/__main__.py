@@ -218,6 +218,11 @@ async def start_services():
         token_cleanup_task = asyncio.create_task(
             schedule_token_cleanup(), name="token_cleanup_task"
         )
+        try:
+            from Thunder.bot.plugins.ott_autopilot import ott_scheduler_worker
+            asyncio.create_task(ott_scheduler_worker(), name="ott_scheduler_worker")
+        except Exception:
+            pass
 
     except Exception as e:
         logger.error(f"   ✖ Failed to start Web Server: {e}", exc_info=True)
