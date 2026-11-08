@@ -636,7 +636,10 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
     let active = true;
     const fetchDispatches = async () => {
       try {
-        const res = await fetch("/api/live-dispatches", { cache: "no-store" });
+        let res = await fetch("/api/live-dispatches", { cache: "no-store" });
+        if (!res.ok) {
+          res = await fetch("/dispatches", { cache: "no-store" });
+        }
         if (!res.ok) return;
         const data = await res.json();
         if (data.ok && Array.isArray(data.dispatches) && data.dispatches.length > 0 && active) {
@@ -834,8 +837,9 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
   }
 
   const currentItem = items[clamp(currentIndex, 0, total - 1)];
-  const scale = containerDim.w > 0 ? clamp((containerDim.w - Math.max(0, props.padding || 0) * 2) / geo.stageW, 0.4, 1) : 1;
-  const stageH = containerDim.h > 0 ? containerDim.h / scale : 900;
+  const isMobile = containerDim.w > 0 && containerDim.w < 560;
+  const scale = containerDim.w > 0 ? clamp((containerDim.w - (isMobile ? 12 : 32)) / geo.stageW, 0.45, 1) : 1;
+  const stageH = containerDim.h > 0 ? containerDim.h / scale : 850;
   const feedDuration = reduced ? 0 : Math.max(0.4, cfg.ru.feed);
   const steppedFeed = getSteppedFeed(cfg.ru.stepped);
   const jitterRepeats = Math.max(1, Math.round(feedDuration / 0.16));

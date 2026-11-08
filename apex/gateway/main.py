@@ -121,6 +121,14 @@ async def route_catch_all(path: str, request: Request):
 
     if req_path in ("/", "/index.html"):
         return await root_portal(request)
+
+    if req_path in ("/api/live-dispatches", "/dispatches", "/live-dispatches"):
+        logger.info(f"[ROUTER] {req_path} (Live Teleprinter API) -> FileToLink ({FILETOLINK_PORT})")
+        return await proxy_http_request(
+            f"http://127.0.0.1:{FILETOLINK_PORT}/api/live-dispatches",
+            request,
+            default_prefix="",
+        )
     
     if req_path == "/jellyfin" or req_path.startswith("/jellyfin/"):
         logger.info(f"[ROUTER] {req_path} -> Jellyfin ({JELLYFIN_PORT})")

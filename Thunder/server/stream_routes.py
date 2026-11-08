@@ -48,6 +48,7 @@ async def serve_motion_blur(request):
         return web.FileResponse(mb_path)
     raise web.HTTPNotFound()
 
+@routes.get("/dispatches", allow_head=True)
 @routes.get("/api/live-dispatches", allow_head=True)
 async def api_live_dispatches(request):
     try:

@@ -1144,21 +1144,7 @@ function Proof() {
               </p>
             </div>
           </div>
-          <div
-            style={{
-              width: "100%",
-              height: "640px",
-              borderRadius: "28px",
-              overflow: "hidden",
-              position: "relative",
-              background: "radial-gradient(ellipse at 50% 18%, rgba(217, 119, 87, 0.08) 0%, rgba(13, 14, 19, 0.96) 55%, #08090C 100%)",
-              border: "1px solid rgba(255, 255, 255, 0.08)",
-              boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 32px 64px -24px rgba(0, 0, 0, 0.9)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
+          <div className="fd-frg-printer-stage">
             <TestimonialEmber
               background="transparent"
               style={{ width: "100%", height: "100%" }}
@@ -1956,6 +1942,24 @@ const css = `
   overflow: hidden;
 }
 
+.fd-frg-printer-container {
+  margin-top: 64px;
+  width: 100%;
+}
+.fd-frg-printer-stage {
+  width: 100%;
+  height: 640px;
+  border-radius: 28px;
+  overflow: hidden;
+  position: relative;
+  background: radial-gradient(ellipse at 50% 18%, rgba(217, 119, 87, 0.08) 0%, rgba(13, 14, 19, 0.96) 55%, #08090C 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 32px 64px -24px rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (max-width: 960px) {
   .fd-frg-cta-grid {
     grid-template-columns: 1fr;
@@ -2067,8 +2071,19 @@ const css = `
   .fd-frg-stats div, .fd-frg-stats div + div { padding: 20px 0; border-left: 0; }
   .fd-frg-stats div + div { border-top: 1px solid var(--fd-frg-line); }
   .fd-frg-quote { margin-top: 64px; }
+  .fd-frg-printer-container { margin-top: 40px; }
+  .fd-frg-printer-stage { height: 530px; border-radius: 20px; }
   .fd-frg-cta { padding: 104px 0; }
   .fd-frg-foot-top { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .fd-frg-printer-stage { height: 470px; border-radius: 16px; }
+  .fd-frg-wrap, .fd-frg-nav-in { padding: 0 16px; }
+  .fd-frg-h1 { font-size: 2.25rem; line-height: 1.1; letter-spacing: -0.03em; }
+  .fd-frg-h2 { font-size: 1.75rem; line-height: 1.15; letter-spacing: -0.02em; }
+  .fd-frg-nav-right .fd-frg-btn-sm { padding: 0 10px; font-size: 0.75rem; height: 32px; }
+  .fd-frg-clock-n { font-size: 2.25rem; }
+  .fd-frg-clock-label { font-size: 0.6875rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .fd-frg *, .fd-frg *::before, .fd-frg *::after { animation: none !important; }
