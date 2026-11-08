@@ -1,4 +1,4 @@
-export interface FeatureItem {
+export interface VerifiedFeature {
   id: string;
   badge: string;
   title: string;
@@ -7,53 +7,53 @@ export interface FeatureItem {
   metricLabel?: string;
 }
 
-export const VERIFIED_CAPABILITIES: FeatureItem[] = [
+export const VERIFIED_CAPABILITIES: VerifiedFeature[] = [
   {
-    id: 'streaming',
-    badge: 'HTTP 206 Partial Content',
-    title: 'Lossless Byte-Range Streaming',
-    description: 'Direct seekable streaming pipeline directly from Telegram data centers to modern browser players with sub-150ms buffer onset.',
-    metric: '1000',
-    metricLabel: 'Max Transmissions',
+    id: 'tg-to-link',
+    badge: 'Core Engine',
+    title: 'Instant Telegram-to-Link Conversion',
+    description: 'Transform any Telegram file, document, or movie up to 4 GB into a direct, high-speed HTTP link. No waiting for Telegram client queueing.',
+    metric: '< 1s',
+    metricLabel: 'Link Generation',
   },
   {
-    id: 'multiclient',
-    badge: 'Multi-Worker Pool',
-    title: '6x Parallel Telegram MTProto Workers',
-    description: 'Dynamic workload distribution across six independent userbot sessions to prevent FloodWait rate limits and maximize bandwidth.',
-    metric: '6 Nodes',
-    metricLabel: 'Worker Clients',
+    id: 'stream-no-download',
+    badge: 'Zero Storage Needed',
+    title: 'Stream Movies Without Downloading',
+    description: 'Play videos instantly in your browser or mobile player. Save gigabytes of internal device storage by streaming directly on demand.',
+    metric: '100%',
+    metricLabel: 'Cloud Streaming',
   },
   {
-    id: 'cinema',
-    badge: 'Obsidian Ember',
-    title: 'Clean Web Cinema & External App Sync',
-    description: 'Hardware accelerated in-browser playback paired with 1-tap deep links for VLC, MX Player, PotPlayer, Infuse, and M3U playlists.',
-    metric: '1-Tap',
-    metricLabel: 'App Integration',
+    id: 'audio-print-verify',
+    badge: 'Quality Check',
+    title: 'Verify Audio Dubbing & Video Print',
+    description: 'Never waste hours downloading the wrong print. Instantly preview the file to check audio clarity, Malayalam/Tamil/Hindi dubbing, and video quality.',
+    metric: 'Instant',
+    metricLabel: 'Voice & Print Check',
   },
   {
-    id: 'batch',
-    badge: 'Batch Queue',
-    title: 'Multi-File & Batch Generation',
-    description: 'Easily bundle ranges of stored documents into single streaming playlists or bulk aria2 command exports for automated downstream fetching.',
-    metric: '50 Files',
-    metricLabel: 'Max Batch Size',
+    id: 'resumable-downloads',
+    badge: 'HTTP 206 Byte-Range',
+    title: '100% Resumable in IDM, 1DM & ADM',
+    description: 'Bypass Telegram app crashes and 50% download freezes. Pause, resume, and multi-thread your downloads using your favorite download manager.',
+    metric: 'Zero Loss',
+    metricLabel: 'Broken Link Immunity',
   },
   {
-    id: 'security',
-    badge: 'Canonical File Hash',
-    title: 'Secure Hash File Identification',
-    description: 'Files are indexed and addressed using cryptographically verifiable secure hash IDs, preventing unauthorized enumeration and link scraping.',
-    metric: 'SHA-256',
-    metricLabel: 'Integrity Check',
-  },
-  {
-    id: 'autopilot',
-    badge: 'Automated Operations',
-    title: 'Weekly Milestones & Channel Health',
-    description: 'Autonomous Sunday night server milestone performance reporting and scheduled TMDB OTT media syndication into connected Telegram channels.',
+    id: 'background-freedom',
+    badge: 'Uninterrupted',
+    title: 'No App Close Aborts',
+    description: 'Closing Telegram or switching chats won\'t stop your downloads. Once generated, your direct download link lives in your browser or download app.',
     metric: '24/7',
-    metricLabel: 'Health Monitoring',
+    metricLabel: 'Independent Download',
+  },
+  {
+    id: 'player-launchers',
+    badge: 'Hardware Acceleration',
+    title: '1-Tap VLC & MX Player Integration',
+    description: 'One tap launches VLC Mobile or MX Player with full hardware acceleration, multi-audio language track selection, and Dolby AC-3 support.',
+    metric: '1-Tap',
+    metricLabel: 'Native App Launch',
   },
 ];

@@ -5,27 +5,23 @@ export interface FaqItem {
 
 export const FAQS: FaqItem[] = [
   {
-    question: 'How does FlashFile generate direct streaming links?',
-    answer: 'When you forward or upload a document to the Telegram bot, FlashFile records its Telegram message location and file metadata in a persistent store. When someone requests the stream or download URL, the Python server pulls the specific requested byte ranges directly from Telegram servers in real-time over MTProto, forwarding HTTP 206 Partial Content streams without saving the file to server disk first.'
+    question: 'Why is downloading directly inside the Telegram app so slow?',
+    answer: 'The official Telegram mobile app throttles background downloads, limits concurrent TCP streams per file, and often freezes or cancels when you switch apps or close the chat. FlashFile generates a direct HTTP link that connects to our 6-worker MTProto pool, allowing your browser or download manager (like IDM or 1DM) to download with multi-threaded parallel connections at your full ISP bandwidth.',
   },
   {
-    question: 'Do I need to download files to watch them?',
-    answer: 'No. You can stream videos directly inside your browser using the built-in web cinema player, or tap the 1-click external player launcher to stream directly inside VLC Mobile, MX Player, PotPlayer, or Infuse without downloading the full video first.'
+    question: 'How does streaming help me check the movie before downloading?',
+    answer: 'Large movie files often have multiple releases: theatre prints, cam rips, original language, or regional dubs (Malayalam, Tamil, Telugu, Hindi). Rather than waiting hours to download a 3GB file only to discover poor audio or wrong dubbing, FlashFile lets you click Play instantly to verify audio sync, multi-audio tracks, subtitle availability, and visual print quality within seconds.',
   },
   {
-    question: 'Why do some MKV files show a black screen or lack audio in web browsers?',
-    answer: 'Standard desktop browsers (Chrome, Edge, Brave) do not include proprietary Dolby Digital (AC-3 / E-AC-3) audio decoders or 10-bit HEVC video licenses. In the FlashFile web player, you can tap "Play in VLC" or "Open M3U" to immediately launch VLC or PotPlayer with full 5.1 Dolby audio and 10-bit hardware video decoding.'
+    question: 'Can I stream movies without downloading them to my phone storage?',
+    answer: 'Yes! The generated stream link allows full real-time seeking and playback directly in your web browser, or via 1-tap in external media players like VLC Mobile and MX Player. You can watch full-length 1080p and 4K movies with zero storage space occupied on your device.',
   },
   {
-    question: 'What is the multi-worker client pool?',
-    answer: 'Telegram enforces strict per-account download limits (FloodWait). FlashFile uses a worker pool of up to 6 Pyrogram clients running in parallel, automatically balancing streaming requests across the least-loaded worker to guarantee uninterrupted high-speed downloads.'
+    question: 'What happens if my internet disconnects or my download pauses?',
+    answer: 'FlashFile implements standard HTTP 206 Partial Content byte-range headers. This means your download is 100% resumable in all modern browsers and download managers (IDM, 1DM, ADM, aria2). When your connection restores, the download resumes exactly where it stopped without restarting from 0%.',
   },
   {
-    question: 'Is there a limit on file size?',
-    answer: 'FlashFile supports files up to 2 GB (standard Telegram limit) or up to 4 GB for Telegram Premium userbot accounts.'
+    question: 'How do I use FlashFile?',
+    answer: 'Simply open @flashfilezbot on Telegram and forward or upload any video, audio, or document file up to 4 GB. Within seconds, the bot replies with your high-speed direct download link, in-browser streaming player link, and 1-tap mobile player launcher shortcuts.',
   },
-  {
-    question: 'Can I generate batch links for multiple files at once?',
-    answer: 'Yes. Use the /batch or /b command inside the Telegram bot. You can pass the first and last message links, and FlashFile will automatically compile a single batch link or aria2 command line for all files in the range.'
-  }
 ];
