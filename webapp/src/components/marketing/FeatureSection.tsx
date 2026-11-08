@@ -1,66 +1,90 @@
 import React from 'react';
-import { VERIFIED_CAPABILITIES } from '../../content/features';
-import { ScrollReveal } from '../common/ScrollReveal';
+import { Film, Zap, RefreshCw, HardDrive, Smartphone, FileArchive } from 'lucide-react';
 
 export const FeatureSection: React.FC = () => {
+  const benefits = [
+    {
+      icon: <Film className="w-5 h-5 text-[#D97757]" />,
+      title: 'Stream 4K Movies Instantly',
+      badge: 'Zero Waiting',
+      description: 'Tap play to start watching immediately in VLC, MX Player, or your web browser. No need to wait for 3GB files to finish downloading first.',
+    },
+    {
+      icon: <Zap className="w-5 h-5 text-[#D97757]" />,
+      title: 'Maximum Download Speed',
+      badge: 'Full Bandwidth',
+      description: 'Downloads your file through multiple parallel connections at the same time, using 100% of your Wi-Fi, 5G, or fiber internet speed.',
+    },
+    {
+      icon: <RefreshCw className="w-5 h-5 text-[#D97757]" />,
+      title: 'Never Loses Your Progress',
+      badge: '100% Resumable',
+      description: 'If your internet connection drops or your phone runs out of battery, your download picks right back up where it paused without starting over.',
+    },
+    {
+      icon: <HardDrive className="w-5 h-5 text-[#D97757]" />,
+      title: 'Zero Storage Wasted on Phone',
+      badge: 'Storage Saver',
+      description: 'Avoid Telegram caching gigabytes of temporary video files into your phone memory. Stream smoothly directly from the cloud.',
+    },
+    {
+      icon: <Smartphone className="w-5 h-5 text-[#D97757]" />,
+      title: 'Works on Phones, PCs & Smart TVs',
+      badge: 'Universal',
+      description: 'Compatible with Android, iPhone, Windows, Mac, iPad, and Smart TVs. Use your favorite video player or download manager.',
+    },
+    {
+      icon: <FileArchive className="w-5 h-5 text-[#D97757]" />,
+      title: 'Large Files Up to 4 GB',
+      badge: 'All Media',
+      description: 'Supports full-length 4K movies, season packs, high-resolution FLAC audio albums, software archives, and PC game files.',
+    },
+  ];
+
   return (
-    <section id="features" className="py-28 relative">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Section Header */}
-        <ScrollReveal delay={50} direction="up">
-          <div className="max-w-3xl mb-20">
-            <span className="text-xs uppercase font-mono tracking-widest text-ff-signal mb-3 block font-semibold">
-              Verified Production Capabilities
-            </span>
-            <h2 className="font-serif text-3xl sm:text-5xl md:text-6xl font-normal text-white tracking-tight mb-5">
-              Engineered for uncompromising speed.
-            </h2>
-            <p className="font-sans text-ff-text-secondary text-base sm:text-lg leading-relaxed">
-              Every capability is backed by the real-time Pyrogram Telegram MTProto cluster, MongoDB indexing engine, and streaming HTTP 206 infrastructure.
-            </p>
-          </div>
-        </ScrollReveal>
+    <section id="benefits" className="py-24 bg-black border-t border-white/[0.08]">
+      <div className="max-w-5xl mx-auto px-6">
+        <div className="mb-16">
+          <span className="font-mono text-xs uppercase tracking-widest text-[#D97757] font-medium block mb-3">
+            Core Features
+          </span>
+          <h2 className="text-3xl sm:text-5xl font-normal text-white font-serif tracking-tight mb-4">
+            Everything You Need to Enjoy Your Media
+          </h2>
+          <p className="text-zinc-400 text-sm sm:text-base max-w-2xl leading-relaxed">
+            Designed for everyday movie lovers, binge-watchers, and power downloaders.
+          </p>
+        </div>
 
-        {/* Feature Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {VERIFIED_CAPABILITIES.map((feat, idx) => (
-            <ScrollReveal key={feat.id} delay={100 * (idx % 3 + 1)} direction="up">
-              <div className="glass-panel rounded-2xl p-7 hover:border-ff-accent/40 hover:shadow-xl hover:shadow-ff-accent/5 transition-all duration-300 flex flex-col justify-between h-full group hover:-translate-y-1">
-                <div>
-                  <div className="flex items-center justify-between mb-5">
-                    <span className="text-xs font-mono font-medium px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-ff-signal">
-                      {feat.badge}
-                    </span>
-                    {feat.metric && (
-                      <div className="text-right">
-                        <span className="font-mono text-base font-bold text-white block leading-none">
-                          {feat.metric}
-                        </span>
-                        <span className="text-[10px] font-mono text-ff-text-muted">
-                          {feat.metricLabel}
-                        </span>
-                      </div>
-                    )}
+        {/* 6 Curved Benefit Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {benefits.map((item, idx) => (
+            <div
+              key={idx}
+              className="p-7 rounded-3xl border border-white/[0.08] bg-[#0A0A0A] hover:border-[#D97757]/30 transition-all flex flex-col justify-between hover:scale-[1.01]"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-5">
+                  <div className="w-10 h-10 rounded-2xl bg-[#D97757]/10 border border-[#D97757]/20 flex items-center justify-center">
+                    {item.icon}
                   </div>
-
-                  <h3 className="font-serif font-medium text-xl text-white mb-3 group-hover:text-ff-accent transition-colors">
-                    {feat.title}
-                  </h3>
-
-                  <p className="text-sm text-ff-text-secondary leading-relaxed font-normal">
-                    {feat.description}
-                  </p>
+                  <span className="text-[10px] font-sans font-semibold px-3 py-1 rounded-full bg-white/[0.04] text-zinc-300 border border-white/[0.08]">
+                    {item.badge}
+                  </span>
                 </div>
-
-                <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
-                  <span className="text-xs font-mono text-ff-text-muted">Production Node: Operational</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
-                </div>
+                <h3 className="text-base font-semibold text-white mb-2">
+                  {item.title}
+                </h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  {item.description}
+                </p>
               </div>
-            </ScrollReveal>
+            </div>
           ))}
         </div>
       </div>
     </section>
   );
 };
+
+export default FeatureSection;

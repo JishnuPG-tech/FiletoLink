@@ -26,8 +26,8 @@ export const getSiteConfig = (): SiteConfig => {
   return {
     name: 'FlashFile',
     tagline: 'Lossless Telegram Media & File Streaming Engine',
-    description: 'Direct HTTP byte-range video streaming, 6-worker load balanced pipelines, and 1-tap external player integration powered by Telegram MTProto.',
-    botUsername: serverConfig?.bot_username || envBot?.replace('https://t.me/', '') || 'ThunderF2L_bot',
+    description: 'Direct HTTP byte-range video streaming, high-speed pipelines, and 1-tap external player integration powered by Telegram MTProto.',
+    botUsername: serverConfig?.bot_username || envBot?.replace('https://t.me/', '') || 'flashfilezbot',
     channelUrl: serverConfig?.channel_url || 'https://t.me/Thunder_Updates',
     githubUrl: 'https://github.com/JishnuPG-tech/FiletoLink',
     statusEndpoint: '/status',

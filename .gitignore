@@ -33,3 +33,6 @@ Thunder/logs/
 webapp/node_modules/
 !webapp/dist/
 !webapp/dist/**
+
+forge-devtool.tsx
+framer_downloads/

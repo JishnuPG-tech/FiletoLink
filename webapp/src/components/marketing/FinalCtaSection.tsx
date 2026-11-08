@@ -1,48 +1,37 @@
 import React from 'react';
-import { Send, ArrowRight, Zap } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { getTelegramBotLink } from '../../content/site-config';
-import { ScrollReveal } from '../common/ScrollReveal';
 
 export const FinalCtaSection: React.FC = () => {
   return (
-    <section className="py-28 relative overflow-hidden bg-transparent">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        <ScrollReveal delay={100} direction="up">
-          <div className="relative rounded-3xl p-10 sm:p-20 text-center glass-panel-glow overflow-hidden shadow-2xl">
-            {/* Ambient Background Glow */}
-            <div
-              className="absolute -top-32 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-gradient-to-b from-ff-accent/25 to-purple-600/10 rounded-full blur-[120px] pointer-events-none"
-              aria-hidden="true"
-            />
+    <section className="py-24 bg-black border-t border-white/[0.08]">
+      <div className="max-w-4xl mx-auto px-6 text-center">
+        <div className="p-10 sm:p-16 rounded-3xl border border-white/[0.1] bg-[#0A0A0A] shadow-2xl">
+          <span className="font-mono text-xs uppercase tracking-widest text-[#D97757] font-medium block mb-3">
+            Start Right Now
+          </span>
 
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs font-mono text-ff-signal tracking-wide mb-6">
-              <Zap className="w-3.5 h-3.5 text-ff-accent" />
-              <span>Instant File-to-Link Access</span>
-            </div>
+          <h2 className="text-3xl sm:text-5xl font-normal text-white font-serif tracking-tight mb-4 max-w-2xl mx-auto leading-tight">
+            Ready to download at full speed?
+          </h2>
 
-            <h2 className="font-serif text-3xl sm:text-5xl md:text-6xl font-normal text-white max-w-3xl mx-auto leading-tight mb-6">
-              Ready to convert your files to high-speed links?
-            </h2>
+          <p className="text-zinc-400 text-sm sm:text-base max-w-lg mx-auto mb-8 leading-relaxed">
+            Forward any movie, series, or file to FlashFile on Telegram. It takes 5 seconds and requires zero setup.
+          </p>
 
-            <p className="font-sans text-ff-text-secondary text-base sm:text-lg max-w-xl mx-auto mb-10 font-normal leading-relaxed">
-              Forward any file or movie up to 4 GB to FlashFile on Telegram. Stream immediately to check audio and quality, or download with 100% resumable links in IDM or your browser.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <a
-                href={getTelegramBotLink('final_cta')}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-9 py-4 rounded-xl bg-gradient-to-r from-ff-accent via-rose-500 to-purple-600 text-white font-semibold text-base shadow-xl shadow-ff-accent/30 hover:shadow-ff-accent/50 hover:-translate-y-0.5 active:translate-y-0 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ff-focus-ring"
-              >
-                <Send className="w-5 h-5" />
-                <span>Launch FlashFile on Telegram</span>
-                <ArrowRight className="w-4 h-4" />
-              </a>
-            </div>
-          </div>
-        </ScrollReveal>
+          <a
+            href={getTelegramBotLink('final_cta')}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-full bg-[#D97757] hover:bg-[#E58A69] text-white font-medium text-sm transition-all shadow-lg shadow-[#D97757]/20 hover:scale-[1.02] active:scale-[0.98] focus:outline-none"
+          >
+            <span>Launch FlashFile on Telegram</span>
+            <ArrowUpRight className="w-4 h-4" />
+          </a>
+        </div>
       </div>
     </section>
   );
 };
+
+export default FinalCtaSection;

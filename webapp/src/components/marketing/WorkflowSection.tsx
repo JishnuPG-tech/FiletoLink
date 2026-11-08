@@ -1,197 +1,203 @@
 import React from 'react';
-import { XCircle, CheckCircle2, MessageSquare, Link2, PlaySquare, ArrowRight } from 'lucide-react';
-import { ScrollReveal } from '../common/ScrollReveal';
+import { X, Check, Send, Link, PlayCircle } from 'lucide-react';
+import { getTelegramBotLink } from '../../content/site-config';
 
 export const WorkflowSection: React.FC = () => {
-  const steps = [
+  const telegramProblems = [
     {
-      step: '01',
-      icon: <MessageSquare className="w-6 h-6 text-ff-accent" />,
-      title: 'Forward Any File to the Bot',
-      description: 'Send any video, movie, audio, or archive up to 4 GB to @flashfilezbot. Zero upload wait — it registers instantly from Telegram cloud storage.',
-      badge: 'Zero Upload Wait',
+      title: 'Downloads Crawl at Slow Speeds',
+      description: 'Telegram restricts download speeds inside the app, so downloading a single 2GB movie can take hours even on fast Wi-Fi.',
     },
     {
-      step: '02',
-      icon: <Link2 className="w-6 h-6 text-ff-signal" />,
-      title: 'Get Fast Link & Stream URL',
-      description: 'The bot replies in under 1 second with your direct HTTP download link, online web streaming link, and 1-tap mobile player buttons.',
-      badge: '< 1s Response Time',
+      title: 'Stops Whenever Your Screen Locks',
+      description: 'If you close the app, switch to WhatsApp, or lock your phone, your download pauses or silently fails in the background.',
     },
     {
-      step: '03',
-      icon: <PlaySquare className="w-6 h-6 text-emerald-400" />,
-      title: 'Stream to Verify or Download',
-      description: 'Tap play to instantly verify video print, multi-audio language tracks, and dubbing — or paste the direct link into IDM / 1DM for max speed.',
-      badge: '100% Resumable',
+      title: 'Fails at 90% and Restarts from Zero',
+      description: 'If your connection glitches for even a second, the download often corrupts and forces you to restart the whole file from 0%.',
+    },
+    {
+      title: 'Fills Up Your Phone Storage',
+      description: 'Telegram secretly stores huge cache files inside your phone memory, giving you "Storage Full" warnings when you least expect it.',
+    },
+  ];
+
+  const flashfileSolutions = [
+    {
+      title: 'Fastest Possible Download Speeds',
+      description: 'FlashFile pulls files using multiple high-speed streams at once, letting download managers like IDM and 1DM max out your internet.',
+    },
+    {
+      title: 'Plays Instantly in VLC or MX Player',
+      description: 'No need to wait for a 3GB movie to download. Tap play to stream immediately with smooth seeking and full subtitle support.',
+    },
+    {
+      title: 'Automatic Resume If Connection Drops',
+      description: 'If your Wi-Fi disconnects, your download automatically continues from the exact percentage where it paused.',
+    },
+    {
+      title: 'Zero Storage Space Wasted',
+      description: 'Watch or check movies directly in your browser or video player without cluttering your phone with gigabytes of temporary data.',
+    },
+  ];
+
+  const simpleSteps = [
+    {
+      step: 'Step 1',
+      title: 'Send or Forward Any File',
+      description: 'Forward any movie, series, audio track, or zip archive up to 4 GB to FlashFile on Telegram.',
+      icon: <Send className="w-5 h-5 text-[#D97757]" />,
+    },
+    {
+      step: 'Step 2',
+      title: 'Get Your Direct Link in 1 Second',
+      description: 'The bot instantly replies with your high-speed download link and an instant online streaming link.',
+      icon: <Link className="w-5 h-5 text-[#D97757]" />,
+    },
+    {
+      step: 'Step 3',
+      title: 'Play Instantly or Download Fast',
+      description: 'Open the link in VLC/MX Player to watch right away, or paste it into IDM/1DM to download at maximum speed.',
+      icon: <PlayCircle className="w-5 h-5 text-[#D97757]" />,
     },
   ];
 
   return (
-    <section id="problem-solution" className="py-28 relative bg-transparent">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="why-flashfile" className="py-24 bg-black border-t border-white/[0.08]">
+      <div className="max-w-5xl mx-auto px-6">
         {/* Section Header */}
-        <ScrollReveal delay={50} direction="up">
-          <div className="text-center max-w-3xl mx-auto mb-20">
-            <span className="text-xs uppercase font-mono tracking-widest text-ff-accent mb-3 block font-semibold">
-              The Problem & Our Solution
-            </span>
-            <h2 className="font-serif text-3xl sm:text-5xl md:text-6xl font-normal text-white tracking-tight mb-5">
-              Why We Built FlashFile
-            </h2>
-            <p className="font-sans text-ff-text-secondary text-base sm:text-lg leading-relaxed">
-              Anyone who downloads media on Telegram knows the frustration of slow speeds, failed downloads, and wrong prints. Here is how FlashFile fixes it for good.
-            </p>
-          </div>
-        </ScrollReveal>
-
-        {/* Side-by-Side Comparison: Telegram vs FlashFile */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-24">
-          {/* Telegram App Problems */}
-          <ScrollReveal delay={150} direction="left">
-            <div className="glass-panel rounded-3xl p-8 sm:p-10 border-rose-500/20 bg-rose-950/10 h-full flex flex-col justify-between">
-              <div>
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
-                    <XCircle className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-serif text-xl sm:text-2xl font-medium text-white">Downloading Inside Telegram</h3>
-                    <span className="text-xs font-mono text-rose-400">Slow, fragile & frustrating</span>
-                  </div>
-                </div>
-
-                <ul className="space-y-4 text-sm text-slate-300 font-sans">
-                  <li className="flex items-start gap-3">
-                    <span className="text-rose-400 font-bold mt-0.5">✕</span>
-                    <div>
-                      <strong className="text-white block font-medium">Severely Throttled Download Speeds</strong>
-                      <span className="text-slate-400 text-xs">Single-thread downloads capped by the app, taking hours to download a standard 2GB movie.</span>
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-rose-400 font-bold mt-0.5">✕</span>
-                    <div>
-                      <strong className="text-white block font-medium">App Close / Chat Switch Aborts</strong>
-                      <span className="text-slate-400 text-xs">Closing Telegram, switching chats, or locking your screen often silently halts the download.</span>
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-rose-400 font-bold mt-0.5">✕</span>
-                    <div>
-                      <strong className="text-white block font-medium">Download Stuck at 50% or 90%</strong>
-                      <span className="text-slate-400 text-xs">Any network glitch corrupts the file cache, forcing you to delete and restart from 0%.</span>
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-rose-400 font-bold mt-0.5">✕</span>
-                    <div>
-                      <strong className="text-white block font-medium">Blind 3GB Downloads</strong>
-                      <span className="text-slate-400 text-xs">No way to check if the movie has the right voice dubbing, correct print, or synced audio until it finishes.</span>
-                    </div>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </ScrollReveal>
-
-          {/* FlashFile Solution */}
-          <ScrollReveal delay={250} direction="right">
-            <div className="glass-panel-glow rounded-3xl p-8 sm:p-10 border-emerald-500/20 bg-emerald-950/10 h-full flex flex-col justify-between">
-              <div>
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-serif text-xl sm:text-2xl font-medium text-white">With FlashFile Bot</h3>
-                    <span className="text-xs font-mono text-emerald-400">Fast, resumable & streamable</span>
-                  </div>
-                </div>
-
-                <ul className="space-y-4 text-sm text-slate-300 font-sans">
-                  <li className="flex items-start gap-3">
-                    <span className="text-emerald-400 font-bold mt-0.5">✓</span>
-                    <div>
-                      <strong className="text-white block font-medium">Direct HTTP Multi-Threaded Links</strong>
-                      <span className="text-slate-400 text-xs">Paste links into IDM, 1DM, or ADM to download with parallel connections at your full ISP speed.</span>
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-emerald-400 font-bold mt-0.5">✓</span>
-                    <div>
-                      <strong className="text-white block font-medium">Complete Background Independence</strong>
-                      <span className="text-slate-400 text-xs">Close Telegram completely, turn off your screen — your download keeps running in your browser or download app.</span>
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-emerald-400 font-bold mt-0.5">✓</span>
-                    <div>
-                      <strong className="text-white block font-medium">100% Resumable (HTTP 206 Byte-Range)</strong>
-                      <span className="text-slate-400 text-xs">Pause, disconnect, reconnect, or restart anytime. Your download picks up right where it left off.</span>
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-emerald-400 font-bold mt-0.5">✓</span>
-                    <div>
-                      <strong className="text-white block font-medium">Stream to Verify Voice, Audio & Print</strong>
-                      <span className="text-slate-400 text-xs">Instantly preview the movie in 5 seconds to confirm audio clarity, Malayalam/Tamil dubbing, and video quality before downloading.</span>
-                    </div>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </ScrollReveal>
+        <div className="mb-16">
+          <span className="font-mono text-xs uppercase tracking-widest text-[#D97757] font-medium block mb-3">
+            Why Use FlashFile
+          </span>
+          <h2 className="text-3xl sm:text-5xl font-normal text-white font-serif tracking-tight mb-4">
+            The Easiest Way to Handle Telegram Media
+          </h2>
+          <p className="text-zinc-400 text-sm sm:text-base max-w-2xl leading-relaxed">
+            Telegram is great for chatting, but downloading large files inside the app is frustrating. Here is the difference FlashFile makes.
+          </p>
         </div>
 
-        {/* 3-Step Simple Workflow */}
-        <div id="how-it-works" className="pt-10">
-          <ScrollReveal delay={50} direction="up">
-            <div className="text-center max-w-3xl mx-auto mb-16">
-              <span className="text-xs uppercase font-mono tracking-widest text-ff-signal mb-2 block font-semibold">
-                Simple 3-Step Process
-              </span>
-              <h3 className="font-serif text-2xl sm:text-4xl font-normal text-white">
-                From Telegram File to Direct Stream in Seconds
-              </h3>
-            </div>
-          </ScrollReveal>
+        {/* Side-by-Side Comparison with Generously Curved Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-24">
+          {/* Telegram Limitations (Curved Card) */}
+          <div className="rounded-3xl p-7 sm:p-9 border border-white/[0.08] bg-[#0A0A0A] flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/[0.06]">
+                <span className="font-sans text-xs text-zinc-400 uppercase tracking-wider font-semibold">
+                  Inside The Telegram App
+                </span>
+                <span className="text-xs text-red-400 font-medium px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/20">
+                  Slow & Frustrating
+                </span>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
-            {steps.map((item, idx) => (
-              <ScrollReveal key={item.step} delay={150 * (idx + 1)} direction="up">
-                <div className="glass-panel rounded-2xl p-8 relative flex flex-col justify-between hover:border-ff-accent/40 hover:shadow-2xl hover:shadow-ff-accent/10 transition-all duration-300 group hover:-translate-y-1 h-full">
-                  <div>
-                    <div className="flex items-center justify-between mb-8">
-                      <div className="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center shadow-inner group-hover:scale-110 group-hover:border-ff-accent/50 transition-all duration-300">
-                        {item.icon}
-                      </div>
-                      <span className="font-mono text-4xl font-black text-white/10 group-hover:text-ff-accent/30 transition-colors">
-                        {item.step}
-                      </span>
+              <div className="space-y-6">
+                {telegramProblems.map((item, idx) => (
+                  <div key={idx} className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 flex-shrink-0 mt-0.5">
+                      <X className="w-3 h-3" />
                     </div>
-
-                    <h4 className="font-serif font-medium text-2xl text-white mb-3">
-                      {item.title}
-                    </h4>
-
-                    <p className="text-sm text-ff-text-secondary leading-relaxed mb-6 font-normal">
-                      {item.description}
-                    </p>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white mb-1">
+                        {item.title}
+                      </h3>
+                      <p className="text-xs text-zinc-400 leading-relaxed">
+                        {item.description}
+                      </p>
+                    </div>
                   </div>
+                ))}
+              </div>
+            </div>
+          </div>
 
-                  <div className="pt-4 border-t border-white/5 flex items-center justify-between">
-                    <span className="text-xs font-mono font-medium text-ff-text-muted">
-                      {item.badge}
-                    </span>
-                    <span className="w-2 h-2 rounded-full bg-ff-accent/30 group-hover:bg-ff-accent transition-colors shadow-sm" />
+          {/* FlashFile Solution (Curved Card with Warm Claude Orange Accent) */}
+          <div className="rounded-3xl p-7 sm:p-9 border border-[#D97757]/30 bg-[#0F0D0B] flex flex-col justify-between shadow-xl shadow-[#D97757]/5">
+            <div>
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#D97757]/20">
+                <span className="font-sans text-xs text-[#D97757] uppercase tracking-wider font-semibold">
+                  With FlashFile
+                </span>
+                <span className="text-xs text-emerald-400 font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                  Fast & Reliable
+                </span>
+              </div>
+
+              <div className="space-y-6">
+                {flashfileSolutions.map((item, idx) => (
+                  <div key={idx} className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full bg-[#D97757]/15 border border-[#D97757]/30 flex items-center justify-center text-[#D97757] flex-shrink-0 mt-0.5">
+                      <Check className="w-3 h-3" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white mb-1">
+                        {item.title}
+                      </h3>
+                      <p className="text-xs text-zinc-400 leading-relaxed">
+                        {item.description}
+                      </p>
+                    </div>
                   </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3 Simple Steps (Curved Cards) */}
+        <div id="how-it-works" className="pt-8">
+          <div className="mb-14">
+            <span className="font-mono text-xs uppercase tracking-widest text-[#D97757] font-medium block mb-2">
+              Simple 3-Step Process
+            </span>
+            <h3 className="text-2xl sm:text-4xl font-normal text-white font-serif tracking-tight mb-3">
+              How to Use FlashFile
+            </h3>
+            <p className="text-zinc-400 text-sm max-w-xl">
+              No registration or setup required. Works in seconds right inside Telegram.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            {simpleSteps.map((step, idx) => (
+              <div
+                key={idx}
+                className="p-7 rounded-3xl border border-white/[0.08] bg-[#0A0A0A] hover:border-[#D97757]/30 transition-all hover:scale-[1.01]"
+              >
+                <div className="flex items-center justify-between mb-5">
+                  <div className="w-10 h-10 rounded-2xl bg-[#D97757]/10 border border-[#D97757]/20 flex items-center justify-center">
+                    {step.icon}
+                  </div>
+                  <span className="font-mono text-xs text-[#D97757] font-bold">
+                    {step.step}
+                  </span>
                 </div>
-              </ScrollReveal>
+                <h4 className="text-base font-semibold text-white mb-2">
+                  {step.title}
+                </h4>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  {step.description}
+                </p>
+              </div>
             ))}
+          </div>
+
+          <div className="text-center">
+            <a
+              href={getTelegramBotLink('workflow_cta')}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#D97757] hover:bg-[#E58A69] text-white font-medium text-xs transition-all shadow-md shadow-[#D97757]/20"
+            >
+              <span>Try It Right Now on Telegram</span>
+              <Send className="w-3.5 h-3.5" />
+            </a>
           </div>
         </div>
       </div>
     </section>
   );
 };
+
+export default WorkflowSection;

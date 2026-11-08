@@ -192,6 +192,11 @@ async def safe_delete_message(message: Message):
 
 async def send_dm_links(bot: Client, user_id: int, links: Dict[str, Any], chat_title: str):
     try:
+        from Thunder.utils.dispatches import record_dispatch
+        record_dispatch(links.get('media_name'), links.get('media_size'), links.get('stream_link'))
+    except Exception:
+        pass
+    try:
         dm_text = MSG_DM_SINGLE_PREFIX.format(chat_title=chat_title) + "\n" + \
                   MSG_LINKS.format(
                       file_name=links['media_name'],
@@ -221,6 +226,11 @@ async def send_dm_links(bot: Client, user_id: int, links: Dict[str, Any], chat_t
 
 
 async def send_link(msg: Message, links: Dict[str, Any]):
+    try:
+        from Thunder.utils.dispatches import record_dispatch
+        record_dispatch(links.get('media_name'), links.get('media_size'), links.get('stream_link'))
+    except Exception:
+        pass
     try:
         await msg.reply_text(
             MSG_LINKS.format(

@@ -1,96 +1,112 @@
 import React from 'react';
-import { Send, ArrowRight, Play, DownloadCloud, CheckCircle2, ShieldCheck, Zap } from 'lucide-react';
+import { ArrowUpRight, Play, Zap, ShieldCheck, Smartphone } from 'lucide-react';
 import { getTelegramBotLink } from '../../content/site-config';
-import { ScrollReveal } from '../common/ScrollReveal';
 
 export const HeroSection: React.FC = () => {
   return (
-    <section className="relative min-h-[96vh] flex items-center justify-center pt-32 pb-20 overflow-hidden bg-transparent">
-      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center">
-        {/* Eyebrow Pill */}
-        <ScrollReveal delay={50} direction="down">
-          <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full glass-panel text-xs font-mono text-ff-signal tracking-wide mb-8 shadow-2xl">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span className="uppercase text-[11px] font-semibold tracking-wider text-slate-300">
-              High-Speed Telegram-to-Link & Instant Streaming Engine
-            </span>
-            <Zap className="w-3.5 h-3.5 text-ff-accent animate-pulse" />
-          </div>
-        </ScrollReveal>
+    <section className="relative min-h-[85vh] flex flex-col justify-center pt-36 pb-20 bg-black">
+      <div className="max-w-4xl mx-auto px-6 text-left">
+        {/* Friendly Eyebrow Pill */}
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#D97757]/10 border border-[#D97757]/25 text-[#D97757] mb-6">
+          <Zap className="w-3.5 h-3.5 fill-[#D97757]" />
+          <span className="font-sans text-xs font-medium tracking-wide">
+            High-Speed Telegram Download & Streaming Bot
+          </span>
+        </div>
 
-        {/* Main Headline */}
-        <ScrollReveal delay={150} direction="up">
-          <h1 className="font-serif text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-normal tracking-tight text-white max-w-4xl leading-[1.06] mb-8">
-            Never get stuck downloading on{' '}
-            <span className="italic text-ff-accent bg-clip-text text-transparent bg-gradient-to-r from-ff-accent via-rose-400 to-purple-400">
-              Telegram
-            </span>{' '}
-            again.
-          </h1>
-        </ScrollReveal>
+        {/* Clear, Human Headline with Claude Orange */}
+        <h1 className="text-4xl sm:text-6xl md:text-7xl font-normal tracking-tight text-white leading-[1.08] mb-6 font-serif">
+          Turn any Telegram file into a{' '}
+          <span className="text-[#D97757] italic">high-speed link</span>.
+        </h1>
 
-        {/* Core Subtitle addressing user's real pain points */}
-        <ScrollReveal delay={250} direction="up">
-          <p className="font-sans text-base sm:text-lg md:text-xl text-ff-text-secondary max-w-2xl mb-12 leading-relaxed font-normal">
-            Downloading directly inside Telegram is slow, stops if you close the chat, and often freezes halfway. FlashFile converts any Telegram file into a <span className="text-white font-medium">high-speed, 100% resumable direct link</span> — and lets you <span className="text-white font-medium">stream instantly</span> to verify print, voice, and multi-audio without wasting storage.
-          </p>
-        </ScrollReveal>
+        {/* User-Friendly Everyday Copy */}
+        <p className="text-base sm:text-lg text-zinc-300 max-w-2xl leading-relaxed mb-10 font-normal">
+          Downloading inside Telegram is painfully slow, stops if your screen locks, and eats up your phone storage. FlashFile gives you a clean direct link so you can <strong className="text-white font-medium">watch movies instantly in VLC or MX Player</strong> without waiting, or download files at your maximum Wi-Fi speed.
+        </p>
 
-        {/* Primary Action Buttons */}
-        <ScrollReveal delay={350} direction="up">
-          <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto mb-16">
-            <a
-              href={getTelegramBotLink('hero_cta')}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-8 py-4 rounded-xl bg-gradient-to-r from-ff-accent to-ff-accent-deep text-white font-semibold text-base shadow-xl shadow-ff-accent/30 hover:shadow-ff-accent/50 hover:-translate-y-0.5 active:translate-y-0 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ff-focus-ring"
-            >
-              <Send className="w-5 h-5" />
-              <span>Convert Telegram File to Link</span>
-              <ArrowRight className="w-4 h-4" />
-            </a>
+        {/* Call to Actions with Smooth Curved Corners */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 mb-16">
+          <a
+            href={getTelegramBotLink('hero_primary')}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 px-7 py-4 rounded-full bg-[#D97757] hover:bg-[#E58A69] text-white font-medium text-sm transition-all shadow-lg shadow-[#D97757]/20 hover:scale-[1.02] active:scale-[0.98] focus:outline-none"
+          >
+            <span>Start Free on Telegram</span>
+            <ArrowUpRight className="w-4 h-4" />
+          </a>
 
-            <a
-              href="#problem-solution"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-7 py-4 rounded-xl glass-panel text-ff-text-secondary hover:text-white hover:border-ff-border-strong text-base font-medium transition-all hover:-translate-y-0.5"
-            >
-              <span>See Comparison & Features</span>
-            </a>
-          </div>
-        </ScrollReveal>
+          <a
+            href="#how-it-works"
+            className="inline-flex items-center justify-center gap-2 px-7 py-4 rounded-full border border-white/[0.15] hover:border-white/[0.3] text-zinc-300 hover:text-white font-medium text-sm transition-all focus:outline-none"
+          >
+            <Play className="w-4 h-4 text-[#D97757] fill-[#D97757]" />
+            <span>See How It Works</span>
+          </a>
+        </div>
 
-        {/* 3 Main Value Props */}
-        <ScrollReveal delay={450} direction="up">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-3xl">
-            <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl glass-panel text-xs text-ff-text-secondary justify-center sm:justify-start hover:border-white/20 transition-colors">
-              <DownloadCloud className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-              <div className="text-left">
-                <div className="font-semibold text-white">Full-Speed HTTP Links</div>
-                <div className="text-[11px] text-ff-text-muted">IDM, 1DM & ADM multi-threading</div>
-              </div>
+        {/* 4 Everyday Benefits (Curved Edge Cards) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="p-5 rounded-2xl border border-white/[0.08] bg-[#0A0A0A] flex flex-col justify-between hover:border-white/[0.18] transition-colors">
+            <div className="w-8 h-8 rounded-xl bg-[#D97757]/10 flex items-center justify-center text-[#D97757] mb-3">
+              <Zap className="w-4 h-4" />
             </div>
-
-            <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl glass-panel text-xs text-ff-text-secondary justify-center sm:justify-start hover:border-white/20 transition-colors">
-              <Play className="w-5 h-5 text-ff-accent flex-shrink-0" />
-              <div className="text-left">
-                <div className="font-semibold text-white">Stream Without Download</div>
-                <div className="text-[11px] text-ff-text-muted">Instant playback, 0 phone storage</div>
+            <div>
+              <div className="font-semibold text-white text-sm mb-1">
+                Full Internet Speed
               </div>
-            </div>
-
-            <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl glass-panel text-xs text-ff-text-secondary justify-center sm:justify-start hover:border-white/20 transition-colors">
-              <CheckCircle2 className="w-5 h-5 text-ff-signal flex-shrink-0" />
-              <div className="text-left">
-                <div className="font-semibold text-white">Audio & Print Check</div>
-                <div className="text-[11px] text-ff-text-muted">Verify voice, dubbing & quality</div>
+              <div className="text-xs text-zinc-400 leading-relaxed">
+                Uses multiple connections at once to max out your Wi-Fi or 5G.
               </div>
             </div>
           </div>
-        </ScrollReveal>
+
+          <div className="p-5 rounded-2xl border border-white/[0.08] bg-[#0A0A0A] flex flex-col justify-between hover:border-white/[0.18] transition-colors">
+            <div className="w-8 h-8 rounded-xl bg-[#D97757]/10 flex items-center justify-center text-[#D97757] mb-3">
+              <Play className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="font-semibold text-white text-sm mb-1">
+                Stream Without Saving
+              </div>
+              <div className="text-xs text-zinc-400 leading-relaxed">
+                Play movies and songs right away in MX Player, VLC, or Chrome.
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl border border-white/[0.08] bg-[#0A0A0A] flex flex-col justify-between hover:border-white/[0.18] transition-colors">
+            <div className="w-8 h-8 rounded-xl bg-[#D97757]/10 flex items-center justify-center text-[#D97757] mb-3">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="font-semibold text-white text-sm mb-1">
+                Never Starts Over
+              </div>
+              <div className="text-xs text-zinc-400 leading-relaxed">
+                If your internet drops, your download resumes from where it stopped.
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl border border-white/[0.08] bg-[#0A0A0A] flex flex-col justify-between hover:border-white/[0.18] transition-colors">
+            <div className="w-8 h-8 rounded-xl bg-[#D97757]/10 flex items-center justify-center text-[#D97757] mb-3">
+              <Smartphone className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="font-semibold text-white text-sm mb-1">
+                Save Phone Memory
+              </div>
+              <div className="text-xs text-zinc-400 leading-relaxed">
+                No huge hidden Telegram cache files filling up your phone.
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );
 };
+
+export default HeroSection;

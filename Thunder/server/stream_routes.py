@@ -48,6 +48,18 @@ async def serve_motion_blur(request):
         return web.FileResponse(mb_path)
     raise web.HTTPNotFound()
 
+@routes.get("/api/live-dispatches", allow_head=True)
+async def api_live_dispatches(request):
+    try:
+        from Thunder.utils.dispatches import get_dispatches
+        dispatches = get_dispatches()
+    except Exception:
+        dispatches = []
+    return web.json_response(
+        {"ok": True, "count": len(dispatches), "dispatches": dispatches},
+        headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"}
+    )
+
 SECURE_HASH_LENGTH = 6
 CHUNK_SIZE = 1024 * 1024
 MAX_CONCURRENT_PER_CLIENT = 8

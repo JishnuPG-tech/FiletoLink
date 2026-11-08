@@ -12,54 +12,41 @@
   html {
     scroll-behavior: smooth;
     color-scheme: dark;
+    background-color: #000000;
   }
 
   body {
-    background-color: #060913;
-    color: #F8FAFC;
+    background-color: #000000;
+    color: #F4EDE2;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     overflow-x: hidden;
   }
 
-  /* Custom subtle obsidian scrollbar */
+  /* Custom subtle minimal scrollbar */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
   }
   ::-webkit-scrollbar-track {
-    background: #060913;
+    background: #000000;
   }
   ::-webkit-scrollbar-thumb {
-    background: #151E33;
+    background: #27272A;
     border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #253356;
+    background: #3F3F46;
   }
 }
 
 @layer utilities {
-  .glass-panel {
-    background-color: rgba(10, 16, 30, 0.62);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  .claude-orange {
+    color: #D97757;
   }
-
-  .glass-panel-glow {
-    background-color: rgba(10, 16, 30, 0.68);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(250, 204, 21, 0.25);
-    box-shadow: 0 0 35px -10px rgba(250, 204, 21, 0.15), 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  .bg-claude-orange {
+    background-color: #D97757;
   }
-
-  .text-glow-gold {
-    text-shadow: 0 0 24px rgba(250, 204, 21, 0.40);
-  }
-
-  .text-glow-cyan {
-    text-shadow: 0 0 24px rgba(56, 189, 248, 0.40);
+  .border-claude-orange {
+    border-color: #D97757;
   }
 }
