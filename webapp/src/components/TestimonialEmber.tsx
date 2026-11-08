@@ -640,17 +640,19 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
         if (!res.ok) return;
         const data = await res.json();
         if (data.ok && Array.isArray(data.dispatches) && data.dispatches.length > 0 && active) {
-          const mapped: TestimonialItem[] = data.dispatches.map((d: any) => {
+          const mapped: TestimonialItem[] = data.dispatches.map((d: any, idx: number) => {
             const parsed = parseTelegramFilename(d.raw_filename);
+            const isSeries = /S\d{1,2}|Season|Episode/i.test(d.raw_filename);
+            const mediaType = isSeries ? "series" : "movie";
             return {
-              quote: `A user used the bot to convert the media ${parsed.cleanTitle} to an instant streaming link.`,
+              quote: `A user used the bot to convert the ${mediaType} ${parsed.cleanTitle} to an instant streaming link.`,
               name: parsed.cleanTitle,
               role: "Stream Ready · VLC & MX Player",
               quality: parsed.quality || d.file_size || "Direct Stream",
               date: d.date || "TODAY",
               rawFilename: d.raw_filename,
               rating: 5,
-              photoUrl: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=120&auto=format&fit=crop&q=80",
+              photoUrl: DEFAULT_AVATARS[idx % DEFAULT_AVATARS.length],
             };
           });
           setLiveItems(mapped);

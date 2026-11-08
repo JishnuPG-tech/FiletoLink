@@ -317,6 +317,17 @@ class Database:
                 raise
             return None
 
+    async def get_recent_files(self, limit: int = 30) -> list:
+        try:
+            cursor = self.files_col.find(
+                {"file_name": {"$exists": True, "$ne": ""}},
+                {"file_name": 1, "file_size": 1, "created_at": 1, "last_seen_at": 1, "public_hash": 1, "_id": 0}
+            ).sort("created_at", -1).limit(limit)
+            return await cursor.to_list(length=limit)
+        except Exception as e:
+            logger.warning(f"Error fetching recent files from DB: {e}")
+            return []
+
     async def get_file_by_message_id(self, canonical_message_id: int) -> Optional[Dict[str, Any]]:
         try:
             return await self.files_col.find_one({"canonical_message_id": canonical_message_id})

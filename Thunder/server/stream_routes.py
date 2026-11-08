@@ -51,9 +51,9 @@ async def serve_motion_blur(request):
 @routes.get("/api/live-dispatches", allow_head=True)
 async def api_live_dispatches(request):
     try:
-        from Thunder.utils.dispatches import get_dispatches
-        dispatches = get_dispatches()
-    except Exception:
+        from Thunder.utils.dispatches import get_live_dispatches_from_sources
+        dispatches = await get_live_dispatches_from_sources(limit=30)
+    except Exception as e:
         dispatches = []
     return web.json_response(
         {"ok": True, "count": len(dispatches), "dispatches": dispatches},
