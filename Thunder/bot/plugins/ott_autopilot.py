@@ -1,26 +1,23 @@
 # Thunder/bot/plugins/ott_autopilot.py
-"""TMDB Daily OTT Releases Autopilot:
-- Runs automatically every morning at 09:00 AM (customizable timezone, default IST UTC+5:30).
-- Discovers new digital & OTT streaming releases in specified region (default: IN).
-- Strict Deduplication via MongoDB: Never posts already-posted items.
-- Only posts if new updates exist; if not, posts nothing (zero spam).
-- Formats posts professionally with high-res poster, IMDb rating, genres, audio, OTT platforms, trailer & bot stream buttons.
-- Admin commands: /post_ott (manual force scan), /ott_status (check schedule & counts).
+"""
+Daily OTT Release Updates Autopilot:
+- Posts concise, clean OTT release updates directly to the channel.
+- Formats:
+    Upcoming: 📣 '{title}' {year} {language} Movie Streaming {date} From {platform}
+    Now Streaming: ✅ '{title}' {year} {language} Movie Streaming Now From {platform}
+- No posters, no synopsis, no rating cards, no buttons - pure clean text announcements.
+- Deduplication via MongoDB: never reposts duplicate announcements.
+- Admin commands: /post_ott (manual scan), /ott_status (status & stats).
 """
 
 import asyncio
 import datetime
-import urllib.parse
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from pyrogram import Client, filters
 from pyrogram.errors import FloodWait
-from pyrogram.types import (
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    Message,
-)
+from pyrogram.types import Message
 
 from Thunder.bot import StreamBot
 from Thunder.utils.database import db
@@ -30,20 +27,21 @@ from Thunder.vars import Var
 TMDB_BASE = "https://api.themoviedb.org/3"
 DEFAULT_TMDB_KEY = "c189b870db5d1a87c1cb51cae8bfa178"
 
-# Provider Mapping for professional display with badges
-PROVIDER_MAP = {
-    8: "🔴 Netflix",
-    119: "🔵 Prime Video",
-    122: "⭐ Disney+ Hotstar",
-    232: "🟡 Zee5",
-    337: "🟣 JioCinema",
-    350: "🍎 Apple TV+",
-    384: "🟢 SonyLIV",
-    220: "🟠 MX Player",
-    531: "Paramount+",
-    283: "Crunchyroll",
-    11: "MUBI",
-    1796: "Lionsgate Play",
+LANGUAGE_MAP = {
+    "ml": "Malayalam",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "hi": "Hindi",
+    "kn": "Kannada",
+    "en": "English",
+    "bn": "Bengali",
+    "mr": "Marathi",
+    "pa": "Punjabi",
+    "gu": "Gujarati",
+    "ko": "Korean",
+    "ja": "Japanese",
+    "es": "Spanish",
+    "fr": "French",
 }
 
 _AUTOPILOT_RUNNING = False
@@ -51,16 +49,82 @@ _LAST_RUN_DATE: Optional[str] = None
 
 
 def get_tmdb_key() -> str:
-    return Var.TMDB_API_KEY.strip() or DEFAULT_TMDB_KEY
+    return getattr(Var, "TMDB_API_KEY", "").strip() or DEFAULT_TMDB_KEY
 
 
 def get_target_channel() -> Optional[int]:
-    return Var.OTT_CHANNEL_ID or Var.FORCE_CHANNEL_ID
+    return getattr(Var, "OTT_CHANNEL_ID", None) or getattr(Var, "FORCE_CHANNEL_ID", None)
 
 
 def get_local_now() -> datetime.datetime:
-    tz = datetime.timezone(datetime.timedelta(hours=Var.OTT_TIMEZONE_OFFSET))
+    offset = getattr(Var, "OTT_TIMEZONE_OFFSET", 5.5)
+    tz = datetime.timezone(datetime.timedelta(hours=offset))
     return datetime.datetime.now(tz)
+
+
+def get_language_name(code: str) -> str:
+    if not code:
+        return "Cinema"
+    code_lower = code.lower().strip()
+    return LANGUAGE_MAP.get(code_lower, code.capitalize())
+
+
+def normalize_provider_name(provider_name: str, provider_id: Optional[int] = None) -> str:
+    name_clean = provider_name.strip()
+    name_lower = name_clean.lower()
+
+    if "hotstar" in name_lower or provider_id == 122:
+        return "JioHotstar"
+    if "prime" in name_lower or "amazon" in name_lower or provider_id == 119:
+        return "Amazon Prime Video"
+    if "netflix" in name_lower or provider_id == 8:
+        return "Netflix"
+    if "zee5" in name_lower or "zee" in name_lower or provider_id == 232:
+        return "Zee5"
+    if "sonyliv" in name_lower or "sony" in name_lower or provider_id == 384:
+        return "SonyLIV"
+    if "jiocinema" in name_lower or "jio" in name_lower or provider_id == 337:
+        return "JioCinema"
+    if "apple" in name_lower or provider_id == 350:
+        return "Apple TV+"
+    if "manorama" in name_lower or provider_id == 429:
+        return "ManoramaMAX"
+    if "aha" in name_lower or provider_id == 608:
+        return "Aha"
+    if "sun nxt" in name_lower or "sunnxt" in name_lower or provider_id == 613:
+        return "Sun NXT"
+    if "simply south" in name_lower or provider_id == 614:
+        return "Simply South"
+    if "lionsgate" in name_lower or provider_id == 1796:
+        return "Lionsgate Play"
+
+    return name_clean
+
+
+def format_release_date(release_date_str: str, today: datetime.date) -> Tuple[bool, str]:
+    """
+    Returns (is_now, formatted_date_string)
+    e.g. (True, "Now")
+    or   (False, "November 6th")
+    """
+    if not release_date_str:
+        return True, "Now"
+    try:
+        rdate = datetime.datetime.strptime(release_date_str[:10], "%Y-%m-%d").date()
+    except Exception:
+        return True, "Now"
+
+    if rdate <= today:
+        return True, "Now"
+
+    day = rdate.day
+    if 11 <= day <= 13:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+
+    month_name = rdate.strftime("%B")
+    return False, f"{month_name} {day}{suffix}"
 
 
 async def fetch_tmdb_json(client: httpx.AsyncClient, endpoint: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -70,37 +134,32 @@ async def fetch_tmdb_json(client: httpx.AsyncClient, endpoint: str, params: Dict
     full_params = {"api_key": api_key, **params}
     url = f"{TMDB_BASE}{endpoint}"
     try:
-        resp = await client.get(url, params=full_params, timeout=12.0)
+        resp = await client.get(url, params=full_params, timeout=14.0)
         if resp.status_code == 200:
             return resp.json()
-        logger.debug(f"TMDB request {endpoint} returned status {resp.status_code}")
+        logger.debug(f"[OTT-AUTOPILOT] TMDB {endpoint} returned status {resp.status_code}")
         return None
     except Exception as e:
-        logger.debug(f"TMDB request error for {endpoint}: {e}")
+        logger.debug(f"[OTT-AUTOPILOT] TMDB error for {endpoint}: {e}")
         return None
 
 
-def extract_ott_platforms(watch_data: Optional[Dict[str, Any]], region: str) -> List[str]:
+def extract_primary_ott_platform(watch_data: Optional[Dict[str, Any]], region: str = "IN") -> Optional[str]:
     if not watch_data or not isinstance(watch_data, dict):
-        return []
+        return None
     results = watch_data.get("results", {})
     region_data = results.get(region) or results.get("IN") or results.get("US") or {}
 
-    platforms = []
-    seen_ids = set()
-
     for category in ("flatrate", "free", "ads", "rent", "buy"):
         items = region_data.get(category, [])
-        if isinstance(items, list):
-            for provider in items:
-                pid = provider.get("provider_id")
-                pname = provider.get("provider_name", "")
-                if pid and pid not in seen_ids:
-                    seen_ids.add(pid)
-                    display_name = PROVIDER_MAP.get(pid, f"📺 {pname}")
-                    platforms.append(display_name)
+        if isinstance(items, list) and items:
+            provider = items[0]
+            pid = provider.get("provider_id")
+            pname = provider.get("provider_name", "")
+            if pname:
+                return normalize_provider_name(pname, pid)
 
-    return platforms
+    return None
 
 
 async def process_and_post_ott_updates(client: Client, manual: bool = False) -> Dict[str, int]:
@@ -110,178 +169,111 @@ async def process_and_post_ott_updates(client: Client, manual: bool = False) -> 
         logger.warning("[OTT-AUTOPILOT] No target channel configured (set OTT_CHANNEL_ID or FORCE_CHANNEL_ID).")
         return {"scanned": 0, "posted": 0, "skipped": 0, "errors": 0}
 
-    today = get_local_now().date()
-    yesterday = today - datetime.timedelta(days=1)
-    future_7d = today + datetime.timedelta(days=7)
+    now_local = get_local_now()
+    today = now_local.date()
+    yesterday = today - datetime.timedelta(days=7)
+    future_30d = today + datetime.timedelta(days=35)
 
     stats = {"scanned": 0, "posted": 0, "skipped": 0, "errors": 0}
 
-    bot_info = await client.get_me()
-    bot_username = bot_info.username or Var.NAME
+    async with httpx.AsyncClient(headers={"User-Agent": "FlashFile-OTT-Bot/2.0"}) as http_client:
+        candidate_ids = []
+        seen_cand = set()
 
-    async with httpx.AsyncClient(headers={"User-Agent": "Thunder-FileToLink-OTT/1.0"}) as http_client:
-        # Discover Movies (Digital & Physical OTT releases)
-        movie_params = {
-            "region": Var.OTT_REGION,
-            "watch_region": Var.OTT_REGION,
-            "with_watch_providers": "8|119|122|232|337|350|384|1796|283",
-            "with_release_type": "4|5",
-            "primary_release_date.gte": yesterday.isoformat(),
-            "primary_release_date.lte": future_7d.isoformat(),
-            "sort_by": "popularity.desc",
-            "page": 1,
-        }
+        # Multi-query strategy to catch Malayalam, Tamil, Telugu, Hindi and Pan-India OTT titles
+        query_configs = [
+            # 1. Malayalam OTT releases
+            {"with_original_language": "ml", "sort_by": "popularity.desc"},
+            # 2. Tamil OTT releases
+            {"with_original_language": "ta", "sort_by": "popularity.desc"},
+            # 3. Telugu OTT releases
+            {"with_original_language": "te", "sort_by": "popularity.desc"},
+            # 4. Hindi OTT releases
+            {"with_original_language": "hi", "sort_by": "popularity.desc"},
+            # 5. General India Major OTT streaming
+            {
+                "region": "IN",
+                "watch_region": "IN",
+                "with_watch_providers": "8|119|122|232|337|384|429|608|613",
+                "sort_by": "popularity.desc",
+            },
+        ]
 
-        # Discover TV Series
-        tv_params = {
-            "watch_region": Var.OTT_REGION,
-            "with_watch_providers": "8|119|122|232|337|350|384|1796|283",
-            "first_air_date.gte": (today - datetime.timedelta(days=3)).isoformat(),
-            "first_air_date.lte": future_7d.isoformat(),
-            "sort_by": "popularity.desc",
-            "page": 1,
-        }
+        for q in query_configs:
+            params = {
+                "watch_region": "IN",
+                "primary_release_date.gte": yesterday.isoformat(),
+                "primary_release_date.lte": future_30d.isoformat(),
+                "page": 1,
+                **q,
+            }
+            res = await fetch_tmdb_json(http_client, "/discover/movie", params)
+            if res and "results" in res:
+                for item in res["results"][:12]:
+                    mid = item.get("id")
+                    if mid and (mid, "movie") not in seen_cand:
+                        seen_cand.add((mid, "movie"))
+                        candidate_ids.append((mid, "movie"))
 
-        candidates = []
-
-        # 1. Fetch Movies
-        movie_res = await fetch_tmdb_json(http_client, "/discover/movie", movie_params)
-        if movie_res and "results" in movie_res:
-            for item in movie_res["results"][:15]:
-                candidates.append((item.get("id"), "movie"))
-
-        # 2. Fetch TV Series
-        tv_res = await fetch_tmdb_json(http_client, "/discover/tv", tv_params)
-        if tv_res and "results" in tv_res:
-            for item in tv_res["results"][:10]:
-                candidates.append((item.get("id"), "tv"))
-
-        stats["scanned"] = len(candidates)
-        if not candidates:
+        stats["scanned"] = len(candidate_ids)
+        if not candidate_ids:
             logger.info("[OTT-AUTOPILOT] No candidate releases found on TMDB.")
             return stats
 
-        for tmdb_id, media_type in candidates:
-            if not tmdb_id:
-                continue
-
-            # Strict Deduplication Check in MongoDB
-            is_already_posted = await db.is_ott_posted(tmdb_id, media_type)
-            if is_already_posted:
-                stats["skipped"] += 1
-                continue
-
-            # Fetch enriched details including IMDb ID, Videos, and Watch Providers
+        for tmdb_id, media_type in candidate_ids:
             endpoint = f"/{media_type}/{tmdb_id}"
             details = await fetch_tmdb_json(
                 http_client,
                 endpoint,
-                {"append_to_response": "external_ids,videos,watch/providers"}
+                {"append_to_response": "watch/providers"}
             )
             if not details:
                 continue
 
-            title = details.get("title") or details.get("name") or "Untitled"
-            poster_path = details.get("poster_path")
-            overview = details.get("overview", "").strip()
-            vote_avg = details.get("vote_average", 0.0)
-            genres_list = [g.get("name") for g in details.get("genres", []) if g.get("name")]
-            genres_str = ", ".join(genres_list[:3]) if genres_list else "Cinema"
-
-            release_date_raw = details.get("release_date") or details.get("first_air_date") or ""
-            year_str = f" ({release_date_raw[:4]})" if len(release_date_raw) >= 4 else ""
-
-            runtime_mins = details.get("runtime") or (details.get("episode_run_time", [0])[0] if details.get("episode_run_time") else 0)
-            runtime_str = f"{runtime_mins // 60}h {runtime_mins % 60}m" if runtime_mins >= 60 else (f"{runtime_mins}m" if runtime_mins > 0 else "")
-
-            # Extract OTT Platforms
+            # Extract platform
             watch_data = details.get("watch/providers")
-            platforms = extract_ott_platforms(watch_data, Var.OTT_REGION)
-            if not platforms:
-                # If no regional provider found, skip to maintain high relevance
+            platform = extract_primary_ott_platform(watch_data, region="IN")
+            if not platform:
                 continue
 
-            platforms_display = " • ".join(platforms[:3])
+            title = details.get("title") or details.get("name") or "Untitled"
+            release_date_raw = details.get("release_date") or details.get("first_air_date") or ""
+            year = release_date_raw[:4] if len(release_date_raw) >= 4 else str(today.year)
+            orig_lang = details.get("original_language", "")
+            language = get_language_name(orig_lang)
+            media_kind = "Movie" if media_type == "movie" else "Series"
 
-            # Extract Trailer Video
-            trailer_url = None
-            videos = details.get("videos", {}).get("results", [])
-            for vid in videos:
-                if vid.get("site") == "YouTube" and vid.get("type") in ("Trailer", "Teaser"):
-                    trailer_url = f"https://youtu.be/{vid.get('key')}"
-                    break
+            is_now, date_str = format_release_date(release_date_raw, today)
 
-            # Extract IMDb Info
-            ext_ids = details.get("external_ids", {})
-            imdb_id = ext_ids.get("imdb_id")
-            imdb_url = f"https://www.imdb.com/title/{imdb_id}/" if imdb_id else None
+            # Deduplication: distinct record for upcoming announcements vs streaming now
+            media_key = f"{media_type}_{'now' if is_now else 'upcoming'}"
 
-            # Audio languages
-            spoken = [l.get("english_name", l.get("name", "")) for l in details.get("spoken_languages", [])]
-            languages_str = ", ".join(spoken[:3]) if spoken else "Original Audio"
+            is_already_posted = await db.is_ott_posted(tmdb_id, media_key)
+            if is_already_posted:
+                stats["skipped"] += 1
+                continue
 
-            # Clean & Truncate Synopsis
-            if len(overview) > 350:
-                overview = overview[:347].rsplit(" ", 1)[0] + "..."
-            overview_quote = f"\n\n📝 *{overview}*" if overview else ""
-
-            # Professional Post Caption
-            rating_line = f"⭐ **Rating:** `{vote_avg:.1f}/10`" if vote_avg > 0 else "⭐ **Rating:** `Awaiting Reviews`"
-            runtime_line = f" • ⏱️ **Runtime:** `{runtime_str}`" if runtime_str else ""
-
-            caption = (
-                f"🎬 **{title}**{year_str}\n"
-                f"{rating_line}{runtime_line}\n"
-                f"🎭 **Genre:** {genres_str}\n"
-                f"📺 **Streaming Platform:** **{platforms_display}**\n"
-                f"🔊 **Audio:** {languages_str}"
-                f"{overview_quote}\n\n"
-                f"⚡ *Instant streaming & direct links available on @{bot_username}*"
-            )
-
-            # Build Clean Interactive Buttons
-            title_slug = urllib.parse.quote(title.strip().replace(" ", "_"))
-            buttons = [
-                [
-                    InlineKeyboardButton("▶️ Stream / Download on Bot", url=f"https://t.me/{bot_username}?start=search_{title_slug}")
-                ]
-            ]
-            row2 = []
-            if trailer_url:
-                row2.append(InlineKeyboardButton("🎬 Watch Trailer", url=trailer_url))
-            if imdb_url:
-                row2.append(InlineKeyboardButton("⭐ IMDb Page", url=imdb_url))
-            if row2:
-                buttons.append(row2)
-
-            keyboard = InlineKeyboardMarkup(buttons)
-
-            # Poster Image URL
-            poster_url = f"https://image.tmdb.org/t/p/w780{poster_path}" if poster_path else None
+            # Format the exact announcement message requested by the user
+            if is_now:
+                message_text = f"✅ '{title}' {year} {language} {media_kind} Streaming Now From {platform}"
+            else:
+                message_text = f"📣 '{title}' {year} {language} {media_kind} Streaming {date_str} From {platform}"
 
             try:
-                if poster_url:
-                    await client.send_photo(
-                        chat_id=target_channel,
-                        photo=poster_url,
-                        caption=caption,
-                        reply_markup=keyboard
-                    )
-                else:
-                    await client.send_message(
-                        chat_id=target_channel,
-                        text=caption,
-                        reply_markup=keyboard,
-                        disable_web_page_preview=False
-                    )
+                # Post pure clean text message with no other additions
+                await client.send_message(
+                    chat_id=target_channel,
+                    text=message_text,
+                    disable_web_page_preview=True
+                )
 
-                # Record in MongoDB to guarantee zero duplicate reposts
-                await db.mark_ott_posted(tmdb_id, media_type, title, platforms_display)
+                # Record in database
+                await db.mark_ott_posted(tmdb_id, media_key, title, platform)
                 stats["posted"] += 1
-                logger.info(f"[OTT-AUTOPILOT] Successfully posted OTT update: {title} ({platforms_display})")
+                logger.info(f"[OTT-AUTOPILOT] Published OTT update: {message_text}")
 
-                # Sleep 4 seconds between posts to strictly avoid Telegram FloodWait
-                await asyncio.sleep(4)
+                # Rate limiting between posts to prevent Telegram FloodWait
+                await asyncio.sleep(3)
 
             except FloodWait as e:
                 logger.warning(f"[OTT-AUTOPILOT] FloodWait {e.value}s while posting {title}")
@@ -294,31 +286,35 @@ async def process_and_post_ott_updates(client: Client, manual: bool = False) -> 
 
 
 async def ott_scheduler_worker():
-    """Background async daemon that triggers at 09:00 AM local time daily."""
+    """Background async daemon that triggers daily at 09:00 AM local time."""
     global _AUTOPILOT_RUNNING, _LAST_RUN_DATE
     if _AUTOPILOT_RUNNING:
         return
     _AUTOPILOT_RUNNING = True
 
+    hour = getattr(Var, "OTT_SCHEDULE_HOUR", 9)
+    minute = getattr(Var, "OTT_SCHEDULE_MINUTE", 0)
+    offset = getattr(Var, "OTT_TIMEZONE_OFFSET", 5.5)
+
     logger.info(
-        f"[OTT-AUTOPILOT] Scheduler worker initialized. Scheduled daily for "
-        f"{Var.OTT_SCHEDULE_HOUR:02d}:{Var.OTT_SCHEDULE_MINUTE:02d} (UTC+{Var.OTT_TIMEZONE_OFFSET})."
+        f"[OTT-AUTOPILOT] Clean OTT Updates Scheduler worker initialized for "
+        f"{hour:02d}:{minute:02d} daily (UTC+{offset})."
     )
 
     while True:
         try:
-            if Var.OTT_AUTOPILOT:
+            if getattr(Var, "OTT_AUTOPILOT", True):
                 now_local = get_local_now()
                 today_str = now_local.strftime("%Y-%m-%d")
 
-                is_target_hour = now_local.hour == Var.OTT_SCHEDULE_HOUR
-                is_target_minute = now_local.minute == Var.OTT_SCHEDULE_MINUTE
+                is_target_hour = now_local.hour == hour
+                is_target_minute = now_local.minute == minute
 
                 if is_target_hour and is_target_minute and _LAST_RUN_DATE != today_str:
-                    logger.info(f"[OTT-AUTOPILOT] 09:00 AM trigger activated for {today_str}. Initiating OTT scan...")
+                    logger.info(f"[OTT-AUTOPILOT] 09:00 AM trigger activated for {today_str}. Initiating clean OTT scan...")
                     _LAST_RUN_DATE = today_str
                     res = await process_and_post_ott_updates(StreamBot, manual=False)
-                    logger.info(f"[OTT-AUTOPILOT] Scan completed: {res}")
+                    logger.info(f"[OTT-AUTOPILOT] Daily clean OTT scan completed: {res}")
 
             await asyncio.sleep(30)
         except Exception as e:
@@ -331,7 +327,7 @@ asyncio.create_task(ott_scheduler_worker())
 
 
 # =========================================================================
-# Owner Admin Commands for OTT Autopilot
+# Owner Admin Commands for Clean OTT Updates
 # =========================================================================
 
 @StreamBot.on_message(filters.command(["post_ott", "scan_ott"]) & filters.private)
@@ -339,16 +335,16 @@ async def post_ott_command(client: Client, message: Message):
     if message.from_user.id != Var.OWNER_ID:
         return
 
-    status_msg = await message.reply_text("🔍 **Scanning TMDB for new OTT releases...**", quote=True)
+    status_msg = await message.reply_text("🔍 **Scanning TMDB for new OTT release updates...**", quote=True)
     res = await process_and_post_ott_updates(client, manual=True)
-    
+
     report = (
-        f"📊 **OTT Autopilot Scan Complete!**\n\n"
+        f"📊 **OTT Updates Scan Complete!**\n\n"
         f"• **Candidates Scanned:** `{res['scanned']}`\n"
-        f"• **New Posts Published:** `{res['posted']}`\n"
+        f"• **New Updates Published:** `{res['posted']}`\n"
         f"• **Already Posted (Skipped):** `{res['skipped']}`\n"
         f"• **Errors:** `{res['errors']}`\n\n"
-        f"*(ℹ️ Note: If 0 items were posted, all available OTT releases have already been published. Zero duplicate posts allowed.)*"
+        f"*(ℹ️ Note: If 0 items were posted, all current announcements have already been published. Zero duplicate messages allowed.)*"
     )
     await status_msg.edit_text(report)
 
@@ -364,17 +360,20 @@ async def ott_status_command(client: Client, message: Message):
     key_configured = bool(get_tmdb_key())
 
     now_local = get_local_now()
+    hour = getattr(Var, "OTT_SCHEDULE_HOUR", 9)
+    minute = getattr(Var, "OTT_SCHEDULE_MINUTE", 0)
+    offset = getattr(Var, "OTT_TIMEZONE_OFFSET", 5.5)
 
     text = (
-        f"⚡ **OTT Autopilot System Status** ⚡\n\n"
-        f"• **Autopilot Active:** `{Var.OTT_AUTOPILOT}`\n"
+        f"⚡ **Clean OTT Updates Autopilot Status** ⚡\n\n"
+        f"• **Autopilot Active:** `{getattr(Var, 'OTT_AUTOPILOT', True)}`\n"
         f"• **Target Channel:** `{channel_repr}`\n"
-        f"• **TMDB API Key:** `{'Configured ✅' if key_configured else 'Missing ✖'}`\n"
-        f"• **Target Region:** `{Var.OTT_REGION}` (India)\n"
-        f"• **Schedule Time:** `{Var.OTT_SCHEDULE_HOUR:02d}:{Var.OTT_SCHEDULE_MINUTE:02d}` Daily (UTC+{Var.OTT_TIMEZONE_OFFSET})\n"
+        f"• **TMDB API Key:** `{'Configured ✅' if key_configured else 'Using Default Key ✅'}`\n"
+        f"• **Target Region:** `{getattr(Var, 'OTT_REGION', 'IN')} (India)`\n"
+        f"• **Schedule Time:** `{hour:02d}:{minute:02d}` Daily (UTC+{offset})\n"
         f"• **Current Local Time:** `{now_local.strftime('%Y-%m-%d %H:%M:%S')}`\n"
-        f"• **Total Releases Posted to Date:** `{total_posted}`\n"
+        f"• **Total Updates Posted to Date:** `{total_posted}`\n"
         f"• **Last Daily Run Date:** `{_LAST_RUN_DATE or 'None yet'}`\n\n"
-        f"*(To trigger an immediate scan, send /post_ott)*"
+        f"*(To trigger an immediate scan and post, send /post_ott)*"
     )
     await message.reply_text(text, quote=True)

@@ -1,0 +1,55 @@
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    border-color: var(--ff-border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--ff-bg);
+    color: var(--ff-text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  /* Custom subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--ff-bg);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--ff-surface-strong);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--ff-border-strong);
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    background-color: var(--ff-surface-glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--ff-border);
+  }
+
+  .text-glow-accent {
+    text-shadow: 0 0 24px var(--ff-accent-soft);
+  }
+
+  .text-glow-signal {
+    text-shadow: 0 0 24px var(--ff-signal-soft);
+  }
+}

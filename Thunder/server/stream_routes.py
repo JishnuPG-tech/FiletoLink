@@ -1,3 +1,4 @@
+import os
 import mimetypes
 # Thunder/server/stream_routes.py
 
@@ -25,6 +26,14 @@ from Thunder.utils.time_format import get_readable_time
 from Thunder.vars import Var
 
 routes = web.RouteTableDef()
+
+# FlashFile Production Webapp path
+WEBAPP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "webapp", "dist"))
+WEBAPP_INDEX = os.path.join(WEBAPP_DIR, "index.html")
+WEBAPP_ASSETS = os.path.join(WEBAPP_DIR, "assets")
+
+if os.path.exists(WEBAPP_ASSETS):
+    routes.static("/assets", WEBAPP_ASSETS)
 
 SECURE_HASH_LENGTH = 6
 CHUNK_SIZE = 1024 * 1024
@@ -292,6 +301,20 @@ async def upi_redirect_handler(request: web.Request):
 
 @routes.get("/", allow_head=True)
 async def root_redirect(request):
+    accept = request.headers.get("Accept", "")
+    # If a browser requests HTML and the built webapp exists, serve FlashFile Showcase Webapp
+    if ("text/html" in accept or "*/*" in accept) and os.path.exists(WEBAPP_INDEX):
+        try:
+            with open(WEBAPP_INDEX, "r", encoding="utf-8") as f:
+                html = f.read()
+            bot_username = getattr(StreamBot, "username", "") or "ThunderF2L_bot"
+            config_script = f'<script>window.__FLASHFILE_CONFIG__ = {{"bot_username": "{bot_username}", "server_name": "FileToLink"}};</script>'
+            html = html.replace("<head>", f"<head>{config_script}")
+            return web.Response(text=html, content_type="text/html")
+        except Exception as e:
+            logger.warning(f"Failed to serve FlashFile webapp HTML: {e}")
+
+    # Fallback or API check response (curl, health probes, uptime monitors)
     return web.json_response({
         "server": {
             "status": "operational",

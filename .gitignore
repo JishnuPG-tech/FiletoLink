@@ -1,12 +1,12 @@
-*.py[cod]
-*$py.class
-*.so
-.venv/
-.Python
-config.env
 .env
-log.text
-.vscode/
+*.env
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.session*
+downloads/
+.venv/
 **/__pycache__/
 *.session
 *.session-journal
@@ -28,5 +28,8 @@ wheels/
 .installed.cfg
 *.egg
 Thunder/logs/
-*.log
-Thunder/template/gpay_merchant_qr.png
+
+# Frontend Webapp
+webapp/node_modules/
+!webapp/dist/
+!webapp/dist/**

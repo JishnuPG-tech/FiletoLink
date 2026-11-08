@@ -1,0 +1,49 @@
+:root {
+  color-scheme: dark;
+  --ff-bg: #08090D;
+  --ff-bg-raised: #0D0F15;
+  --ff-surface: #11131B;
+  --ff-surface-strong: #171A23;
+  --ff-surface-glass: rgba(17, 19, 27, 0.76);
+  --ff-border: rgba(248, 250, 252, 0.08);
+  --ff-border-strong: rgba(248, 250, 252, 0.16);
+  --ff-text: #F8FAFC;
+  --ff-text-secondary: #B5BCC9;
+  --ff-text-muted: #7F899B;
+  --ff-accent: #FF3B5C;
+  --ff-accent-hover: #FF5570;
+  --ff-accent-deep: #E02447;
+  --ff-accent-soft: rgba(255, 59, 92, 0.12);
+  --ff-signal: #38BDF8;
+  --ff-signal-soft: rgba(56, 189, 248, 0.10);
+  --ff-success: #48D6A0;
+  --ff-warning: #F6C56B;
+  --ff-danger: #FF647C;
+  --ff-particle-primary: #FF3B5C;
+  --ff-particle-secondary: #E02447;
+  --ff-particle-highlight: #38BDF8;
+  --ff-focus-ring: #8BD7FF;
+}
+
+[data-theme="claude-editorial"] {
+  --ff-bg: #171512;
+  --ff-bg-raised: #1D1A16;
+  --ff-surface: #24201B;
+  --ff-surface-strong: #2B261F;
+  --ff-surface-glass: rgba(36, 32, 27, 0.78);
+  --ff-border: rgba(244, 237, 226, 0.10);
+  --ff-border-strong: rgba(244, 237, 226, 0.20);
+  --ff-text: #F4EDE2;
+  --ff-text-secondary: #D0C4B4;
+  --ff-text-muted: #A99B8A;
+  --ff-accent: #D97757;
+  --ff-accent-hover: #E58A69;
+  --ff-accent-deep: #B85F3A;
+  --ff-accent-soft: rgba(217, 119, 87, 0.14);
+  --ff-signal: #F2BA93;
+  --ff-signal-soft: rgba(242, 186, 147, 0.10);
+  --ff-particle-primary: #D97757;
+  --ff-particle-secondary: #B85F3A;
+  --ff-particle-highlight: #F2BA93;
+  --ff-focus-ring: #FFD6B9;
+}
