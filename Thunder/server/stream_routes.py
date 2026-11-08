@@ -31,9 +31,22 @@ routes = web.RouteTableDef()
 WEBAPP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "webapp", "dist"))
 WEBAPP_INDEX = os.path.join(WEBAPP_DIR, "index.html")
 WEBAPP_ASSETS = os.path.join(WEBAPP_DIR, "assets")
+WEBAPP_JS = os.path.join(WEBAPP_DIR, "js")
+WEBAPP_IMAGES = os.path.join(WEBAPP_DIR, "images")
 
 if os.path.exists(WEBAPP_ASSETS):
     routes.static("/assets", WEBAPP_ASSETS)
+if os.path.exists(WEBAPP_JS):
+    routes.static("/js", WEBAPP_JS)
+if os.path.exists(WEBAPP_IMAGES):
+    routes.static("/images", WEBAPP_IMAGES)
+
+@routes.get("/motion_blur.png", allow_head=True)
+async def serve_motion_blur(request):
+    mb_path = os.path.join(WEBAPP_DIR, "motion_blur.png")
+    if os.path.exists(mb_path):
+        return web.FileResponse(mb_path)
+    raise web.HTTPNotFound()
 
 SECURE_HASH_LENGTH = 6
 CHUNK_SIZE = 1024 * 1024
