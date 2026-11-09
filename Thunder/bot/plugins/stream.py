@@ -1,6 +1,7 @@
 # Thunder/bot/plugins/stream.py
 
 import asyncio
+import os
 import secrets
 from typing import Any, Dict, Optional
 
@@ -197,9 +198,10 @@ async def send_dm_links(bot: Client, user_id: int, links: Dict[str, Any], chat_t
     except Exception:
         pass
     try:
+        safe_name = str(links.get('media_name', '')).replace('`', "'")
         dm_text = MSG_DM_SINGLE_PREFIX.format(chat_title=chat_title) + "\n" + \
                   MSG_LINKS.format(
-                      file_name=links['media_name'],
+                      file_name=safe_name,
                       file_size=links['media_size'],
                       download_link=links['online_link'],
                       stream_link=links['stream_link']
@@ -232,9 +234,10 @@ async def send_link(msg: Message, links: Dict[str, Any]):
     except Exception:
         pass
     try:
+        safe_name = str(links.get('media_name', '')).replace('`', "'")
         await msg.reply_text(
             MSG_LINKS.format(
-                file_name=links['media_name'],
+                file_name=safe_name,
                 file_size=links['media_size'],
                 download_link=links['online_link'],
                 stream_link=links['stream_link']
@@ -248,7 +251,7 @@ async def send_link(msg: Message, links: Dict[str, Any]):
         await asyncio.sleep(e.value)
         await msg.reply_text(
             MSG_LINKS.format(
-                file_name=links['media_name'],
+                file_name=safe_name,
                 file_size=links['media_size'],
                 download_link=links['online_link'],
                 stream_link=links['stream_link']

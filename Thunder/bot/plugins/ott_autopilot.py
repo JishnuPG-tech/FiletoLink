@@ -26,7 +26,6 @@ from Thunder.utils.logger import logger
 from Thunder.vars import Var
 
 TMDB_BASE = "https://api.themoviedb.org/3"
-DEFAULT_TMDB_KEY = "c189b870db5d1a87c1cb51cae8bfa178"
 
 LANGUAGE_MAP = {
     "ml": "Malayalam",
@@ -66,7 +65,7 @@ _LAST_RUN_DATE: Optional[str] = None
 
 
 def get_tmdb_key() -> str:
-    return getattr(Var, "TMDB_API_KEY", "").strip() or DEFAULT_TMDB_KEY
+    return getattr(Var, "TMDB_API_KEY", "").strip()
 
 
 def get_target_channel() -> Optional[int]:
@@ -203,6 +202,11 @@ async def process_and_post_ott_updates(client: Client, manual: bool = False) -> 
     target_channel = get_target_channel()
     if not target_channel:
         logger.warning("[OTT-AUTOPILOT] No target channel configured (set OTT_CHANNEL_ID or FORCE_CHANNEL_ID).")
+        return {"scanned": 0, "posted": 0, "skipped": 0, "low_pop_skipped": 0, "errors": 0}
+
+    api_key = get_tmdb_key()
+    if not api_key:
+        logger.warning("[OTT-AUTOPILOT] TMDB_API_KEY is not set. Autopilot scan skipped.")
         return {"scanned": 0, "posted": 0, "skipped": 0, "low_pop_skipped": 0, "errors": 0}
 
     now_local = get_local_now()
@@ -510,7 +514,7 @@ async def ott_status_command(client: Client, message: Message):
         f"• **Target Channel:** `{channel_repr}`\n"
         f"• **Filter Mode:** `Trending & Blockbusters Only (High Popularity)`\n"
         f"• **Supported Media:** `Movies & TV Series`\n"
-        f"• **TMDB API Key:** `{'Configured ✅' if key_configured else 'Using Default Key ✅'}`\n"
+        f"• **TMDB API Key:** `{'Configured ✅' if key_configured else 'Missing (Set TMDB_API_KEY) ⚠️'}`\n"
         f"• **Target Region:** `{getattr(Var, 'OTT_REGION', 'IN')} (India)`\n"
         f"• **Schedule Time:** `{hour:02d}:{minute:02d}` Daily (UTC+{offset})\n"
         f"• **Current Local Time:** `{now_local.strftime('%Y-%m-%d %H:%M:%S')}`\n"

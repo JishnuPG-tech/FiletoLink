@@ -230,12 +230,14 @@ async def _serve_media_response(
     if not mime_type:
         mime_type = 'application/octet-stream'
     disposition = get_content_disposition(request)
+    ascii_filename = re.sub(r'[\r\n"\\/]+', '_', filename).encode('ascii', 'replace').decode('ascii')
 
     headers = {
         "Content-Type": mime_type,
         "Content-Length": str(content_length),
         "Content-Disposition": (
-            f"{disposition}; filename*=UTF-8''{quote(filename, safe='')}"),
+            f'{disposition}; filename="{ascii_filename}"; filename*=UTF-8\'\'{quote(filename, safe="")}'
+        ),
         "Accept-Ranges": "bytes",
         "Cache-Control": "public, max-age=31536000",
         "Connection": "keep-alive",
@@ -297,26 +299,54 @@ async def _serve_media_response(
 
 @routes.get("/pay", allow_head=True)
 async def upi_redirect_handler(request: web.Request):
-    upi_uri = f"upi://pay?pa={Var.UPI_ID}&pn=DJ&am={Var.SUB_PRICE}&cu=INR"
+    if not Var.UPI_ID:
+        return web.Response(
+            text="""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Payments Offline - FlashFile</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #08090D; color: #fff; text-align: center; padding: 40px 20px; }
+        .card { max-width: 420px; margin: 40px auto; background: #111318; border: 1px solid #222630; border-radius: 20px; padding: 32px 24px; }
+        h2 { margin-top: 0; color: #D97757; }
+        p { color: #94a3b8; font-size: 15px; line-height: 1.6; }
+        a { display: inline-block; margin-top: 16px; color: #D97757; text-decoration: none; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>⚡ FlashFile Payment Gateway</h2>
+        <p>Online payments are currently disabled or merchant UPI ID is not configured.</p>
+        <a href="/">← Return to FlashFile Home</a>
+    </div>
+</body>
+</html>""",
+            content_type="text/html",
+            status=503
+        )
+
+    upi_uri = f"upi://pay?pa={Var.UPI_ID}&pn=FlashFile&am={Var.SUB_PRICE}&cu=INR"
     html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Pay ₹{Var.SUB_PRICE} - Flash File</title>
+    <title>Pay ₹{Var.SUB_PRICE} - FlashFile</title>
     <meta http-equiv="refresh" content="0; url={upi_uri}">
     <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1115; color: #fff; text-align: center; padding: 40px 20px; }}
-        .card {{ max-width: 400px; margin: 0 auto; background: #181a20; border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }}
-        h2 {{ margin-top: 0; color: #4ade80; }}
-        .btn {{ display: block; background: #2563eb; color: #fff; text-decoration: none; padding: 14px 20px; border-radius: 12px; font-weight: bold; margin: 16px 0; }}
-        .upi-box {{ background: #232730; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 16px; margin: 15px 0; user-select: all; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #08090D; color: #fff; text-align: center; padding: 40px 20px; }}
+        .card {{ max-width: 400px; margin: 0 auto; background: #111318; border: 1px solid #222630; border-radius: 20px; padding: 24px; box-shadow: 0 4px 24px rgba(0,0,0,0.6); }}
+        h2 {{ margin-top: 0; color: #D97757; }}
+        .btn {{ display: block; background: #D97757; color: #fff; text-decoration: none; padding: 14px 20px; border-radius: 12px; font-weight: bold; margin: 16px 0; }}
+        .upi-box {{ background: #1A1D24; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 16px; margin: 15px 0; user-select: all; border: 1px solid #2e3440; }}
     </style>
 </head>
 <body>
     <div class="card">
-        <h2>⚡ Flash File Premium</h2>
-        <p>Redirecting to your UPI app (Google Pay, PhonePe, Paytm)...</p>
+        <h2>⚡ FlashFile Premium</h2>
+        <p>Redirecting to your UPI app (Google Pay, PhonePe, Paytm, Cred)...</p>
         <a class="btn" href="{upi_uri}">Launch UPI App (₹{Var.SUB_PRICE})</a>
         <p style="color: #94a3b8; font-size: 14px;">Or copy UPI ID manually:</p>
         <div class="upi-box">{Var.UPI_ID}</div>

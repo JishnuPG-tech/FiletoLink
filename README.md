@@ -59,7 +59,7 @@ pinned: false
 
 ## About The Project
 
-**Thunder** is a powerful Telegram bot that transforms Telegram files into high-speed direct links, perfect for both streaming and rapid downloading. Share files via HTTP(S) links without needing to download them from the Telegram client first.
+**FlashFile** is a powerful Telegram bot that transforms Telegram files into high-speed direct links, perfect for both streaming and rapid downloading. Share files via HTTP(S) links without needing to download them from the Telegram client first.
 
 ### 💡 Perfect For
 
@@ -125,7 +125,7 @@ Copy `config_sample.env` to `config.env` and fill in your values.
 | `BIN_CHANNEL` | Storage channel ID | `-1001234567890` |
 | `OWNER_ID` | Owner user ID | `12345678` |
 | `DATABASE_URL` | MongoDB connection | `mongodb+srv://...` |
-| `FQDN` | Domain/IP address | `f2l.thunder.com` |
+| `FQDN` | Domain/IP address | `flashfile.hf.space` |
 | `HAS_SSL` | HTTPS enabled | `True` or `False` |
 | `PORT` | Server port | `8080` |
 | `NO_PORT` | Hide port in URLs | `True` or `False` |
@@ -144,7 +144,7 @@ Copy `config_sample.env` to `config.env` and fill in your values.
 | `BANNED_CHANNELS` | Blocked channel IDs | *(empty)* |
 | `SLEEP_THRESHOLD` | Client switch threshold | `300` |
 | `WORKERS` | Async workers | `8` |
-| `NAME` | Bot name | `ThunderF2L` |
+| `NAME` | Bot name | `FlashFile` |
 | `BIND_ADDRESS` | Bind address | `0.0.0.0` |
 | `PING_INTERVAL` | Ping interval (seconds) | `840` |
 | `TOKEN_ENABLED` | Enable tokens | `False` |
@@ -295,7 +295,7 @@ URL_SHORTENER_SITE=shortener.example.com
 
 ### Rate Limiting System
 
-Thunder implements a sophisticated multi-tier rate limiting system designed for high-performance file sharing:
+FlashFile implements a sophisticated multi-tier rate limiting system designed for high-performance file sharing:
 
 #### **Priority Queue Architecture**
 
@@ -327,7 +327,7 @@ Features include download/upload speeds, latency measurements, and shareable res
 
 ## Deployment Guide
 
-This section covers the complete setup process for deploying Thunder, from prerequisites to production deployment.
+This section covers the complete setup process for deploying FlashFile, from prerequisites to production deployment.
 
 ### Prerequisites
 
@@ -354,8 +354,8 @@ cp config_sample.env config.env
 nano config.env  # Edit your settings
 
 # 3. Build and run
-docker build -t thunder .
-docker run -d --name thunder -p 8080:8080 thunder
+docker build -t flashfile .
+docker run -d --name flashfile -p 8080:8080 flashfile
 ```
 
 <details>
@@ -381,7 +381,7 @@ nano config.env
 python -m Thunder
 ```
 
-> **Tip:** Start with the essential configuration to get Thunder running, then add optional features as needed.
+> **Tip:** Start with the essential configuration to get FlashFile running, then add optional features as needed.
 
 </details>
 
@@ -389,21 +389,21 @@ python -m Thunder
 
 ### Deploy to Koyeb
 
-[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=docker&image=docker.io/fyaz05/thunder:latest&name=thunder&ports=8080;http;/&env[API_ID]=&env[API_HASH]=&env[BOT_TOKEN]=&env[BIN_CHANNEL]=&env[OWNER_ID]=&env[DATABASE_URL]=&env[FQDN]=)
+[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=docker&image=docker.io/jishnupg/flashfile:latest&name=thunder&ports=8080;http;/&env[API_ID]=&env[API_HASH]=&env[BOT_TOKEN]=&env[BIN_CHANNEL]=&env[OWNER_ID]=&env[DATABASE_URL]=&env[FQDN]=)
 
 After deployment, to add any additional environment variables, use the Koyeb dashboard under **Settings** → **Environment Variables**.
 
 ### Deploy to Render
 
 1. Open [Render Dashboard](https://dashboard.render.com) → **New** → **Web Service**
-2. Choose **Existing Image**: `fyaz05/thunder:latest`
+2. Choose **Existing Image**: `jishnupg/flashfile:latest`
 3. Add your environment variables
 4. Click **Deploy**
 
 ### Deploy to Railway
 
 1. Open [Railway](https://railway.app) → **New Project** → **Deploy Service**
-2. Choose **Docker Image**: `fyaz05/thunder:latest`
+2. Choose **Docker Image**: `jishnupg/flashfile:latest`
 3. Add your environment variables
 4. Click **Deploy**
 
@@ -454,7 +454,7 @@ This guide will help you set up a secure reverse proxy using **NGINX** for your 
 
 - A **VPS or server** running Ubuntu/Debian with NGINX installed.
 - Your **file streaming bot** running on a local port (e.g., `8080`).
-- A **subdomain** (e.g., `f2l.thunder.com`) set up in **Cloudflare**.
+- A **subdomain** (e.g., `flashfile.hf.space`) set up in **Cloudflare**.
 - **Cloudflare Origin Certificate** files: `cert.pem` and `key.key`.
 
 ---
@@ -471,27 +471,27 @@ This guide will help you set up a secure reverse proxy using **NGINX** for your 
 Create a folder for your certificates and place `cert.pem` and `key.key` inside. Secure the private key.
 
 ```bash
-sudo mkdir -p /etc/ssl/cloudflare/f2l.thunder.com
+sudo mkdir -p /etc/ssl/cloudflare/flashfile.hf.space
 # Move/copy your cert.pem and key.key files into this directory
-sudo chmod 600 /etc/ssl/cloudflare/f2l.thunder.com/key.key
-sudo chmod 644 /etc/ssl/cloudflare/f2l.thunder.com/cert.pem
+sudo chmod 600 /etc/ssl/cloudflare/flashfile.hf.space/key.key
+sudo chmod 644 /etc/ssl/cloudflare/flashfile.hf.space/cert.pem
 ```
 
 ---
 
 #### 🛠️ Step 3: Create NGINX Configuration
 
-Create a new file at `/etc/nginx/sites-available/f2l.thunder.conf` and paste the following, replacing `f2l.thunder.com` and `8080` with your values.
+Create a new file at `/etc/nginx/sites-available/f2l.thunder.conf` and paste the following, replacing `flashfile.hf.space` and `8080` with your values.
 
 ```nginx
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
-    server_name f2l.thunder.com;
+    server_name flashfile.hf.space;
 
     # SSL Configuration
-    ssl_certificate     /etc/ssl/cloudflare/f2l.thunder.com/cert.pem;
-    ssl_certificate_key /etc/ssl/cloudflare/f2l.thunder.com/key.key;
+    ssl_certificate     /etc/ssl/cloudflare/flashfile.hf.space/cert.pem;
+    ssl_certificate_key /etc/ssl/cloudflare/flashfile.hf.space/key.key;
 
     # Basic security
     add_header X-Frame-Options DENY;
@@ -516,7 +516,7 @@ server {
 server {
     listen 80;
     listen [::]:80;
-    server_name f2l.thunder.com;
+    server_name flashfile.hf.space;
     return 301 https://$host$request_uri;
 }
 ```
@@ -553,7 +553,7 @@ A: This is usually a configuration issue. Please check the following:
 **Q: What do I use for the `FQDN` variable?**
 A: It's the public URL or IP address of your bot.
 
-- **With a Domain**: Use your subdomain (e.g., `f2l.thunder.com`).
+- **With a Domain**: Use your subdomain (e.g., `flashfile.hf.space`).
 - **On Koyeb/Render/Heroku**: Use the public URL provided by the platform.
 - **On a VPS**: Use your server's public IP address.
 
