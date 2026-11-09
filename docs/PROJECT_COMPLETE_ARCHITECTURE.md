@@ -1,8 +1,11 @@
 # Comprehensive Architecture, Build Specification & Upgrade Summary
-**Project:** Jellyfin + Thunder FileToLink + Apex Streaming Ecosystem  
+**Project:** FlashFile FileToLink & Streaming Ecosystem  
 **Target Environment:** Hugging Face Spaces (Docker / Debian Bookworm) & Local Development  
-**Last Updated:** October 2026  
+**Last Updated:** November 2026  
 **Document Purpose:** Master technical reference and architectural guide for engineering handoff and autonomous AI agent operations.
+
+> [!IMPORTANT]
+> For the complete modern evolution, brand overhaul, audio synthesis engine, security audit, and OTT autopilot pipeline, refer directly to [FLASHFILE_MASTER_UPGRADE_SUMMARY.md](file:///C:/Users/JISHNU%20PG/Videos/FigCraft/FiletoLink/docs/FLASHFILE_MASTER_UPGRADE_SUMMARY.md).
 
 ---
 
