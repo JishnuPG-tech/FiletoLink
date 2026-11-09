@@ -115,7 +115,7 @@ class Var:
     PAYMENT_ENABLED: bool = str_to_bool(os.getenv("PAYMENT_ENABLED", os.getenv("PAYMENT", os.getenv("Payment", os.getenv("payment", "False")))))
     SUB_PRICE: int = int(os.getenv("SUB_PRICE", "10"))
     SUB_DURATION_DAYS: int = int(os.getenv("SUB_DURATION_DAYS", "30"))
-    UPI_ID: str = os.getenv("UPI_ID", "8590731979@okbizaxis").strip()
+    UPI_ID: str = os.getenv("UPI_ID", "").strip()
     ADMIN_CHANNEL: int = int(os.getenv("ADMIN_CHANNEL", "0"))
 
     # TMDB & OTT Channel Autopilot

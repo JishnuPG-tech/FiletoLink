@@ -43,7 +43,7 @@ All payment configurations are isolated with safe defaults:
 # Payment & Subscription Configuration
 PAYMENT_ENABLED: bool = str_to_bool(os.getenv("PAYMENT", os.getenv("Payment", "False")))
 SUB_PRICE: int = int(os.getenv("SUB_PRICE", "10"))
-UPI_ID: str = os.getenv("UPI_ID", "jishnupg2005-2@okaxis").strip()
+UPI_ID: str = os.getenv("UPI_ID", "").strip()
 UPI_NAME: str = os.getenv("UPI_NAME", "Flash File").strip()
 ADMIN_CHANNEL: int = int(os.getenv("ADMIN_CHANNEL", os.getenv("PAYMENT_LOG_CHANNEL", "0")))
 ```
@@ -121,7 +121,7 @@ To access high-speed streaming, unlimited file conversions, and direct multi-thr
 ### B. UPI Deep Link Specification
 The payment button uses the standard NPCI UPI Intent protocol:
 ```
-upi://pay?pa=jishnupg2005-2@okaxis&pn=Flash%20File&am=10&cu=INR&tn=FlashFile_Sub_{user_id}
+upi://pay?pa=YOUR_UPI_ID&pn=Flash%20File&am=10&cu=INR&tn=FlashFile_Sub_{user_id}
 ```
 * On Android: Directly invokes the UPI App Selector (Google Pay, PhonePe, Paytm, BHIM, Cred) with the receiver name, UPI ID, and exact ₹10 amount locked in.
 * Note contains `FlashFile_Sub_{user_id}` for instant cross-referencing.
