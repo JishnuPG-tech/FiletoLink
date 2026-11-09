@@ -122,9 +122,22 @@ function buildConfig(props: TestimonialEmberProps) {
   };
 }
 
+// Comprehensive Unicode emoji & pictograph pattern
+const EMOJI_REGEX = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}-\u{2B55}\u{200D}\u{FE0F}\u{20E3}\u{D800}-\u{DFFF}]/gu;
+
+export function purgeEmoji(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(EMOJI_REGEX, "")
+    .replace(/^[\s\-_~•·|/\\#@!?,:;+=]+/, "")
+    .replace(/[\s\-_~•·|/\\#@!?,:;+=]+$/, "")
+    .trim();
+}
+
 /** Smart Telegram movie/series filename cleaner & extractor */
 export function parseTelegramFilename(raw: string) {
-  let clean = raw.trim();
+  let clean = purgeEmoji(raw);
+
   const sizeMatch = clean.match(/[\(\[]?(\d+(?:\.\d+)?\s*(?:GB|MB|gb|mb))[\)\]]?/i);
   const size = sizeMatch ? sizeMatch[1].toUpperCase() : "";
 
@@ -132,11 +145,16 @@ export function parseTelegramFilename(raw: string) {
   let resolution = resMatch ? resMatch[1].toUpperCase() : "1080p";
   if (resolution === "2160P") resolution = "4K UHD";
 
-  clean = clean.replace(/\[.*?\]|\(.*?\)/g, " ");
+  // Remove file extension
   clean = clean.replace(/\.(mkv|mp4|avi|webm|mov|ts|m4v|flac)$/i, "");
+  // Remove channel tags like @channel, t.me/..., www...
+  clean = clean.replace(/[@#][\w_]+|t\.me\/[\w_]+|https?:\/\/\S+|www\.\S+/gi, " ");
+  // Remove brackets
+  clean = clean.replace(/\[.*?\]|\{.*?\}/g, " ");
+  clean = clean.replace(/\((?!\d{4}\)).*?\)/g, " ");
   clean = clean.replace(/[\._\-]+/g, " ").trim();
 
-  const tvMatch = clean.match(/\b(S\d{1,2}\s*E\d{1,2}|Season\s*\d+|Episode\s*\d+)\b/i);
+  const tvMatch = clean.match(/\b(S\d{1,2}\s*E\d{1,2}|Season\s*\d+|Episode\s*\d+|E\d{1,2})\b/i);
   const yearMatch = clean.match(/\b(19\d{2}|20\d{2})\b/);
 
   let title = clean;
@@ -144,30 +162,44 @@ export function parseTelegramFilename(raw: string) {
 
   if (tvMatch && tvMatch.index !== undefined) {
     title = clean.slice(0, tvMatch.index).trim();
-    yearOrEpisode = tvMatch[1].toUpperCase();
+    yearOrEpisode = tvMatch[1].toUpperCase().replace(/\s+/g, "");
   } else if (yearMatch && yearMatch.index !== undefined) {
     title = clean.slice(0, yearMatch.index).trim();
     yearOrEpisode = `(${yearMatch[1]})`;
   } else {
-    const cutMatch = clean.match(/\b(2160p|4k|1080p|720p|bluray|web-dl|webrip|hdr|dvd|hdrip|x264|x265|hevc|aac|atmos)\b/i);
+    const cutMatch = clean.match(/\b(2160p|4k|1080p|720p|480p|bluray|brrip|web[\s\-]?dl|webrip|hdr|hdrip|dvd|x264|x265|hevc|aac|atmos|remux|truehd)\b/i);
     if (cutMatch && cutMatch.index !== undefined) {
       title = clean.slice(0, cutMatch.index).trim();
     }
   }
 
-  title = title
-    .split(" ")
-    .filter(Boolean)
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
+  // Strip trailing punctuation e.g. 'Jailer 2 (' -> 'Jailer 2'
+  title = title.replace(/[\s\(\[\-_~:;,.|/\\]+$/g, "").replace(/^[\s\(\[\-_~:;,.|/\\]+/g, "").trim();
 
-  const cleanTitle = yearOrEpisode ? `${title} ${yearOrEpisode}` : title;
+  // Noise words filter
+  const NOISE_WORDS = new Set([
+    "hindi", "tamil", "telugu", "malayalam", "kannada", "dual", "multi",
+    "audio", "sub", "esub", "hc", "rip", "true", "hq", "web", "dl", "bluray",
+    "brrip", "hdrip", "dvd", "x264", "x265", "hevc", "aac", "ds4k", "snxt", "mmax",
+    "jhs", "extraflix", "worldfree4u", "yify", "nf", "amzn", "hotstar"
+  ]);
+
+  const words = title
+    .split(/\s+/)
+    .filter(w => !NOISE_WORDS.has(w.toLowerCase()))
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+
+  title = words.join(" ").trim();
+
+  const cleanTitle = yearOrEpisode ? `${title} ${yearOrEpisode}`.trim() : title;
   const quality = size ? `${resolution} · ${size}` : resolution;
+  const canonKey = title.toLowerCase().replace(/[^a-z0-9]/g, "") || clean.toLowerCase();
 
   return {
-    cleanTitle: cleanTitle || raw,
+    cleanTitle: purgeEmoji(cleanTitle) || purgeEmoji(raw),
     quality,
-    rawFilename: raw,
+    rawFilename: purgeEmoji(raw),
+    canonKey,
   };
 }
 
@@ -226,29 +258,51 @@ const DEFAULT_ITEMS: TestimonialItem[] = [
 
 function parseItems(items?: TestimonialItem[]) {
   const source = Array.isArray(items) && items.length > 0 ? items.filter(Boolean) : DEFAULT_ITEMS;
-  return source.map((item, i) => {
+  const seenKeys = new Set<string>();
+  const results: any[] = [];
+
+  for (let i = 0; i < source.length; i++) {
+    const item = source[i];
     const photo = (item.photoUrl || "").trim();
-    let name = item.name || "";
-    let quote = item.quote || "";
+    let name = purgeEmoji(item.name || "");
+    let quote = purgeEmoji(item.quote || "");
     let quality = item.quality || "";
+
     if (item.rawFilename && (!name || !quote)) {
       const parsed = parseTelegramFilename(item.rawFilename);
       if (!name) name = parsed.cleanTitle;
       if (!quote) quote = `A user used the bot to convert the media ${parsed.cleanTitle} to an instant streaming link.`;
       if (!quality) quality = parsed.quality;
     }
-    return {
+
+    const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (key && seenKeys.has(key)) continue;
+    if (key) seenKeys.add(key);
+
+    results.push({
       quote,
       name,
       role: item.role || "Stream Ready · VLC & MX Player",
       company: item.company || "",
       quality,
-      rawFilename: item.rawFilename || "",
+      rawFilename: purgeEmoji(item.rawFilename || ""),
       rating: clamp(Math.round(item.rating ?? 5), 0, 5),
       date: item.date || "08 NOV 2026",
-      face: photo || DEFAULT_AVATARS[i % DEFAULT_AVATARS.length],
-    };
-  });
+      face: photo || DEFAULT_AVATARS[results.length % DEFAULT_AVATARS.length],
+    });
+  }
+
+  return results.length > 0 ? results : source.map((item, i) => ({
+    quote: purgeEmoji(item.quote || ""),
+    name: purgeEmoji(item.name || ""),
+    role: item.role || "Stream Ready · VLC & MX Player",
+    company: item.company || "",
+    quality: item.quality || "",
+    rawFilename: purgeEmoji(item.rawFilename || ""),
+    rating: clamp(Math.round(item.rating ?? 5), 0, 5),
+    date: item.date || "08 NOV 2026",
+    face: (item.photoUrl || "").trim() || DEFAULT_AVATARS[i % DEFAULT_AVATARS.length],
+  }));
 }
 
 /** Algorithmic FNV-1a barcode generator */
@@ -643,22 +697,33 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
         if (!res.ok) return;
         const data = await res.json();
         if (data.ok && Array.isArray(data.dispatches) && data.dispatches.length > 0 && active) {
-          const mapped: TestimonialItem[] = data.dispatches.map((d: any, idx: number) => {
+          const seenKeys = new Set<string>();
+          const uniqueItems: TestimonialItem[] = [];
+
+          for (let idx = 0; idx < data.dispatches.length; idx++) {
+            const d = data.dispatches[idx];
             const parsed = parseTelegramFilename(d.raw_filename);
-            const isSeries = /S\d{1,2}|Season|Episode/i.test(d.raw_filename);
+            if (!parsed.cleanTitle || !parsed.canonKey) continue;
+            if (seenKeys.has(parsed.canonKey)) continue;
+            seenKeys.add(parsed.canonKey);
+
+            const isSeries = /S\d{1,2}|Season|Episode|E\d{1,2}/i.test(d.raw_filename);
             const mediaType = isSeries ? "series" : "movie";
-            return {
+            uniqueItems.push({
               quote: `A user used the bot to convert the ${mediaType} ${parsed.cleanTitle} to an instant streaming link.`,
               name: parsed.cleanTitle,
               role: "Stream Ready · VLC & MX Player",
               quality: parsed.quality || d.file_size || "Direct Stream",
               date: d.date || "TODAY",
-              rawFilename: d.raw_filename,
+              rawFilename: parsed.rawFilename,
               rating: 5,
-              photoUrl: DEFAULT_AVATARS[idx % DEFAULT_AVATARS.length],
-            };
-          });
-          setLiveItems(mapped);
+              photoUrl: DEFAULT_AVATARS[uniqueItems.length % DEFAULT_AVATARS.length],
+            });
+          }
+
+          if (uniqueItems.length > 0) {
+            setLiveItems(uniqueItems);
+          }
         }
       } catch {
         // Fallback gracefully
