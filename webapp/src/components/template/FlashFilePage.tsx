@@ -525,29 +525,57 @@ function Hero() {
 /* ─────────────────────────── supported apps bar ─────────────────────────── */
 
 function Logos() {
-  const names = [
-    "VLC Player",
-    "MX Player",
-    "Google Chrome",
-    "1DM Mobile",
-    "Apple iOS",
-    "Android",
-    "Smart TVs",
-    "Windows PC",
+  const APPS = [
+    { name: "VLC Player", href: "#players" },
+    { name: "MX Player", href: "#players" },
+    { name: "Google Chrome", href: "#players" },
+    { name: "1DM Mobile", href: "#players" },
+    { name: "Apple iOS", href: "#players" },
+    { name: "Android", href: "#players" },
+    { name: "Smart TVs", href: "#players" },
+    { name: "Windows PC", href: "#players" },
+    { name: "Mac & Linux", href: "#players" },
+    { name: "Infuse Player", href: "#players" },
   ];
+
+  // Duplicate for seamless infinite horizontal ticker
+  const tickerItems = [...APPS, ...APPS];
+
   return (
     <section className="fd-frg-logos" aria-label="Supported Apps">
       <div className="fd-frg-wrap">
         <p className="fd-frg-mini" data-reveal="">
           Streams and downloads seamlessly with the apps already on your device
         </p>
-        <ul>
-          {names.map((n, i) => (
-            <li key={n} data-reveal="" style={{ "--i": i } as CSSProperties} className="fd-frg-wm">
-              {n}
-            </li>
-          ))}
-        </ul>
+        <div className="fd-frg-marquee-shell" data-reveal="">
+          <div className="fd-frg-marquee-track">
+            {tickerItems.map((item, idx) => (
+              <a
+                key={`${item.name}-${idx}`}
+                href={item.href}
+                className="fd-frg-marquee-item"
+                title={`Jump to ${item.name} details in Supported Players`}
+              >
+                <span>{item.name}</span>
+                <svg
+                  className="fd-frg-marquee-arrow"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M7 17L17 7" />
+                  <path d="M7 7h10v10" />
+                </svg>
+              </a>
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -1486,34 +1514,68 @@ const css = `
 .fd-frg-caret { display: inline-block; width: 8px; height: 1.1em; margin-left: -6px; background: var(--fd-frg-accent); animation: fd-frg-blink 1s steps(2, start) infinite; }
 @keyframes fd-frg-blink { to { visibility: hidden; } }
 
-/* logos bar (No overflow, clean 8 columns) */
+/* logos marquee bar (infinite horizontal ticker with href links) */
 .fd-frg-logos { padding: 0 0 96px; }
-.fd-frg-logos ul {
-  display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+.fd-frg-marquee-shell {
+  position: relative;
   margin-top: 28px;
+  overflow: hidden;
   border-top: 1px solid var(--fd-frg-line);
   border-bottom: 1px solid var(--fd-frg-line);
+  background: rgba(255, 255, 255, 0.015);
+  mask-image: linear-gradient(to right, transparent, black 6%, black 94%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 6%, black 94%, transparent);
 }
-.fd-frg-logos li {
+.fd-frg-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: fd-frg-ticker 28s linear infinite;
+  will-change: transform;
+}
+.fd-frg-marquee-shell:hover .fd-frg-marquee-track {
+  animation-play-state: paused;
+}
+.fd-frg-marquee-item {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   height: 76px;
-  padding: 0 12px;
+  padding: 0 32px;
+  min-width: 175px;
   color: var(--fd-frg-mute);
   border-right: 1px solid var(--fd-frg-line);
-  white-space: nowrap;
+  text-decoration: none;
   font-size: 0.875rem;
   font-weight: 500;
   letter-spacing: -0.01em;
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: color var(--fd-dur-2) var(--fd-ease-out);
+  white-space: nowrap;
+  background: transparent;
+  transition: color var(--fd-dur-2) var(--fd-ease-out), background var(--fd-dur-2) var(--fd-ease-out);
 }
-.fd-frg-logos li:last-child { border-right: 0; }
-.fd-frg-logos li:hover { color: var(--fd-frg-fg); }
+.fd-frg-marquee-item:hover {
+  color: #fff;
+  background: rgba(217, 119, 87, 0.08);
+}
+.fd-frg-marquee-arrow {
+  opacity: 0.35;
+  transition: transform var(--fd-dur-2) var(--fd-ease-out), opacity var(--fd-dur-2) var(--fd-ease-out), stroke var(--fd-dur-2) var(--fd-ease-out);
+}
+.fd-frg-marquee-item:hover .fd-frg-marquee-arrow {
+  opacity: 1;
+  stroke: var(--fd-frg-accent);
+  transform: translate(2px, -2px);
+}
+@keyframes fd-frg-ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fd-frg-marquee-track {
+    animation: none;
+    overflow-x: auto;
+  }
+}
 
 /* sections */
 .fd-frg-sec { padding: 128px 0; border-top: 1px solid var(--fd-frg-line); background: #000; }
@@ -2016,9 +2078,6 @@ const css = `
 @media (max-width: 1000px) {
   .fd-frg-nav-links { display: none; }
   .fd-frg-burger { display: block; }
-  .fd-frg-logos ul { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .fd-frg-logos li:nth-child(4) { border-right: 0; }
-  .fd-frg-logos li:nth-child(-n + 4) { border-bottom: 1px solid var(--fd-frg-line); }
   .fd-frg-tl-grid { grid-template-columns: 1fr; gap: 48px; }
   .fd-frg-sticky-head { position: static; }
   .fd-frg-diff-body { grid-template-columns: 1fr; }
@@ -2036,8 +2095,7 @@ const css = `
   .fd-frg-term-title { display: none; }
   .fd-frg-term-bar { justify-content: space-between; }
   .fd-frg-sec { padding: 88px 0; }
-  .fd-frg-logos ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .fd-frg-logos li:nth-child(2n) { border-right: 0; }
+  .fd-frg-marquee-item { height: 60px; padding: 0 20px; min-width: 140px; font-size: 0.8125rem; gap: 8px; }
   .fd-frg-steps { padding-left: 36px; }
   .fd-frg-node { left: -30px; }
   .fd-frg-rail { left: 10px; }

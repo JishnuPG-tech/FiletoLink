@@ -14,4 +14,16 @@ export default defineConfig({
     assetsDir: 'assets',
     emptyOutDir: true,
   },
+  server: {
+    proxy: {
+      '/api/live-dispatches': {
+        target: 'https://jishnupg-filetolink.hf.space',
+        changeOrigin: true,
+      },
+      '/dispatches': {
+        target: 'https://jishnupg-filetolink.hf.space',
+        changeOrigin: true,
+      },
+    },
+  },
 });
