@@ -265,7 +265,7 @@ function parseItems(items?: TestimonialItem[]) {
       if (!quality) quality = parsed.quality;
     }
 
-    const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const key = `${name.toLowerCase().replace(/[^a-z0-9]/g, "")}__${item.role || i}`;
     if (key && seenKeys.has(key)) continue;
     if (key) seenKeys.add(key);
 
@@ -277,7 +277,7 @@ function parseItems(items?: TestimonialItem[]) {
       quality,
       rawFilename: purgeEmoji(item.rawFilename || ""),
       rating: clamp(Math.round(item.rating ?? 5), 0, 5),
-      date: item.date || "08 NOV 2026",
+      date: item.date || "TODAY",
       face: photo || DEFAULT_AVATARS[results.length % DEFAULT_AVATARS.length],
     });
   }
@@ -972,6 +972,7 @@ function PrinterChassis({
 export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
   const cfg = buildConfig(props);
   const [liveItems, setLiveItems] = useState<TestimonialItem[] | null>(null);
+  const dispatchesSigRef = useRef<string>("");
 
   useEffect(() => {
     let active = true;
@@ -984,6 +985,12 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
         if (!res.ok) return;
         const data = await res.json();
         if (data.ok && Array.isArray(data.dispatches) && data.dispatches.length > 0 && active) {
+          const sig = data.dispatches.map((d: any) => d.raw_filename || d.name || "").join("::");
+          if (sig === dispatchesSigRef.current) {
+            return; // Data has not changed, preserve current printing ticket and loop progress
+          }
+          dispatchesSigRef.current = sig;
+
           const seenKeys = new Set<string>();
           const uniqueItems: TestimonialItem[] = [];
 
@@ -997,8 +1004,6 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
             if (key && seenKeys.has(key)) continue;
             if (key) seenKeys.add(key);
 
-            const isSeries = /S\d{1,2}|Season|Episode|E\d{1,2}/i.test(d.raw_filename);
-            const mediaType = isSeries ? "series" : "file";
             uniqueItems.push({
               quote: `A user used @flashfilezbot to convert ${title} to a direct download & stream link.`,
               name: title,
@@ -1021,7 +1026,7 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
     };
 
     fetchDispatches();
-    const interval = setInterval(fetchDispatches, 10000);
+    const interval = setInterval(fetchDispatches, 30000);
     return () => {
       active = false;
       clearInterval(interval);
@@ -1113,19 +1118,6 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
       timerRef.current = null;
     }
   }, []);
-
-  // When live database items arrive, immediately switch to the real files
-  useEffect(() => {
-    if (liveItems && liveItems.length > 0) {
-      setCurrentIndex(0);
-      setCycle((c) => c + 1);
-      setIsFirstRender(false);
-      setIsPrinting(true);
-      printerAudio.startPrintSound(cfg.ru.feed);
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(finishPrinting, (cfg.ru.feed + 1.5) * 1000);
-    }
-  }, [liveItems, cfg.ru.feed, finishPrinting]);
 
   // Initial print on view
   useEffect(() => {
