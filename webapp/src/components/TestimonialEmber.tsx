@@ -381,6 +381,300 @@ function ArrowIcon({ back, color }: { back?: boolean; color: string }) {
   );
 }
 
+function SpeakerIcon({ muted, color }: { muted?: boolean; color: string }) {
+  if (muted) {
+    return (
+      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill={color} />
+        <line x1="23" y1="9" x2="17" y2="15" />
+        <line x1="17" y1="9" x2="23" y2="15" />
+      </svg>
+    );
+  }
+  return (
+    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill={color} />
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+    </svg>
+  );
+}
+
+/** Authentic Web Audio API thermal printer sound synthesizer (motor buzz, paper friction, rip & key ticks) */
+class ThermalPrinterAudio {
+  private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
+  private isPlaying = false;
+  private muted = false;
+  private activeNodes: { stop?: () => void }[] = [];
+
+  public init() {
+    if (typeof window === "undefined") return;
+    try {
+      if (!this.ctx) {
+        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          this.ctx = new AudioCtx();
+        }
+      }
+      if (this.ctx && this.ctx.state === "suspended") {
+        this.ctx.resume().catch(() => {});
+      }
+    } catch (e) {}
+  }
+
+  public startPrintSound(duration = 1.6) {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+
+    this.stopPrintSound();
+
+    try {
+      const now = this.ctx.currentTime;
+      const ctx = this.ctx;
+
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0.001, now);
+      master.gain.linearRampToValueAtTime(0.24, now + 0.05);
+      master.gain.setValueAtTime(0.24, now + Math.max(0.1, duration - 0.12));
+      master.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      master.connect(ctx.destination);
+      this.masterGain = master;
+
+      // 1. Stepper Motor Churn (Dual harmonic oscillators modulated by 26Hz stepping LFO)
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      const motorFilter = ctx.createBiquadFilter();
+      const motorGain = ctx.createGain();
+
+      osc1.type = "sawtooth";
+      osc1.frequency.setValueAtTime(142, now);
+
+      lfo.type = "square";
+      lfo.frequency.setValueAtTime(26, now); // Stepper line pulses
+      lfoGain.gain.setValueAtTime(38, now);
+      lfo.connect(lfoGain);
+      lfoGain.connect(osc1.frequency);
+
+      osc2.type = "square";
+      osc2.frequency.setValueAtTime(284, now);
+
+      motorFilter.type = "bandpass";
+      motorFilter.frequency.setValueAtTime(460, now);
+      motorFilter.Q.setValueAtTime(2.8, now);
+
+      motorGain.gain.setValueAtTime(0.18, now);
+
+      osc1.connect(motorFilter);
+      osc2.connect(motorFilter);
+      motorFilter.connect(motorGain);
+      motorGain.connect(master);
+
+      // 2. Paper Feed Friction / Thermal Head Sizzle (Pink noise burst)
+      const sampleRate = ctx.sampleRate;
+      const bufferSize = Math.floor(sampleRate * Math.min(3, duration));
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      let b0 = 0, b1 = 0, b2 = 0;
+      for (let i = 0; i < bufferSize; i++) {
+        const white = Math.random() * 2 - 1;
+        b0 = 0.99 * b0 + white * 0.05;
+        b1 = 0.95 * b1 + white * 0.1;
+        b2 = 0.85 * b2 + white * 0.25;
+        output[i] = (b0 + b1 + b2 + white * 0.3) * 0.8;
+      }
+
+      const noiseSrc = ctx.createBufferSource();
+      noiseSrc.buffer = noiseBuffer;
+
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = "bandpass";
+      noiseFilter.frequency.setValueAtTime(1600, now);
+      noiseFilter.Q.setValueAtTime(1.6, now);
+
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.14, now);
+
+      noiseSrc.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(master);
+
+      osc1.start(now);
+      osc2.start(now);
+      lfo.start(now);
+      noiseSrc.start(now);
+
+      osc1.stop(now + duration);
+      osc2.stop(now + duration);
+      lfo.stop(now + duration);
+      noiseSrc.stop(now + duration);
+
+      this.activeNodes = [
+        { stop: () => { try { osc1.stop(); } catch(e){} } },
+        { stop: () => { try { osc2.stop(); } catch(e){} } },
+        { stop: () => { try { lfo.stop(); } catch(e){} } },
+        { stop: () => { try { noiseSrc.stop(); } catch(e){} } },
+      ];
+
+      this.isPlaying = true;
+    } catch (e) {}
+  }
+
+  public stopPrintSound() {
+    if (!this.isPlaying) return;
+    this.isPlaying = false;
+    if (this.masterGain && this.ctx) {
+      try {
+        const now = this.ctx.currentTime;
+        this.masterGain.gain.cancelScheduledValues(now);
+        this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
+        this.masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+      } catch (e) {}
+    }
+    this.activeNodes.forEach((n) => {
+      try { n.stop?.(); } catch (e) {}
+    });
+    this.activeNodes = [];
+  }
+
+  public playTearSound() {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+
+    try {
+      const now = this.ctx.currentTime;
+      const ctx = this.ctx;
+      const duration = 0.22;
+      const sampleRate = ctx.sampleRate;
+      const bufferSize = Math.floor(sampleRate * duration);
+      const buffer = ctx.createBuffer(1, bufferSize, sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let i = 0; i < bufferSize; i++) {
+        const decay = Math.exp(-i / (sampleRate * 0.045));
+        data[i] = (Math.random() * 2 - 1) * decay;
+      }
+
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = "highpass";
+      filter.frequency.setValueAtTime(1100, now);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.32, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+      src.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      src.start(now);
+    } catch (e) {}
+  }
+
+  public playClickSound() {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+
+    try {
+      const now = this.ctx.currentTime;
+      const ctx = this.ctx;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(340, now);
+      osc.frequency.exponentialRampToValueAtTime(110, now + 0.035);
+
+      gain.gain.setValueAtTime(0.14, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.035);
+    } catch (e) {}
+  }
+
+  public toggleMute() {
+    this.muted = !this.muted;
+    if (this.muted) this.stopPrintSound();
+    return this.muted;
+  }
+
+  public isMuted() {
+    return this.muted;
+  }
+}
+
+export const printerAudio = new ThermalPrinterAudio();
+
+if (typeof window !== "undefined") {
+  const unlockAudio = () => {
+    printerAudio.init();
+    window.removeEventListener("pointerdown", unlockAudio);
+    window.removeEventListener("touchstart", unlockAudio);
+    window.removeEventListener("keydown", unlockAudio);
+  };
+  window.addEventListener("pointerdown", unlockAudio, { once: true, passive: true });
+  window.addEventListener("touchstart", unlockAudio, { once: true, passive: true });
+  window.addEventListener("keydown", unlockAudio, { once: true, passive: true });
+}
+
+function PrinterSoundButton({
+  cfg,
+  isMuted,
+  onToggle,
+}: {
+  cfg: ReturnType<typeof buildConfig>;
+  isMuted: boolean;
+  onToggle: () => void;
+}) {
+  const [pressed, setPressed] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={isMuted ? "Unmute printer sound" : "Mute printer sound"}
+      title={isMuted ? "Sound: Off (click to unmute)" : "Sound: On (click to mute)"}
+      onClick={() => {
+        printerAudio.playClickSound();
+        onToggle();
+      }}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: 10,
+        border: "none",
+        padding: 0,
+        background: cfg.pr.key,
+        boxShadow: pressed
+          ? `inset 0 1px 0 ${cfg.pr.edge}, 0 1px 0 rgba(0,0,0,0.45)`
+          : `inset 0 1px 0 ${cfg.pr.edge}, 0 3px 0 rgba(0,0,0,0.45)`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxSizing: "border-box",
+        cursor: "pointer",
+        transform: pressed ? "translateY(2px)" : "none",
+        transition: "transform 0.08s ease, box-shadow 0.08s ease",
+      }}
+    >
+      <SpeakerIcon muted={isMuted} color={isMuted ? "#71717A" : cfg.pr.keyIcon} />
+    </button>
+  );
+}
+
 function PrinterKeyButton({
   back,
   cfg,
@@ -395,7 +689,10 @@ function PrinterKeyButton({
     <button
       type="button"
       aria-label={back ? "Print previous testimonial" : "Print next testimonial"}
-      onClick={onPress}
+      onClick={() => {
+        printerAudio.playClickSound();
+        onPress();
+      }}
       onPointerDown={() => setPressed(true)}
       onPointerUp={() => setPressed(false)}
       onPointerLeave={() => setPressed(false)}
@@ -746,6 +1043,7 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerDim, setContainerDim] = useState({ w: 0, h: 0 });
+  const [isMuted, setIsMuted] = useState(false);
   const [inView, setInView] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [reduced, setReduced] = useState(isReducedMotion);
@@ -814,6 +1112,7 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
   }, []);
 
   const finishPrinting = useCallback(() => {
+    printerAudio.stopPrintSound();
     isPrintingRef.current = false;
     setIsPrinting(false);
     if (timerRef.current) {
@@ -829,6 +1128,7 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
     setHasPrintedInitial(true);
     setIsFirstRender(false);
     setIsPrinting(true);
+    printerAudio.startPrintSound(cfg.ru.feed);
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(finishPrinting, (cfg.ru.feed + 1.5) * 1000);
   }, [hasPrintedInitial, inView, isVisible, total, cfg.ru.feed, finishPrinting]);
@@ -838,6 +1138,7 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
     (delta: number) => {
       if (isPrintingRef.current || total < 2 || !hasPrintedInitial) return;
       isPrintingRef.current = true;
+      printerAudio.playTearSound();
       const tilt = (Math.random() > 0.5 ? 1 : -1) * (5 + Math.random() * 9);
       const drift = (Math.random() - 0.5) * 60;
       setDroppingTickets((prev) => [
@@ -848,6 +1149,7 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
       setCycle((c) => c + 1);
       setIsFirstRender(false);
       setIsPrinting(true);
+      printerAudio.startPrintSound(cfg.ru.feed);
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(finishPrinting, (cfg.ru.feed + 2) * 1000);
     },
@@ -981,12 +1283,22 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
                 )
               }
               keys={
-                total > 1 ? (
-                  <>
-                    <PrinterKeyButton back cfg={cfg} onPress={() => changeTicket(-1)} />
-                    <PrinterKeyButton cfg={cfg} onPress={() => changeTicket(1)} />
-                  </>
-                ) : null
+                <>
+                  <PrinterSoundButton
+                    cfg={cfg}
+                    isMuted={isMuted}
+                    onToggle={() => {
+                      const m = printerAudio.toggleMute();
+                      setIsMuted(m);
+                    }}
+                  />
+                  {total > 1 && (
+                    <>
+                      <PrinterKeyButton back cfg={cfg} onPress={() => changeTicket(-1)} />
+                      <PrinterKeyButton cfg={cfg} onPress={() => changeTicket(1)} />
+                    </>
+                  )}
+                </>
               }
             />
           </div>
