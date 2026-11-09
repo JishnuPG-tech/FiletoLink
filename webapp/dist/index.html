@@ -2,26 +2,33 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <script>
       (function () {
-        function applyVirtualCanvas() {
-          // Subtle desktop-like canvas (480px) on mobile phones without enabling heavy 1280px desktop mode
-          var targetW = 480;
-          var w = window.screen.width;
-          if (w > 0 && w < targetW) {
-            var scale = (w / targetW).toFixed(4);
-            var vp = document.querySelector('meta[name="viewport"]');
-            if (vp) {
-              vp.setAttribute('content', 'width=' + targetW + ', initial-scale=' + scale + ', maximum-scale=3.0, user-scalable=yes');
-            }
+        try {
+          var dpr = window.devicePixelRatio || 1;
+          var sw = Math.min(window.screen.width || 0, window.screen.height || 0);
+          // High-DPI Android devices report physical pixels in screen.width (e.g. 1080)
+          var cssW = sw > 600 ? Math.round(sw / dpr) : sw;
+          var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (cssW > 0 && cssW < 600);
+          if (isMobile) {
+            // Subtle, spacious desktop canvas for mobile phones (~520px)
+            var targetW = 520;
+            var scale = Math.max(0.4, Math.min(1.0, (cssW / targetW) || 0.75)).toFixed(3);
+            document.write('<meta name="viewport" content="width=' + targetW + ', initial-scale=' + scale + ', maximum-scale=3.0, user-scalable=yes">');
+          } else {
+            document.write('<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">');
           }
+        } catch (e) {
+          document.write('<meta name="viewport" content="width=device-width, initial-scale=1.0">');
         }
-        applyVirtualCanvas();
-        window.addEventListener('resize', applyVirtualCanvas);
-        window.addEventListener('orientationchange', applyVirtualCanvas);
       })();
     </script>
+    <noscript>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    </noscript>
     <title>FlashFile — Telegram-Powered Media & File Streaming Engine</title>
     <meta name="description" content="Lossless high-throughput media access, byte-range streaming, and direct download links powered by multi-worker Telegram bot infrastructure." />
     <meta name="theme-color" content="#08090D" />
@@ -39,7 +46,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <script type="module" crossorigin src="/assets/index-BmvSZ2vi.js"></script>
+    <script type="module" crossorigin src="/assets/index-68ADh2vt.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-Di5Pxz5s.css">
   </head>
   <body class="bg-ff-bg text-ff-text antialiased selection:bg-ff-accent-soft selection:text-ff-accent overflow-x-hidden min-h-screen">

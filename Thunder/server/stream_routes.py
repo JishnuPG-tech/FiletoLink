@@ -336,7 +336,15 @@ async def root_redirect(request):
             bot_username = getattr(StreamBot, "username", "") or "ThunderF2L_bot"
             config_script = f'<script>window.__FLASHFILE_CONFIG__ = {{"bot_username": "{bot_username}", "server_name": "FileToLink"}};</script>'
             html = html.replace("<head>", f"<head>{config_script}")
-            return web.Response(text=html, content_type="text/html")
+            return web.Response(
+                text=html,
+                content_type="text/html",
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                },
+            )
         except Exception as e:
             logger.warning(f"Failed to serve FlashFile webapp HTML: {e}")
 

@@ -391,13 +391,13 @@ type TLine = { kind: "cmd" | "out" | "ok" | "warn" | "dim" | "sum"; text: string
 
 const SCRIPT: TLine[] = [
   { kind: "cmd", text: "forward movie: Dune.Part.Two.2024.4K.HDR.mkv (6.4 GB)" },
-  { kind: "dim", text: "→ media indexed directly from Telegram cloud — zero upload wait", pause: 380 },
-  { kind: "out", text: "  connecting channels   direct cloud video stream ready", pause: 400 },
-  { kind: "ok", text: "  ✓ direct stream       ready in 0.24 seconds", pause: 260 },
-  { kind: "ok", text: "  ✓ audio check         English 5.1, Hindi Dubbed, Subtitles", pause: 260 },
-  { kind: "ok", text: "  ✓ video quality       4K Ultra HD — 18.4 Mbps bitrate", pause: 260 },
-  { kind: "warn", text: "  ◆ streaming link      https://stream.flashfile.pro/dune2-hdr", pause: 460 },
-  { kind: "ok", text: "  ✓ ready to play       open in VLC, MX Player or Chrome", pause: 360 },
+  { kind: "dim", text: "→ media indexed from Telegram cloud · zero upload wait", pause: 380 },
+  { kind: "out", text: "  status: direct cloud video stream ready", pause: 400 },
+  { kind: "ok", text: "  ✓ direct stream   · ready in 0.24 seconds", pause: 260 },
+  { kind: "ok", text: "  ✓ audio check     · Dolby 5.1, Hindi Dub, Subtitles", pause: 260 },
+  { kind: "ok", text: "  ✓ video quality   · 4K Ultra HD — 18.4 Mbps", pause: 260 },
+  { kind: "warn", text: "  ◆ streaming link  · https://stream.flashfile.pro/dune2-hdr", pause: 460 },
+  { kind: "ok", text: "  ✓ ready to play   · open in VLC, MX Player or Chrome", pause: 360 },
   { kind: "sum", text: "streaming at 124 MB/s · zero phone storage used · no torrents", pause: 0 },
 ];
 
@@ -2101,26 +2101,26 @@ const css = `
   .fd-frg-stats div:nth-child(n + 3) { border-top: 1px solid var(--fd-frg-line); }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .fd-frg { overflow-x: hidden; }
-  .fd-frg-wrap { padding: 0 18px; }
+  .fd-frg-wrap { padding: 0 20px; }
   .fd-frg-nav-in { padding: 0 16px; height: 60px; }
   
   /* Navbar */
-  .fd-frg-brand-text { font-size: 1.125rem; }
+  .fd-frg-brand-text { font-size: 1.1875rem; }
   .fd-frg-nav-right { gap: 8px; }
-  .fd-frg-nav-right .fd-frg-btn { height: 34px; padding: 0 12px; font-size: 0.75rem; }
+  .fd-frg-nav-right .fd-frg-btn { height: 36px; padding: 0 14px; font-size: 0.8125rem; }
   .fd-frg-burger { width: 38px; height: 38px; }
 
   /* Hero Section */
-  .fd-frg-hero { padding-top: 100px; padding-bottom: 72px; }
+  .fd-frg-hero { padding-top: 108px; padding-bottom: 72px; }
   .fd-frg-pill {
     max-width: 100%;
     height: auto;
-    padding: 6px 12px;
+    padding: 6px 14px;
     gap: 8px;
-    font-size: 0.75rem;
-    line-height: 1.35;
+    font-size: 0.78125rem;
+    line-height: 1.4;
   }
   .fd-frg-pill-txt {
     overflow: visible;
@@ -2128,155 +2128,182 @@ const css = `
     white-space: normal;
   }
   .fd-frg-h1 {
-    font-size: clamp(2rem, 7.8vw, 2.75rem);
-    line-height: 1.12;
-    letter-spacing: -0.03em;
-    margin-top: 18px;
+    font-size: clamp(2.25rem, 6.8vw, 3rem);
+    line-height: 1.08;
+    letter-spacing: -0.04em;
+    margin-top: 20px;
   }
   .fd-frg-lede {
-    font-size: 0.9375rem;
+    font-size: 0.9688rem;
     line-height: 1.6;
-    margin-top: 16px;
+    margin-top: 18px;
     padding: 0 4px;
+    max-width: 32em;
   }
   .fd-frg-ctas {
-    flex-direction: column;
+    flex-direction: row;
+    justify-content: center;
     width: 100%;
-    max-width: 320px;
-    margin: 26px auto 0;
-    gap: 10px;
+    margin: 28px auto 0;
+    gap: 12px;
   }
   .fd-frg-ctas .fd-frg-btn {
-    width: 100%;
-    height: 48px;
-    justify-content: center;
+    height: 46px;
+    padding: 0 20px;
     font-size: 0.875rem;
   }
 
-  /* Hero Terminal */
-  .fd-frg-hero-term { margin-top: 36px; }
-  .fd-frg-term { border-radius: 20px; }
-  .fd-frg-term-bar { height: 38px; padding: 0 14px; justify-content: space-between; }
-  .fd-frg-term-title { display: none; }
+  /* Hero Terminal (Full Desktop Alignment & Proportions) */
+  .fd-frg-hero-term { margin-top: 40px; }
+  .fd-frg-term { border-radius: 22px; }
+  .fd-frg-term-bar { height: 40px; padding: 0 16px; justify-content: space-between; }
+  .fd-frg-term-title { display: block; font-size: 0.72rem; }
   .fd-frg-term-body {
     height: auto;
-    min-height: 270px;
-    padding: 14px;
-    font-size: 0.65rem;
-    line-height: 1.7;
+    min-height: 280px;
+    padding: 16px 20px;
+    font-size: 0.7188rem;
+    line-height: 1.85;
+    white-space: pre;
     overflow-x: auto;
+    scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
   }
   .fd-frg-tl {
-    white-space: pre-wrap;
-    word-break: break-word;
-    gap: 6px;
+    white-space: pre;
+    gap: 8px;
   }
 
   /* Section Spacing */
-  .fd-frg-sec { padding: 76px 0; }
-  .fd-frg-eyebrow { font-size: 0.6875rem; }
-  .fd-frg-h2 { font-size: clamp(1.75rem, 6.5vw, 2.25rem); line-height: 1.15; letter-spacing: -0.025em; }
-  .fd-frg-p { font-size: 0.875rem; line-height: 1.55; }
+  .fd-frg-sec { padding: 84px 0; }
+  .fd-frg-eyebrow { font-size: 0.75rem; }
+  .fd-frg-h2 { font-size: clamp(1.875rem, 5.2vw, 2.5rem); line-height: 1.15; letter-spacing: -0.03em; }
+  .fd-frg-p { font-size: 0.9375rem; line-height: 1.55; }
 
   /* Supported Apps Marquee */
-  .fd-frg-logos { padding: 0 0 64px; }
-  .fd-frg-marquee-item { height: 56px; padding: 0 18px; min-width: 135px; font-size: 0.78125rem; gap: 6px; }
+  .fd-frg-logos { padding: 0 0 68px; }
+  .fd-frg-marquee-item { height: 62px; padding: 0 24px; min-width: 150px; font-size: 0.8125rem; gap: 8px; }
 
-  /* Step 01 Timeline Flow - Pixel-Perfect Rail Alignment */
-  .fd-frg-steps { padding-left: 36px; }
-  .fd-frg-rail { left: 16px; width: 2px; }
-  .fd-frg-node { left: -26px; width: 12px; height: 12px; }
-  .fd-frg-steps h3 { font-size: 1.1875rem; line-height: 1.3; }
-  .fd-frg-steps p { font-size: 0.84375rem; line-height: 1.5; }
-  .fd-frg-meter { flex-wrap: wrap; gap: 8px; }
-  .fd-frg-meter-grid { max-width: 155px; }
+  /* Step 01 Timeline Flow - Pixel-Perfect Rail & Node Alignment */
+  .fd-frg-steps { padding-left: 44px; }
+  .fd-frg-rail { left: 14px; width: 2px; }
+  .fd-frg-node { left: -36px; top: 6px; width: 12px; height: 12px; }
+  .fd-frg-steps li { padding-bottom: 48px; }
+  .fd-frg-steps h3 { font-size: 1.25rem; line-height: 1.28; }
+  .fd-frg-steps p { font-size: 0.9063rem; line-height: 1.55; }
+  .fd-frg-meter { flex-wrap: wrap; gap: 10px; }
+  .fd-frg-meter-grid { max-width: 170px; }
   .fd-frg-meter-grid i:nth-child(n + 25) { display: none; }
-  .fd-frg-meter b { font-size: 0.6875rem; }
+  .fd-frg-meter b { font-size: 0.72rem; }
 
-  /* Step 02 Media Stream Analyzer */
-  .fd-frg-diff { border-radius: 20px; margin-top: 36px; }
-  .fd-frg-diff-bar { flex-wrap: wrap; height: auto; padding: 12px 14px; row-gap: 8px; }
-  .fd-frg-diff-status { margin-left: 0; width: 100%; font-size: 0.75rem; }
-  .fd-frg-code { padding: 12px 10px; font-size: 0.625rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .fd-frg-dl { grid-template-columns: 46px 14px 1fr; white-space: normal; word-break: break-word; gap: 6px; line-height: 1.6; }
-  .fd-frg-ln:first-child { display: none; }
-  .fd-frg-ln { white-space: nowrap; text-align: left; color: var(--fd-frg-dim); font-weight: 600; padding-right: 0; }
-  .fd-frg-comments { padding: 14px; }
-  .fd-frg-cmt { padding: 14px; border-radius: 14px; }
-  .fd-frg-cmt header b { font-size: 0.8125rem; }
-  .fd-frg-cmt p { font-size: 0.75rem; line-height: 1.5; }
+  /* Step 02 Media Stream Analyzer (Full Desktop Inspection Table) */
+  .fd-frg-diff { border-radius: 22px; margin-top: 40px; }
+  .fd-frg-diff-bar { flex-wrap: nowrap; height: 46px; padding: 0 18px; }
+  .fd-frg-diff-status { font-size: 0.75rem; }
+  .fd-frg-code {
+    padding: 14px 16px;
+    font-size: 0.7188rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .fd-frg-dl {
+    grid-template-columns: 44px 44px 18px 1fr;
+    white-space: nowrap;
+    gap: 4px;
+    line-height: 1.85;
+  }
+  .fd-frg-ln:first-child { display: block; }
+  .fd-frg-ln { text-align: left; color: var(--fd-frg-dim); font-weight: 500; padding-right: 4px; }
+  .fd-frg-src { overflow: hidden; text-overflow: ellipsis; }
+  .fd-frg-comments { padding: 18px; }
+  .fd-frg-cmt { padding: 16px; border-radius: 16px; }
+  .fd-frg-cmt header b { font-size: 0.8438rem; }
+  .fd-frg-cmt p { font-size: 0.8125rem; line-height: 1.55; }
 
-  /* Step 03 Speed Test Waterfall Chart (Full-Width Stacked Rows for Mobile) */
-  .fd-frg-speed { height: 260vh; }
-  .fd-frg-speed-stick { top: 56px; height: calc(100vh - 56px); }
-  .fd-frg-clock-row { grid-template-columns: 1fr; gap: 10px; border-radius: 18px; padding: 12px 14px; }
-  .fd-frg-clock { padding: 12px 14px; }
-  .fd-frg-clock-n { font-size: 2.25rem; }
-  .fd-frg-gantt { margin-top: 16px; padding: 22px 0 4px; display: flex; flex-direction: column; gap: 10px; }
-  .fd-frg-gantt-axis { position: relative; left: 0; right: 32px; height: 16px; margin-bottom: 2px; }
+  /* Step 03 Speed Test Waterfall Chart (Spacious Side-by-Side Desktop Layout) */
+  .fd-frg-speed { height: 280vh; }
+  .fd-frg-speed-stick { top: 60px; height: calc(100vh - 60px); }
+  .fd-frg-clock-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border-radius: 20px;
+  }
+  .fd-frg-clock { padding: 14px 18px; }
+  .fd-frg-clock-n { font-size: 2.5rem; }
+  .fd-frg-gantt {
+    margin-top: 14px;
+    padding: 24px 0 4px;
+    display: grid;
+    gap: 8px;
+  }
+  .fd-frg-gantt-axis {
+    position: absolute;
+    left: 155px;
+    right: 48px;
+    top: 0;
+    height: 18px;
+  }
+  .fd-frg-gantt-axis span { font-size: 0.72rem; }
   .fd-frg-job {
     display: grid;
-    grid-template-columns: 1fr 32px;
-    grid-template-rows: auto 24px;
-    row-gap: 4px;
-    height: auto;
+    grid-template-columns: 155px 1fr 48px;
+    align-items: center;
+    height: 32px;
   }
   .fd-frg-job-name {
-    grid-column: 1 / -1;
-    font-size: 0.75rem;
+    grid-column: 1 / 2;
+    font-size: 0.72rem;
     font-weight: 500;
     gap: 8px;
-    padding-right: 0;
-    white-space: normal;
+    padding-right: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
+  .fd-frg-step-idx { width: 18px; height: 18px; font-size: 0.625rem; }
   .fd-frg-job-track {
-    grid-column: 1 / 2;
-    height: 22px;
+    grid-column: 2 / 3;
+    height: 100%;
   }
   .fd-frg-job-dur {
-    grid-column: 2 / 3;
-    font-size: 0.6875rem;
-    line-height: 22px;
+    grid-column: 3 / 4;
+    font-size: 0.72rem;
+    line-height: 32px;
     padding-left: 8px;
     text-align: right;
   }
   .fd-frg-playhead {
-    top: 36px;
-    left: calc((100% - 32px) * var(--p));
+    top: 20px;
+    bottom: 0;
+    left: calc(155px + (100% - 155px - 48px) * var(--p));
   }
 
   /* Step 04 Bento Benefits */
-  .fd-frg-bento { grid-template-columns: 1fr; gap: 16px; margin-top: 36px; }
+  .fd-frg-bento { grid-template-columns: 1fr; gap: 16px; margin-top: 40px; }
   .fd-frg-tile-wide { grid-column: auto; }
-  .fd-frg-tile { min-height: auto; padding: 22px; border-radius: 20px; }
-  .fd-frg-tile h3 { font-size: 1.125rem; }
-  .fd-frg-vis-stack { margin: 8px 0; }
-  .fd-frg-vis-stack .fd-frg-stack-card { margin-left: calc(var(--i) * 10px); padding: 10px 12px; gap: 6px; font-size: 0.6875rem; }
-  .fd-frg-vis-flake { grid-template-columns: repeat(8, 1fr); gap: 4px; }
-  .fd-frg-vis-flake i:nth-child(n + 33) { display: none; }
+  .fd-frg-tile { min-height: auto; padding: 26px; border-radius: 22px; }
+  .fd-frg-tile h3 { font-size: 1.1875rem; }
+  .fd-frg-vis-stack { margin: 10px 0; }
+  .fd-frg-vis-stack .fd-frg-stack-card { margin-left: calc(var(--i) * 10px); padding: 12px 14px; gap: 6px; font-size: 0.72rem; }
+  .fd-frg-vis-flake { grid-template-columns: repeat(12, 1fr); gap: 4px; }
 
   /* Step 05 Live Receipt Printer */
-  .fd-frg-printer-container { margin-top: 32px; }
-  .fd-frg-printer-stage { height: 500px; border-radius: 20px; padding: 10px; }
+  .fd-frg-printer-container { margin-top: 36px; }
+  .fd-frg-printer-stage { height: 540px; border-radius: 22px; padding: 12px; }
+
+  /* Supported Players Grid */
+  .fd-frg-int { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 36px; }
+  .fd-frg-int-cell { padding: 18px; border-radius: 18px; }
 
   /* Final CTA */
-  .fd-frg-cta { padding: 84px 0; }
-  .fd-frg-cta-grid { gap: 36px; }
-  .fd-frg-cta-h { font-size: clamp(1.75rem, 6.5vw, 2.25rem); }
-  .fd-frg-copier-frame { height: 420px; max-width: 310px; margin: 0 auto; padding: 8px; }
+  .fd-frg-cta { padding: 96px 0; }
+  .fd-frg-cta-grid { gap: 42px; }
+  .fd-frg-cta-h { font-size: clamp(2rem, 5.5vw, 2.75rem); }
+  .fd-frg-copier-frame { height: 460px; max-width: 360px; margin: 0 auto; padding: 12px; }
   .fd-frg-foot-top { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 480px) {
-  .fd-frg-printer-stage { height: 470px; border-radius: 16px; }
-  .fd-frg-wrap { padding: 0 14px; }
-  .fd-frg-nav-in { padding: 0 14px; }
-  .fd-frg-h1 { font-size: 2.125rem; line-height: 1.1; }
-  .fd-frg-h2 { font-size: 1.625rem; line-height: 1.15; }
-  .fd-frg-clock-n { font-size: 2rem; }
-  .fd-frg-copier-frame { height: 400px; max-width: 295px; }
-}
 @media (prefers-reduced-motion: reduce) {
   .fd-frg *, .fd-frg *::before, .fd-frg *::after { animation: none !important; }
   .fd-frg[data-js] [data-reveal] { transform: none; transition: opacity 120ms linear; transition-delay: 0ms; }
