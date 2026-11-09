@@ -98,7 +98,7 @@ async def get_live_dispatches_from_sources(limit: int = 30) -> List[Dict[str, An
         from Thunder.utils.database import db
         db_records = await db.get_recent_files(limit=limit * 4)
         for r in db_records:
-            raw_fname = r.get("file_name", "")
+            raw_fname = r.get("file_name") or r.get("raw_filename") or r.get("name") or r.get("title") or ""
             fname = purge_emoji(raw_fname)
             key = extract_canonical_key(fname)
             if fname and key and key not in seen_keys:
@@ -109,6 +109,8 @@ async def get_live_dispatches_from_sources(limit: int = 30) -> List[Dict[str, An
                 c_date = r.get("created_at") or r.get("last_seen_at")
                 if hasattr(c_date, "strftime"):
                     date_str = c_date.strftime("%d %b %Y").upper()
+                elif hasattr(r.get("_id"), "generation_time"):
+                    date_str = r["_id"].generation_time.strftime("%d %b %Y").upper()
                 else:
                     date_str = time.strftime("%d %b %Y", time.gmtime()).upper()
 
@@ -121,6 +123,37 @@ async def get_live_dispatches_from_sources(limit: int = 30) -> List[Dict[str, An
                 })
                 if len(items) >= limit:
                     break
+
+        # 2b. Extract from OTT channel posts collection if more items needed
+        if len(items) < limit:
+            try:
+                ott_cursor = db.ott_posts_col.find({}).sort("_id", -1).limit(limit * 2)
+                async for ott in ott_cursor:
+                    title = ott.get("title", "")
+                    if title:
+                        fname = purge_emoji(title)
+                        key = extract_canonical_key(fname)
+                        if fname and key and key not in seen_keys:
+                            seen_keys.add(key)
+                            p_date = ott.get("posted_at")
+                            if hasattr(p_date, "strftime"):
+                                date_str = p_date.strftime("%d %b %Y").upper()
+                            elif hasattr(ott.get("_id"), "generation_time"):
+                                date_str = ott["_id"].generation_time.strftime("%d %b %Y").upper()
+                            else:
+                                date_str = "TODAY"
+                            platform = ott.get("platform") or "OTT 4K Release"
+                            items.append({
+                                "raw_filename": fname,
+                                "file_size": platform,
+                                "stream_url": "",
+                                "timestamp": int(p_date.timestamp()) if hasattr(p_date, "timestamp") else int(time.time()),
+                                "date": date_str,
+                            })
+                            if len(items) >= limit:
+                                break
+            except Exception as e_ott:
+                logger.warning(f"Error fetching live dispatches from ott_posts_col: {e_ott}")
     except Exception as e:
         logger.warning(f"Error fetching live dispatches from db: {e}")
 

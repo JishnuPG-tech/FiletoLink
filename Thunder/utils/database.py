@@ -320,13 +320,25 @@ class Database:
     async def get_recent_files(self, limit: int = 30) -> list:
         try:
             cursor = self.files_col.find(
-                {"file_name": {"$exists": True, "$ne": ""}},
-                {"file_name": 1, "file_size": 1, "created_at": 1, "last_seen_at": 1, "public_hash": 1, "_id": 0}
-            ).sort("created_at", -1).limit(limit)
+                {
+                    "$or": [
+                        {"file_name": {"$exists": True, "$ne": ""}},
+                        {"raw_filename": {"$exists": True, "$ne": ""}},
+                        {"name": {"$exists": True, "$ne": ""}},
+                        {"title": {"$exists": True, "$ne": ""}},
+                    ]
+                },
+                {"file_name": 1, "raw_filename": 1, "name": 1, "title": 1, "file_size": 1, "created_at": 1, "last_seen_at": 1, "public_hash": 1, "_id": 1}
+            ).sort("_id", -1).limit(limit)
             return await cursor.to_list(length=limit)
         except Exception as e:
-            logger.warning(f"Error fetching recent files from DB: {e}")
-            return []
+            logger.warning(f"Error fetching recent files from DB by _id: {e}")
+            try:
+                cursor = self.files_col.find({}).sort("_id", -1).limit(limit)
+                return await cursor.to_list(length=limit)
+            except Exception as e2:
+                logger.warning(f"Fallback fetch from DB failed: {e2}")
+                return []
 
     async def get_file_by_message_id(self, canonical_message_id: int) -> Optional[Dict[str, Any]]:
         try:

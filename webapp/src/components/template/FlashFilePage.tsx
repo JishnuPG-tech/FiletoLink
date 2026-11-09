@@ -320,6 +320,30 @@ const APP_LOGOS: Record<string, ReactNode> = {
   ),
 };
 
+const TelegramPlaneIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m22 2-7 20-4-9-9-4Z" />
+    <path d="M22 2 11 13" />
+  </svg>
+);
+
+const GitHubMarkIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+  </svg>
+);
+
+const BotChipIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 8V4H8" />
+    <rect width="16" height="12" x="4" y="8" rx="2" />
+    <path d="M2 14h2" />
+    <path d="M20 14h2" />
+    <path d="M15 13v2" />
+    <path d="M9 13v2" />
+  </svg>
+);
+
 /* ─────────────────────────── nav (No FlashFile logo, pure typography) ─────────────────────────── */
 
 const NAV = [
@@ -1217,14 +1241,14 @@ function Proof() {
         <div className="fd-frg-printer-container" data-reveal="" style={{ marginTop: "64px" }}>
           <div className="fd-frg-head-row" style={{ marginBottom: "36px", textAlign: "center" }}>
             <div style={{ margin: "0 auto", maxWidth: "680px" }}>
-              <p className="fd-frg-eyebrow">05 — Recent Stream Conversions</p>
+              <p className="fd-frg-eyebrow">05 — Live Database File Conversions</p>
               <h2 className="fd-frg-h2" style={{ textAlign: "center" }}>
-                Recent movies and series,
+                Real database receipts,
                 <br />
-                <span className="fd-frg-h2-mute">streamed live with @flashfilezbot.</span>
+                <span className="fd-frg-h2-mute">converted live with @flashfilezbot.</span>
               </h2>
               <p className="fd-frg-p" style={{ margin: "14px auto 0", textAlign: "center", maxWidth: "560px" }}>
-                Every time a user converts a movie or series to an instant streaming link, the engine prints a verified playback ticket.
+                Every file and movie indexed in your database prints a verified physical receipt directly on this live thermal console.
               </p>
             </div>
           </div>
@@ -1393,17 +1417,17 @@ function Footer() {
               <span className="fd-frg-brand-text">FlashFile</span>
             </a>
             <p className="fd-frg-foot-p">Convert Telegram files to direct high-speed browser download links (Chrome, IDM) and instant 4K streams.</p>
-            <div style={{ display: "flex", gap: "16px", marginTop: "12px", flexWrap: "wrap", alignItems: "center" }}>
-              <a href={config.channelUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--fd-frg-accent)", fontSize: "0.8125rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                📢 Updates Channel
+            <div style={{ display: "flex", gap: "16px", marginTop: "14px", flexWrap: "wrap", alignItems: "center" }}>
+              <a href={config.channelUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--fd-frg-accent)", fontSize: "0.8125rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <TelegramPlaneIcon /> Updates Channel
               </a>
               <span style={{ color: "var(--fd-frg-line-2)" }}>•</span>
-              <a href={config.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--fd-frg-dim)", fontSize: "0.8125rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                🛠️ Developer: JishnuPG-tech
+              <a href={config.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--fd-frg-dim)", fontSize: "0.8125rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <GitHubMarkIcon /> Developer: JishnuPG-tech
               </a>
               <span style={{ color: "var(--fd-frg-line-2)" }}>•</span>
-              <a href={`https://t.me/${config.botUsername}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--fd-frg-mute)", fontSize: "0.8125rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                🤖 Bot: @{config.botUsername}
+              <a href={`https://t.me/${config.botUsername}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--fd-frg-mute)", fontSize: "0.8125rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <BotChipIcon /> Bot: @{config.botUsername}
               </a>
             </div>
             <span className="fd-frg-status" style={{ marginTop: "16px", display: "inline-flex" }}>

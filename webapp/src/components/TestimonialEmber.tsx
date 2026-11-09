@@ -999,20 +999,23 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
 
           for (let idx = 0; idx < data.dispatches.length; idx++) {
             const d = data.dispatches[idx];
+            if (!d || !d.raw_filename) continue;
             const parsed = parseTelegramFilename(d.raw_filename);
-            if (!parsed.cleanTitle || !parsed.canonKey) continue;
-            if (seenKeys.has(parsed.canonKey)) continue;
-            seenKeys.add(parsed.canonKey);
+            const title = parsed.cleanTitle || d.raw_filename;
+            const key = parsed.canonKey || title.toLowerCase().replace(/[^a-z0-9]/g, "");
+            if (!title) continue;
+            if (key && seenKeys.has(key)) continue;
+            if (key) seenKeys.add(key);
 
             const isSeries = /S\d{1,2}|Season|Episode|E\d{1,2}/i.test(d.raw_filename);
-            const mediaType = isSeries ? "series" : "movie";
+            const mediaType = isSeries ? "series" : "file";
             uniqueItems.push({
-              quote: `A user used @flashfilezbot to convert the ${mediaType} ${parsed.cleanTitle} to a direct download & stream link.`,
-              name: parsed.cleanTitle,
+              quote: `A user used @flashfilezbot to convert ${title} to a direct download & stream link.`,
+              name: title,
               role: "Fast Download & Stream · Chrome & VLC",
               quality: parsed.quality || d.file_size || "Direct Download",
               date: d.date || "TODAY",
-              rawFilename: parsed.rawFilename,
+              rawFilename: d.raw_filename,
               rating: 5,
               photoUrl: DEFAULT_AVATARS[uniqueItems.length % DEFAULT_AVATARS.length],
             });
