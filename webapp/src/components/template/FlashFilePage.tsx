@@ -829,7 +829,22 @@ function Speed() {
   const ref = useRef<HTMLElement>(null);
   const clock = useRef<HTMLSpanElement>(null);
   const legacy = useRef<HTMLSpanElement>(null);
+  const [isMobileScreen, setIsMobileScreen] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobileScreen(typeof window !== "undefined" && window.innerWidth <= 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  const inView = useInView(ref, 0.15);
+
+  // Desktop scroll-driven frame
   useScrollFrame(ref, () => {
+    if (isMobileScreen) return;
     const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
@@ -855,6 +870,46 @@ function Speed() {
     }
   });
 
+  // Mobile continuous real-time playback loop (eliminates the empty 280vh black void completely)
+  useEffect(() => {
+    if (!isMobileScreen || !inView) return;
+    let start = performance.now();
+    let frameId: number;
+
+    const tick = (now: number) => {
+      const elapsed = (now - start) / 1000;
+      // 5 seconds live animation + 1.8 seconds hold
+      const cycleTime = 6.8;
+      const progressInCycle = (elapsed % cycleTime);
+      const p = clamp01(progressInCycle / 5);
+      const t = p * TOTAL;
+
+      const el = ref.current;
+      if (el) {
+        el.style.setProperty("--p", p.toFixed(4));
+        el.querySelectorAll<HTMLElement>("[data-job]").forEach((row) => {
+          const s = Number(row.dataset.start);
+          const d = Number(row.dataset.dur);
+          const f = clamp01((t - s) / d);
+          row.style.setProperty("--f", f.toFixed(4));
+          row.dataset.state = f >= 1 ? "done" : f > 0 ? "run" : "wait";
+        });
+      }
+      if (clock.current) {
+        const sec = Math.round(t);
+        clock.current.textContent = `0:0${sec}`;
+      }
+      if (legacy.current) {
+        const lt = Math.round(p * 2520);
+        legacy.current.textContent = `${Math.floor(lt / 60)}:${String(lt % 60).padStart(2, "0")}`;
+      }
+      frameId = requestAnimationFrame(tick);
+    };
+
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [isMobileScreen, inView]);
+
   return (
     <section className="fd-frg-speed" id="speed" ref={ref}>
       <div className="fd-frg-speed-stick">
@@ -866,7 +921,9 @@ function Speed() {
                 Same 4 GB movie. <span className="fd-frg-h2-mute">Watching in 5 seconds.</span>
               </h2>
             </div>
-            <p className="fd-frg-mono fd-frg-speed-hint" aria-hidden="true">Scroll to watch speed test ↓</p>
+            <p className="fd-frg-mono fd-frg-speed-hint" aria-hidden="true">
+              {isMobileScreen ? "Live 5-second test (auto-plays)" : "Scroll to watch speed test ↓"}
+            </p>
           </div>
           <div className="fd-frg-clock-row">
             <div className="fd-frg-clock">
@@ -2102,25 +2159,25 @@ const css = `
 }
 
 @media (max-width: 768px) {
-  .fd-frg { overflow-x: hidden; }
-  .fd-frg-wrap { padding: 0 20px; }
-  .fd-frg-nav-in { padding: 0 16px; height: 60px; }
+  .fd-frg { overflow-x: clip; }
+  .fd-frg-wrap { padding: 0 18px; }
+  .fd-frg-nav-in { padding: 0 16px; height: 56px; }
   
   /* Navbar */
-  .fd-frg-brand-text { font-size: 1.1875rem; }
+  .fd-frg-brand-text { font-size: 1.125rem; }
   .fd-frg-nav-right { gap: 8px; }
-  .fd-frg-nav-right .fd-frg-btn { height: 36px; padding: 0 14px; font-size: 0.8125rem; }
-  .fd-frg-burger { width: 38px; height: 38px; }
+  .fd-frg-nav-right .fd-frg-btn { height: 34px; padding: 0 12px; font-size: 0.78125rem; }
+  .fd-frg-burger { width: 36px; height: 36px; }
 
-  /* Hero Section */
-  .fd-frg-hero { padding-top: 108px; padding-bottom: 72px; }
+  /* Hero Section (Compact & Tight) */
+  .fd-frg-hero { padding-top: 80px; padding-bottom: 32px; }
   .fd-frg-pill {
     max-width: 100%;
     height: auto;
-    padding: 6px 14px;
+    padding: 6px 12px;
     gap: 8px;
-    font-size: 0.78125rem;
-    line-height: 1.4;
+    font-size: 0.75rem;
+    line-height: 1.35;
   }
   .fd-frg-pill-txt {
     overflow: visible;
@@ -2128,15 +2185,15 @@ const css = `
     white-space: normal;
   }
   .fd-frg-h1 {
-    font-size: clamp(2.25rem, 6.8vw, 3rem);
+    font-size: clamp(2.125rem, 6.5vw, 2.75rem);
     line-height: 1.08;
     letter-spacing: -0.04em;
-    margin-top: 20px;
+    margin-top: 16px;
   }
   .fd-frg-lede {
-    font-size: 0.9688rem;
-    line-height: 1.6;
-    margin-top: 18px;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    margin-top: 14px;
     padding: 0 4px;
     max-width: 32em;
   }
@@ -2144,26 +2201,26 @@ const css = `
     flex-direction: row;
     justify-content: center;
     width: 100%;
-    margin: 28px auto 0;
-    gap: 12px;
+    margin: 22px auto 0;
+    gap: 10px;
   }
   .fd-frg-ctas .fd-frg-btn {
-    height: 46px;
-    padding: 0 20px;
-    font-size: 0.875rem;
+    height: 44px;
+    padding: 0 18px;
+    font-size: 0.8438rem;
   }
 
   /* Hero Terminal (Full Desktop Alignment & Proportions) */
-  .fd-frg-hero-term { margin-top: 40px; }
-  .fd-frg-term { border-radius: 22px; }
-  .fd-frg-term-bar { height: 40px; padding: 0 16px; justify-content: space-between; }
-  .fd-frg-term-title { display: block; font-size: 0.72rem; }
+  .fd-frg-hero-term { margin-top: 24px; }
+  .fd-frg-term { border-radius: 20px; }
+  .fd-frg-term-bar { height: 38px; padding: 0 14px; justify-content: space-between; }
+  .fd-frg-term-title { display: block; font-size: 0.6875rem; }
   .fd-frg-term-body {
     height: auto;
-    min-height: 280px;
-    padding: 16px 20px;
+    min-height: 260px;
+    padding: 14px 16px;
     font-size: 0.7188rem;
-    line-height: 1.85;
+    line-height: 1.8;
     white-space: pre;
     overflow-x: auto;
     scrollbar-width: none;
@@ -2174,34 +2231,37 @@ const css = `
     gap: 8px;
   }
 
-  /* Section Spacing */
-  .fd-frg-sec { padding: 84px 0; }
-  .fd-frg-eyebrow { font-size: 0.75rem; }
-  .fd-frg-h2 { font-size: clamp(1.875rem, 5.2vw, 2.5rem); line-height: 1.15; letter-spacing: -0.03em; }
-  .fd-frg-p { font-size: 0.9375rem; line-height: 1.55; }
+  /* Section Spacing (Eliminates All Empty Vertical Voids) */
+  .fd-frg-sec { padding: 44px 0; }
+  .fd-frg-eyebrow { font-size: 0.7188rem; }
+  .fd-frg-h2 { font-size: clamp(1.75rem, 5vw, 2.25rem); line-height: 1.15; letter-spacing: -0.03em; margin-top: 8px; }
+  .fd-frg-p { font-size: 0.9063rem; line-height: 1.5; margin-top: 12px; }
 
   /* Supported Apps Marquee */
-  .fd-frg-logos { padding: 0 0 68px; }
-  .fd-frg-marquee-item { height: 62px; padding: 0 24px; min-width: 150px; font-size: 0.8125rem; gap: 8px; }
+  .fd-frg-logos { padding: 0 0 28px; }
+  .fd-frg-marquee-shell { margin-top: 16px; }
+  .fd-frg-marquee-item { height: 56px; padding: 0 20px; min-width: 140px; font-size: 0.78125rem; gap: 8px; }
 
   /* Step 01 Timeline Flow - Pixel-Perfect Rail & Node Alignment */
-  .fd-frg-steps { padding-left: 44px; }
+  .fd-frg-tl-grid { gap: 28px; }
+  .fd-frg-steps { padding-left: 40px; }
   .fd-frg-rail { left: 14px; width: 2px; }
-  .fd-frg-node { left: -36px; top: 6px; width: 12px; height: 12px; }
-  .fd-frg-steps li { padding-bottom: 48px; }
-  .fd-frg-steps h3 { font-size: 1.25rem; line-height: 1.28; }
-  .fd-frg-steps p { font-size: 0.9063rem; line-height: 1.55; }
-  .fd-frg-meter { flex-wrap: wrap; gap: 10px; }
-  .fd-frg-meter-grid { max-width: 170px; }
+  .fd-frg-node { left: -32px; top: 6px; width: 12px; height: 12px; }
+  .fd-frg-steps li { padding-bottom: 32px; }
+  .fd-frg-steps h3 { font-size: 1.1875rem; line-height: 1.25; margin-top: 6px; }
+  .fd-frg-steps p { font-size: 0.875rem; line-height: 1.5; margin-top: 6px; }
+  .fd-frg-step-meta { margin-top: 10px; }
+  .fd-frg-meter { flex-wrap: wrap; gap: 8px; }
+  .fd-frg-meter-grid { max-width: 160px; }
   .fd-frg-meter-grid i:nth-child(n + 25) { display: none; }
-  .fd-frg-meter b { font-size: 0.72rem; }
+  .fd-frg-meter b { font-size: 0.6875rem; }
 
   /* Step 02 Media Stream Analyzer (Full Desktop Inspection Table) */
-  .fd-frg-diff { border-radius: 22px; margin-top: 40px; }
-  .fd-frg-diff-bar { flex-wrap: nowrap; height: 46px; padding: 0 18px; }
-  .fd-frg-diff-status { font-size: 0.75rem; }
+  .fd-frg-diff { border-radius: 20px; margin-top: 24px; }
+  .fd-frg-diff-bar { flex-wrap: nowrap; height: 42px; padding: 0 16px; }
+  .fd-frg-diff-status { font-size: 0.7188rem; }
   .fd-frg-code {
-    padding: 14px 16px;
+    padding: 12px 14px;
     font-size: 0.7188rem;
     overflow-x: auto;
     scrollbar-width: none;
@@ -2211,49 +2271,62 @@ const css = `
     grid-template-columns: 44px 44px 18px 1fr;
     white-space: nowrap;
     gap: 4px;
-    line-height: 1.85;
+    line-height: 1.8;
   }
   .fd-frg-ln:first-child { display: block; }
   .fd-frg-ln { text-align: left; color: var(--fd-frg-dim); font-weight: 500; padding-right: 4px; }
   .fd-frg-src { overflow: hidden; text-overflow: ellipsis; }
-  .fd-frg-comments { padding: 18px; }
-  .fd-frg-cmt { padding: 16px; border-radius: 16px; }
-  .fd-frg-cmt header b { font-size: 0.8438rem; }
-  .fd-frg-cmt p { font-size: 0.8125rem; line-height: 1.55; }
+  .fd-frg-comments { padding: 14px; gap: 10px; }
+  .fd-frg-cmt { padding: 14px; border-radius: 14px; }
+  .fd-frg-cmt header b { font-size: 0.8125rem; }
+  .fd-frg-cmt p { font-size: 0.78125rem; line-height: 1.5; margin-top: 6px; }
 
-  /* Step 03 Speed Test Waterfall Chart (Spacious Side-by-Side Desktop Layout) */
-  .fd-frg-speed { height: 280vh; }
-  .fd-frg-speed-stick { top: 60px; height: calc(100vh - 60px); }
+  /* Step 03 Speed Test Waterfall Chart (Zero Scroll Void on Mobile) */
+  .fd-frg-speed {
+    height: auto !important;
+    min-height: auto !important;
+    padding: 44px 0 !important;
+  }
+  .fd-frg-speed-stick {
+    position: relative !important;
+    top: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  .fd-frg-speed-in {
+    gap: 16px;
+  }
   .fd-frg-clock-row {
     grid-template-columns: 1fr 1fr;
     gap: 0;
-    border-radius: 20px;
+    border-radius: 18px;
   }
-  .fd-frg-clock { padding: 14px 18px; }
-  .fd-frg-clock-n { font-size: 2.5rem; }
+  .fd-frg-clock { padding: 12px 14px; }
+  .fd-frg-clock-n { font-size: 2.25rem; }
   .fd-frg-gantt {
-    margin-top: 14px;
-    padding: 24px 0 4px;
+    margin-top: 10px;
+    padding: 20px 0 2px;
     display: grid;
-    gap: 8px;
+    gap: 6px;
   }
   .fd-frg-gantt-axis {
     position: absolute;
     left: 155px;
     right: 48px;
     top: 0;
-    height: 18px;
+    height: 16px;
   }
-  .fd-frg-gantt-axis span { font-size: 0.72rem; }
+  .fd-frg-gantt-axis span { font-size: 0.6875rem; }
   .fd-frg-job {
     display: grid;
     grid-template-columns: 155px 1fr 48px;
     align-items: center;
-    height: 32px;
+    height: 30px;
   }
   .fd-frg-job-name {
     grid-column: 1 / 2;
-    font-size: 0.72rem;
+    font-size: 0.7188rem;
     font-weight: 500;
     gap: 8px;
     padding-right: 12px;
@@ -2268,40 +2341,51 @@ const css = `
   }
   .fd-frg-job-dur {
     grid-column: 3 / 4;
-    font-size: 0.72rem;
-    line-height: 32px;
+    font-size: 0.6875rem;
+    line-height: 30px;
     padding-left: 8px;
     text-align: right;
   }
   .fd-frg-playhead {
-    top: 20px;
+    top: 18px;
     bottom: 0;
     left: calc(155px + (100% - 155px - 48px) * var(--p));
   }
 
   /* Step 04 Bento Benefits */
-  .fd-frg-bento { grid-template-columns: 1fr; gap: 16px; margin-top: 40px; }
+  .fd-frg-bento { grid-template-columns: 1fr; gap: 14px; margin-top: 24px; }
   .fd-frg-tile-wide { grid-column: auto; }
-  .fd-frg-tile { min-height: auto; padding: 26px; border-radius: 22px; }
-  .fd-frg-tile h3 { font-size: 1.1875rem; }
-  .fd-frg-vis-stack { margin: 10px 0; }
-  .fd-frg-vis-stack .fd-frg-stack-card { margin-left: calc(var(--i) * 10px); padding: 12px 14px; gap: 6px; font-size: 0.72rem; }
+  .fd-frg-tile { min-height: auto; padding: 22px; border-radius: 20px; }
+  .fd-frg-tile h3 { font-size: 1.125rem; padding-top: 16px; }
+  .fd-frg-vis-stack { margin: 8px 0; }
+  .fd-frg-vis-stack .fd-frg-stack-card { margin-left: calc(var(--i) * 8px); padding: 10px 12px; gap: 4px; font-size: 0.6875rem; }
   .fd-frg-vis-flake { grid-template-columns: repeat(12, 1fr); gap: 4px; }
 
   /* Step 05 Live Receipt Printer */
-  .fd-frg-printer-container { margin-top: 36px; }
-  .fd-frg-printer-stage { height: 540px; border-radius: 22px; padding: 12px; }
+  .fd-frg-printer-container { margin-top: 24px; }
+  .fd-frg-printer-stage { height: 480px; border-radius: 20px; padding: 10px; }
 
   /* Supported Players Grid */
-  .fd-frg-int { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 36px; }
-  .fd-frg-int-cell { padding: 18px; border-radius: 18px; }
+  .fd-frg-int { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 24px; }
+  .fd-frg-int-cell { padding: 16px; border-radius: 16px; }
+
+  /* Proof & Quote */
+  .fd-frg-quote { margin: 36px auto 0; }
+  .fd-frg-quote blockquote { font-size: clamp(1.25rem, 4vw, 1.625rem); }
+
+  /* FAQ */
+  .fd-frg-faq-list { margin-top: 24px; gap: 8px; }
+  .fd-frg-faq-btn { padding: 16px 20px; font-size: 0.9375rem; }
+  .fd-frg-faq-a { padding: 0 20px 16px; font-size: 0.875rem; }
 
   /* Final CTA */
-  .fd-frg-cta { padding: 96px 0; }
-  .fd-frg-cta-grid { gap: 42px; }
-  .fd-frg-cta-h { font-size: clamp(2rem, 5.5vw, 2.75rem); }
-  .fd-frg-copier-frame { height: 460px; max-width: 360px; margin: 0 auto; padding: 12px; }
+  .fd-frg-cta { padding: 56px 0; }
+  .fd-frg-cta-grid { gap: 28px; }
+  .fd-frg-cta-h { font-size: clamp(1.875rem, 5vw, 2.5rem); }
+  .fd-frg-copier-frame { height: 420px; max-width: 340px; margin: 0 auto; padding: 10px; }
   .fd-frg-foot-top { grid-template-columns: 1fr; }
+  .fd-frg-foot { padding: 44px 0 24px; }
+  .fd-frg-foot-bot { margin-top: 24px; padding-top: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
