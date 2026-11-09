@@ -333,8 +333,8 @@ async def root_redirect(request):
         try:
             with open(WEBAPP_INDEX, "r", encoding="utf-8") as f:
                 html = f.read()
-            bot_username = getattr(StreamBot, "username", "") or "ThunderF2L_bot"
-            config_script = f'<script>window.__FLASHFILE_CONFIG__ = {{"bot_username": "{bot_username}", "server_name": "FileToLink"}};</script>'
+            bot_username = getattr(StreamBot, "username", "") or "flashfilezbot"
+            config_script = f'<script>window.__FLASHFILE_CONFIG__ = {{"bot_username": "{bot_username}", "server_name": "FlashFile", "channel_url": "https://t.me/flashfilez"}};</script>'
             html = html.replace("<head>", f"<head>{config_script}")
             return web.Response(
                 text=html,
@@ -352,7 +352,7 @@ async def root_redirect(request):
     return web.json_response({
         "server": {
             "status": "operational",
-            "name": "FileToLink",
+            "name": "FlashFile",
             "version": __version__,
         }
     })

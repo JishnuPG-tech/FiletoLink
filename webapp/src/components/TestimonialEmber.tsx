@@ -75,8 +75,8 @@ const DEFAULT_PAPER = {
   soft: "rgba(26, 25, 23, 0.52)",
   padding: 26,
   lines: 7,
-  header: "STREAM CONVERSION",
-  footer: "TELEGRAM LINK READY · @FLASHFILEZBOT",
+  header: "FILE CONVERSION",
+  footer: "DIRECT DOWNLOAD & STREAM · @FLASHFILEZBOT",
   stars: true,
   avatar: true,
   mono: true,
@@ -205,9 +205,9 @@ export function parseTelegramFilename(raw: string) {
 
 const DEFAULT_ITEMS: TestimonialItem[] = [
   {
-    quote: "A user used the bot to convert the movie Dune: Part Two (2024) to an instant streaming link.",
+    quote: "A user used @flashfilezbot to convert the movie Dune: Part Two (2024) to a high-speed download & stream link.",
     name: "Dune: Part Two (2024)",
-    role: "Stream Ready · VLC & MX Player",
+    role: "Fast Download & Stream · Chrome & VLC",
     rating: 5,
     quality: "4K UHD · 4.2 GB",
     date: "08 NOV 2026",
@@ -215,9 +215,9 @@ const DEFAULT_ITEMS: TestimonialItem[] = [
     rawFilename: "Dune.Part.Two.2024.2160p.UHD.BluRay.x265.10bit.HDR.DDP5.1.Atmos.mkv",
   },
   {
-    quote: "A user used the bot to convert the series Breaking Bad S05E14 to an instant streaming link.",
+    quote: "A user used @flashfilezbot to convert the series Breaking Bad S05E14 to a high-speed download & stream link.",
     name: "Breaking Bad S05E14",
-    role: "Direct Play · 1DM & Infuse",
+    role: "Direct Download & Play · IDM & 1DM",
     rating: 5,
     quality: "1080p · 1.4 GB",
     date: "08 NOV 2026",
@@ -225,9 +225,9 @@ const DEFAULT_ITEMS: TestimonialItem[] = [
     rawFilename: "Breaking.Bad.S05E14.Ozymandias.1080p.10bit.BluRay.x265.mkv",
   },
   {
-    quote: "A user used the bot to convert the movie Interstellar (2014) to an instant streaming link.",
+    quote: "A user used @flashfilezbot to convert the movie Interstellar (2014) to a high-speed download & stream link.",
     name: "Interstellar (2014)",
-    role: "Lossless Passthrough · VLC",
+    role: "Lossless Download & Stream · Chrome",
     rating: 5,
     quality: "4K Remux · 8.6 GB",
     date: "08 NOV 2026",
@@ -235,9 +235,9 @@ const DEFAULT_ITEMS: TestimonialItem[] = [
     rawFilename: "Interstellar.2014.IMAX.2160p.HDR.TrueHD.7.1.x265.mkv",
   },
   {
-    quote: "A user used the bot to convert the series Severance S02E01 to an instant streaming link.",
+    quote: "A user used @flashfilezbot to convert the series Severance S02E01 to a high-speed download & stream link.",
     name: "Severance S02E01",
-    role: "Stream Ready · Apple Safari & iOS",
+    role: "Fast Download & Stream · Apple iOS & Safari",
     rating: 5,
     quality: "4K HDR · 2.1 GB",
     date: "08 NOV 2026",
@@ -245,9 +245,9 @@ const DEFAULT_ITEMS: TestimonialItem[] = [
     rawFilename: "Severance.S02E01.Hello.Ms.Cobel.2160p.WEB-DL.DDP5.1.mkv",
   },
   {
-    quote: "A user used the bot to convert the movie Gladiator II (2024) to an instant streaming link.",
+    quote: "A user used @flashfilezbot to convert the movie Gladiator II (2024) to a high-speed download & stream link.",
     name: "Gladiator II (2024)",
-    role: "Multi-Audio Track · MX Player",
+    role: "Multi-Audio Download & Stream · MX Player",
     rating: 5,
     quality: "1080p · 2.4 GB",
     date: "08 NOV 2026",
@@ -271,7 +271,7 @@ function parseItems(items?: TestimonialItem[]) {
     if (item.rawFilename && (!name || !quote)) {
       const parsed = parseTelegramFilename(item.rawFilename);
       if (!name) name = parsed.cleanTitle;
-      if (!quote) quote = `A user used the bot to convert the media ${parsed.cleanTitle} to an instant streaming link.`;
+      if (!quote) quote = `A user used @flashfilezbot to convert ${parsed.cleanTitle} to a direct download and streaming link.`;
       if (!quality) quality = parsed.quality;
     }
 
@@ -282,7 +282,7 @@ function parseItems(items?: TestimonialItem[]) {
     results.push({
       quote,
       name,
-      role: item.role || "Stream Ready · VLC & MX Player",
+      role: item.role || "Fast Download & Stream · Chrome & VLC",
       company: item.company || "",
       quality,
       rawFilename: purgeEmoji(item.rawFilename || ""),
@@ -1007,10 +1007,10 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
             const isSeries = /S\d{1,2}|Season|Episode|E\d{1,2}/i.test(d.raw_filename);
             const mediaType = isSeries ? "series" : "movie";
             uniqueItems.push({
-              quote: `A user used the bot to convert the ${mediaType} ${parsed.cleanTitle} to an instant streaming link.`,
+              quote: `A user used @flashfilezbot to convert the ${mediaType} ${parsed.cleanTitle} to a direct download & stream link.`,
               name: parsed.cleanTitle,
-              role: "Stream Ready · VLC & MX Player",
-              quality: parsed.quality || d.file_size || "Direct Stream",
+              role: "Fast Download & Stream · Chrome & VLC",
+              quality: parsed.quality || d.file_size || "Direct Download",
               date: d.date || "TODAY",
               rawFilename: parsed.rawFilename,
               rating: 5,

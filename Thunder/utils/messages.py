@@ -122,8 +122,8 @@ MSG_LOG_FILE_MISSING = "⚠️ **Log File Missing:** Could not find the log file
 # ====== BUTTON TEXTS (User-facing) ======
 # =====================================================================================
 
-MSG_BUTTON_STREAM_NOW = "🖥️ Stream"
-MSG_BUTTON_DOWNLOAD = "🚀 Download"
+MSG_BUTTON_STREAM_NOW = "🖥️ Stream Online"
+MSG_BUTTON_DOWNLOAD = "🚀 Fast Download"
 MSG_BUTTON_GET_HELP = "📖 Get Help"
 MSG_BUTTON_CANCEL_BROADCAST = "🛑 Cancel Broadcast"
 MSG_BUTTON_VIEW_PROFILE = "👤 View User Profile"
@@ -140,61 +140,57 @@ MSG_BUTTON_CLOSE = "✖ Close"
 
 MSG_WELCOME = (
     "🌟 **Welcome, {user_name}!** 🌟\n\n"
-    "I'm **Flash File** ⚡\n"
-    "I generate direct download and streaming links for your files.\n\n"
+    "I'm **FlashFile** ⚡\n"
+    "I convert your Telegram files into direct high-speed download links (for Chrome, IDM, or any browser) and provide instant 4K streaming.\n\n"
     "**How to use:**\n"
-    "1. Send any file to me for private links.\n"
-    "2. In groups, reply to a file with `/link`.\n\n"
-    "» Use `/help` for all commands and detailed information.\n\n"
-    "🚀 Send a file to begin!"
+    "> 1. Send or forward any file to me to get instant download & stream links.\n"
+    "> 2. In groups, reply to a file with `/link`.\n\n"
+    "📢 **Updates Channel:** @flashfilez\n"
+    "🛠️ **Developer:** @JishnuPG-tech\n\n"
+    "» Use `/help` for all commands & pro tips.\n\n"
+    "🚀 Send or forward a file to begin!"
 )
 
 MSG_HELP = (
-    "📘 **Flash File - Help Guide** 📖\n\n"
-    "How to get direct download & streaming links:\n\n"
+    "📘 **FlashFile - Help Guide** 📖\n\n"
+    "Convert any Telegram file into a direct high-speed download link for Chrome or any browser, with instant 4K streaming:\n\n"
     "**🚀 Private Chat (with me):**\n"
-    "> 1. Send me **any file** (document, video, audio, photo, etc.).\n"
-    "> 2. I'll instantly reply with your links! ⚡\n\n"
+    "> 1. Send or forward **any file** (document, video, audio, zip, photo up to 4 GB).\n"
+    "> 2. I'll instantly reply with your high-speed direct download link & stream link! ⚡\n\n"
     "**👥 Using in Groups:**\n"
     "> • Reply to any file with `/link`.\n"
-    "> • **Batch Mode:** Reply to the **first** file with `/link <number>` (e.g., `/link 5` for 5 files, up to {max_files}).\n"
-    "> • Bot needs administrator rights in the group to function.\n"
-    "> • Links are posted in the group & sent to you privately.\n\n"
-    "**📢 Using in Channels:**\n"
-    "> • Add me as an administrator with necessary permissions.\n"
-    "> • I can be configured to auto-detect new media files.\n"
-    "> • Inline stream/download buttons can be added to files automatically.\n"
-    "> • Files from banned channels (owner configuration) are rejected.\n"
-    "> • Auto-posting links if the bot has admin privileges with delete rights.\n\n"
+    "> • **Batch Mode:** Reply to the **first** file with `/link <number>` (e.g., `/link 5` up to {max_files} files).\n"
+    "> • Bot needs administrator rights in the group to function.\n\n"
+    "**📢 Channel & Developer:**\n"
+    "> • Updates Channel: https://t.me/flashfilez\n"
+    "> • Developer GitHub: https://github.com/JishnuPG-tech\n\n"
     "**⚙️ Available Commands:**\n"
     "> `/start` 👋 - Welcome message & quick start information.\n"
     "> `/help` 📖 - Shows this help message.\n"
-    "> `/link <num>` 🔗 - (Groups) Generate links. \n"
-    "> `/about` ℹ️ - Learn more about me and my features.\n"
-    "> `/ping` 📡 - Check my responsiveness and online status.\n"
-    "> `/dc` 🌍 - View DC information (for yourself, another user, or a file).\n\n"
+    "> `/link <num>` 🔗 - (Groups) Generate direct links.\n"
+    "> `/about` ℹ️ - Learn about FlashFile features and updates.\n"
+    "> `/ping` 📡 - Check responsiveness and online status.\n"
+    "> `/dc` 🌍 - View Telegram DC datacenter information.\n\n"
     "**💡 Pro Tips:**\n"
-    "> • You can forward files from other chats directly to me.\n"
-    "> • If you encounter a rate limit message, please wait the specified time. ⏳\n"
-    "> • For `/link` in groups to work reliably (and for private link delivery), ensure you've started a private chat with me first.\n"
-    "> • Processing batch files might take a bit longer. Please be patient. 🐌\n\n"
-    "❓ Questions? Please ask in our support group!"
+    "> • Paste the download link into Chrome, Brave, IDM, or 1DM for max speed multi-threaded downloads.\n"
+    "> • All direct links support 100% pause and resume via HTTP 206.\n"
+    "> • Tap 'Stream Online' to watch immediately in VLC or MX Player without saving to phone storage."
 )
 
 MSG_ABOUT = (
-    "🌟 **About Flash File - File to Link Bot** ℹ️\n\n"
-    "I'm your go-to bot for **instant download & streaming!** ⚡\n\n"
-    "**🚀 Key Features:**\n"
-    "> **Instant Links:** Get your links within seconds.\n"
-    "> **Online Streaming:** Watch videos or listen to audio directly (for supported formats).\n"
-    "> **Universal File Support:** Handles documents, videos, audio, photos, and more.\n"
-    "> **High-Speed Access:** Optimized for fast link generation and file access.\n"
-    "> **Secure & Reliable:** Your files are handled with care during processing.\n"
-    "> **User-Friendly Interface:** Designed for ease of use on any device.\n"
-    "> **Efficient Processing:** Built for speed and reliability.\n"
-    "> **Batch Mode:** Process multiple files at once in groups using `/link <number>`.\n"
-    "> **Versatile Usage:** Works in private chats, groups, and channels (with admin setup).\n\n"
-    "💖 If you find me useful, please consider sharing me with your friends!"
+    "🌟 **About FlashFile** ⚡\n\n"
+    "FlashFile converts any Telegram file into a direct high-speed HTTP link for Chrome, IDM, or any browser, plus instant 4K streaming in VLC and MX Player.\n\n"
+    "**🚀 Key Capabilities:**\n"
+    "> 📥 **1-Click Browser Downloads:** Full wire-speed download on Chrome, Brave, IDM, and 1DM.\n"
+    "> 🖥️ **Instant 4K Streaming:** Watch directly in VLC, MX Player, or built-in web cinema.\n"
+    "> ⚡ **HTTP 206 Resumption:** 100% pause & resume if connection drops.\n"
+    "> 📁 **Universal File Support:** MKV, MP4, documents, zip archives, and lossless audio up to 4 GB.\n"
+    "> ☁️ **RAM Direct Stream:** Zero phone storage used for temporary video files.\n\n"
+    "**📢 Project Links:**\n"
+    "> 📢 Channel: https://t.me/flashfilez\n"
+    "> 🛠️ Developer: https://github.com/JishnuPG-tech\n"
+    "> 🤖 Bot: @flashfilezbot\n\n"
+    "💖 Share @flashfilezbot with friends for lightning-fast downloads!"
 )
 
 # ------ Ping ------
@@ -226,12 +222,14 @@ MSG_DC_UNKNOWN = "Unknown"
 # ------ File Link Generation ------
 MSG_DM_SINGLE_PREFIX = "📬 **From {chat_title}**\n"
 MSG_LINKS = (
-    "✨ **Your Links are Ready!** ✨\n\n"
-    "> `{file_name}`\n\n"
-    "📂 **File Size:** `{file_size}`\n\n"
-    "🚀 **Download Link:**\n`{download_link}`\n\n"
-    "🖥️ **Stream Link:**\n`{stream_link}`\n\n"
-    "⌛️ **Note: Links remain active while the bot is running and the file is accessible.**"
+    "⚡ **FlashFile — Your Links are Ready!** ⚡\n\n"
+    "> 📁 `{file_name}`\n"
+    "> 💾 **File Size:** `{file_size}`\n\n"
+    "🚀 **Direct Download Link (Chrome / Browser / IDM):**\n"
+    "`{download_link}`\n\n"
+    "🖥️ **Instant Stream Link (VLC / MX / Web):**\n"
+    "`{stream_link}`\n\n"
+    "⚡ 100% Resumable • Powered by @flashfilezbot"
 )
 
 # =====================================================================================
@@ -400,7 +398,7 @@ MSG_DB_STATS = "📊 **Database Statistics**\n\n> 👥 **Total Users:** `{total_
 
 # Payment & Subscription Messages
 MSG_SUB_PLAN_ACTIVE = (
-    "👑 **Flash File Premium Active**\n\n"
+    "👑 **FlashFile Premium Active**\n\n"
     "👤 **Account:** `{user_name}` (`{user_id}`)\n"
     "📅 **Valid Until:** `{expiry_date}`\n"
     "⏳ **Remaining:** `{remaining_days} days`\n"
@@ -409,7 +407,7 @@ MSG_SUB_PLAN_ACTIVE = (
 )
 
 MSG_SUB_PLAN_FREE = (
-    "⚡ **Flash File Premium Access**\n\n"
+    "⚡ **FlashFile Premium Access**\n\n"
     "Unlock unlimited ultra-fast streaming & direct download links:\n\n"
     "💳 **Monthly Pass:** `₹{price} / 30 Days`\n"
     "✨ Unlimited high-speed streaming links\n"
@@ -420,7 +418,7 @@ MSG_SUB_PLAN_FREE = (
 )
 
 MSG_PAYWALL_GATE = (
-    "🔒 **Flash File Premium Access Required**\n\n"
+    "🔒 **FlashFile Premium Access Required**\n\n"
     "Direct streaming links for this bot require an active pass:\n\n"
     "💎 **Monthly Pass:** `₹{price} / 30 Days` (Unlimited)\n"
     "🎟 **1-Time Pass:** Request temporary access for this file\n\n"

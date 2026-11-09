@@ -25,11 +25,11 @@ export const getSiteConfig = (): SiteConfig => {
 
   return {
     name: 'FlashFile',
-    tagline: 'Lossless Telegram Media & File Streaming Engine',
-    description: 'Direct HTTP byte-range video streaming, high-speed pipelines, and 1-tap external player integration powered by Telegram MTProto.',
+    tagline: 'Telegram File to Direct Link & Fast Downloader',
+    description: 'Convert any Telegram file into a direct high-speed download link for Chrome, IDM, or any browser, plus instant 4K media streaming in VLC and MX Player.',
     botUsername: serverConfig?.bot_username || envBot?.replace('https://t.me/', '') || 'flashfilezbot',
-    channelUrl: serverConfig?.channel_url || 'https://t.me/Thunder_Updates',
-    githubUrl: 'https://github.com/JishnuPG-tech/FiletoLink',
+    channelUrl: serverConfig?.channel_url || 'https://t.me/flashfilez',
+    githubUrl: 'https://github.com/JishnuPG-tech',
     statusEndpoint: '/status',
   };
 };

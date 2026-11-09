@@ -1,5 +1,5 @@
 ---
-title: FileToLink
+title: FlashFile
 emoji: ⚡
 colorFrom: blue
 colorTo: indigo
@@ -8,19 +8,18 @@ pinned: false
 ---
 
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/gh/fyaz05/Resources@main/FileToLink/Thunder.jpg" alt="Thunder Logo" width="120">
-  <h1 align="center">⚡ Thunder</h1>
+  <h1 align="center">⚡ FlashFile</h1>
 </p>
 
 <p align="center">
-  <b>High-Performance Telegram File-to-Link Bot for Direct Links & Streaming</b>
+  <b>Convert Telegram Files to High-Speed Direct Download Links (Chrome / Any Browser) & Instant 4K Streaming</b>
 </p>
 
 <p align="center">
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.13%2B-blue?style=for-the-badge&logo=python" alt="Python Version"></a>
-  <a href="https://github.com/Mayuri-Chan/pyrofork"><img src="https://img.shields.io/badge/Pyrofork-red?style=for-the-badge" alt="Pyrofork"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/fyaz05/FileToLink?style=for-the-badge&color=green" alt="License"></a>
-  <a href="https://t.me/Thunder_Updates"><img src="https://img.shields.io/badge/Telegram-Channel-blue?style=for-the-badge&logo=telegram" alt="Telegram Channel"></a>
+  <a href="https://github.com/JishnuPG-tech/FiletoLink"><img src="https://img.shields.io/badge/GitHub-JishnuPG--tech-orange?style=for-the-badge&logo=github" alt="GitHub"></a>
+  <a href="https://t.me/flashfilez"><img src="https://img.shields.io/badge/Telegram-Channel-blue?style=for-the-badge&logo=telegram" alt="Telegram Channel"></a>
+  <a href="https://t.me/flashfilezbot"><img src="https://img.shields.io/badge/Telegram-Bot-blue?style=for-the-badge&logo=telegram" alt="Telegram Bot"></a>
 </p>
 
 <hr>
@@ -347,7 +346,7 @@ This section covers the complete setup process for deploying Thunder, from prere
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/fyaz05/FileToLink.git
+git clone https://github.com/JishnuPG-tech/FiletoLink.git
 cd FileToLink
 
 # 2. Configure
@@ -364,7 +363,7 @@ docker run -d --name thunder -p 8080:8080 thunder
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/fyaz05/FileToLink.git
+git clone https://github.com/JishnuPG-tech/FiletoLink.git
 cd FileToLink
 
 # 2. Setup virtual environment
@@ -435,7 +434,7 @@ After deployment, to add any additional environment variables, use the Koyeb das
    ```
 7. Set `UPSTREAM_REPO` for auto-updates on dyno restart:
    ```bash
-   heroku config:set UPSTREAM_REPO="https://github.com/fyaz05/FileToLink" UPSTREAM_BRANCH="main"
+   heroku config:set UPSTREAM_REPO="https://github.com/JishnuPG-tech/FiletoLink" UPSTREAM_BRANCH="main"
    ```
 
 > **Note:** Heroku provides HTTPS automatically. Set `FQDN` to `your-app-name.herokuapp.com` and `HAS_SSL` to `True`.
@@ -626,6 +625,6 @@ This project is not affiliated with Telegram. Use it responsibly and in complian
 
 <p align="center">
   <b>⭐ Star this project if you find it useful!</b><br>
-  <a href="https://github.com/fyaz05/FileToLink/issues/new">Report Bug</a> •
-  <a href="https://github.com/fyaz05/FileToLink/issues/new">Request Feature</a>
+  <a href="https://github.com/JishnuPG-tech/FiletoLink/issues/new">Report Bug</a> •
+  <a href="https://github.com/JishnuPG-tech/FiletoLink/issues/new">Request Feature</a>
 </p>

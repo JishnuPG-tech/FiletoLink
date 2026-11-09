@@ -9,7 +9,7 @@
  * - Bot username: @flashfilezbot
  */
 import React, { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { getTelegramBotLink } from "../../content/site-config";
+import { getTelegramBotLink, getSiteConfig } from "../../content/site-config";
 import Copier from "../Copier";
 import { TestimonialEmber } from "../TestimonialEmber";
 
@@ -390,15 +390,15 @@ function Nav() {
 type TLine = { kind: "cmd" | "out" | "ok" | "warn" | "dim" | "sum"; text: string; pause?: number };
 
 const SCRIPT: TLine[] = [
-  { kind: "cmd", text: "forward movie: Dune.Part.Two.2024.4K.HDR.mkv (6.4 GB)" },
-  { kind: "dim", text: "→ media indexed from Telegram cloud · zero upload wait", pause: 380 },
-  { kind: "out", text: "  status: direct cloud video stream ready", pause: 400 },
-  { kind: "ok", text: "  ✓ direct stream   · ready in 0.24 seconds", pause: 260 },
-  { kind: "ok", text: "  ✓ audio check     · Dolby 5.1, Hindi Dub, Subtitles", pause: 260 },
-  { kind: "ok", text: "  ✓ video quality   · 4K Ultra HD — 18.4 Mbps", pause: 260 },
-  { kind: "warn", text: "  ◆ streaming link  · https://stream.flashfile.pro/dune2-hdr", pause: 460 },
-  { kind: "ok", text: "  ✓ ready to play   · open in VLC, MX Player or Chrome", pause: 360 },
-  { kind: "sum", text: "streaming at 124 MB/s · zero phone storage used · no torrents", pause: 0 },
+  { kind: "cmd", text: "forward file: Dune.Part.Two.2024.4K.HDR.mkv (6.4 GB)" },
+  { kind: "dim", text: "→ file indexed from Telegram cloud · zero upload wait", pause: 380 },
+  { kind: "out", text: "  status: direct high-speed download & stream links ready", pause: 400 },
+  { kind: "ok", text: "  ✓ download link   · fast resume in Chrome, IDM & browsers", pause: 260 },
+  { kind: "ok", text: "  ✓ direct stream   · 4K UHD playback in VLC & MX Player", pause: 260 },
+  { kind: "ok", text: "  ✓ audio check     · Dolby 5.1, Multi-Dub, Subtitles", pause: 260 },
+  { kind: "warn", text: "  ◆ direct link     · https://flashfile.pro/dl/dune2-hdr", pause: 460 },
+  { kind: "ok", text: "  ✓ wire speed      · full bandwidth saturation (124 MB/s)", pause: 360 },
+  { kind: "sum", text: "direct browser download & instant streaming · 100% resumable", pause: 0 },
 ];
 
 function Terminal() {
@@ -447,7 +447,7 @@ function Terminal() {
           <i />
           <i />
         </span>
-        <span className="fd-frg-term-title">Telegram Movie Streaming Engine</span>
+        <span className="fd-frg-term-title">FlashFile — File to Link & Streaming Engine</span>
         <button type="button" className="fd-frg-term-replay" onClick={() => setRun((r) => r + 1)} disabled={!done}>
           Replay
         </button>
@@ -474,7 +474,7 @@ function Terminal() {
         )}
       </div>
       <p className="fd-frg-sr" aria-live="polite">
-        {done ? "Demonstration: 6.4 GB Telegram video converted to direct streaming link in 0.24 seconds." : ""}
+        {done ? "Demonstration: 6.4 GB Telegram video converted to direct download and streaming links in 0.24 seconds." : ""}
       </p>
     </div>
   );
@@ -485,21 +485,20 @@ function Hero() {
     <section className="fd-frg-hero" id="top">
       <div className="fd-frg-wrap fd-frg-hero-in">
         <a className="fd-frg-pill fd-frg-in" href="#speed" style={{ "--d": "0ms" } as CSSProperties}>
-          <span className="fd-frg-pill-new">DIRECT STREAM</span>{" "}
-          <span className="fd-frg-pill-txt">Watch movies instantly without saving to phone</span> <Arrow />
+          <span className="fd-frg-pill-new">FILE TO LINK</span>{" "}
+          <span className="fd-frg-pill-txt">Convert Telegram files to high-speed browser downloads</span> <Arrow />
         </a>
         <h1 className="fd-frg-h1">
           <span className="fd-frg-in" style={{ "--d": "80ms" } as CSSProperties}>
-            Watch any Telegram movie.
+            Convert Telegram files.
           </span>
           <span className="fd-frg-in fd-frg-h1-mute" style={{ "--d": "180ms" } as CSSProperties}>
-            Skip the download.
+            Download anywhere at full speed.
           </span>
         </h1>
         <p className="fd-frg-lede fd-frg-in" style={{ "--d": "280ms" } as CSSProperties}>
-          Downloading files inside Telegram is slow, stops when your phone locks, and fills up your phone storage.
-          FlashFile turns any Telegram movie into a clean, direct HTTP link that streams 4K video instantly in VLC or MX Player,
-          with zero torrents and zero waiting.
+          Downloading large files inside Telegram is slow, easily gets interrupted, and locks you into the app.
+          FlashFile converts any Telegram file into a direct, high-speed HTTP link for Chrome, IDM, or any browser—with instant 4K streaming in VLC and MX Player as a bonus.
         </p>
         <div className="fd-frg-ctas fd-frg-in" style={{ "--d": "360ms" } as CSSProperties}>
           <a
@@ -676,12 +675,12 @@ function Timeline() {
         <div className="fd-frg-sticky-head" data-reveal="">
           <p className="fd-frg-eyebrow">01 — Simple 5-Second Flow</p>
           <h2 className="fd-frg-h2">
-            From Telegram to player,
+            From Telegram to browser download,
             <br />
             <span className="fd-frg-h2-mute">in under five seconds.</span>
           </h2>
           <p className="fd-frg-p">
-            No registration, no software to install, no passwords. Forward your movie to @flashfilezbot and start watching or downloading right away.
+            No registration, no software to install, no passwords. Forward your file to @flashfilezbot and start high-speed browser downloading or 4K streaming right away.
           </p>
         </div>
         <ol className="fd-frg-steps" ref={list}>
@@ -916,9 +915,9 @@ function Speed() {
         <div className="fd-frg-wrap fd-frg-speed-in">
           <div className="fd-frg-speed-head">
             <div>
-              <p className="fd-frg-eyebrow">03 — The 5-Second Stream</p>
+              <p className="fd-frg-eyebrow">03 — Wire-Speed Downloads & Streaming</p>
               <h2 className="fd-frg-h2">
-                Same 4 GB movie. <span className="fd-frg-h2-mute">Watching in 5 seconds.</span>
+                Same 4 GB file. <span className="fd-frg-h2-mute">Downloading at full speed.</span>
               </h2>
             </div>
             <p className="fd-frg-mono fd-frg-speed-hint" aria-hidden="true">
@@ -1384,6 +1383,7 @@ function Cta() {
 }
 
 function Footer() {
+  const config = getSiteConfig();
   return (
     <footer className="fd-frg-foot">
       <div className="fd-frg-wrap">
@@ -1392,15 +1392,28 @@ function Footer() {
             <a href="#top" className="fd-frg-brand" aria-label="FlashFile home">
               <span className="fd-frg-brand-text">FlashFile</span>
             </a>
-            <p className="fd-frg-foot-p">High-speed Telegram media streaming and resumable download engine.</p>
-            <span className="fd-frg-status">
-              All streaming servers operational
+            <p className="fd-frg-foot-p">Convert Telegram files to direct high-speed browser download links (Chrome, IDM) and instant 4K streams.</p>
+            <div style={{ display: "flex", gap: "16px", marginTop: "12px", flexWrap: "wrap", alignItems: "center" }}>
+              <a href={config.channelUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--fd-frg-accent)", fontSize: "0.8125rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                📢 Updates Channel
+              </a>
+              <span style={{ color: "var(--fd-frg-line-2)" }}>•</span>
+              <a href={config.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--fd-frg-dim)", fontSize: "0.8125rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                🛠️ Developer: JishnuPG-tech
+              </a>
+              <span style={{ color: "var(--fd-frg-line-2)" }}>•</span>
+              <a href={`https://t.me/${config.botUsername}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--fd-frg-mute)", fontSize: "0.8125rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                🤖 Bot: @{config.botUsername}
+              </a>
+            </div>
+            <span className="fd-frg-status" style={{ marginTop: "16px", display: "inline-flex" }}>
+              All download pipelines & streaming servers operational
             </span>
           </div>
         </div>
         <div className="fd-frg-foot-bot">
-          <span>&copy; {new Date().getFullYear()} FlashFile Engine. Free & Open Source.</span>
-          <span className="fd-frg-mono">Direct HTTP 206 Streaming Infrastructure · @flashfilezbot</span>
+          <span>&copy; {new Date().getFullYear()} FlashFile. Developed by <a href="https://github.com/JishnuPG-tech" target="_blank" rel="noopener noreferrer" style={{ color: "var(--fd-frg-accent)", textDecoration: "underline" }}>JishnuPG-tech</a>.</span>
+          <span className="fd-frg-mono">Direct HTTP 206 Browser Download & Streaming Engine · @flashfilezbot</span>
         </div>
       </div>
     </footer>

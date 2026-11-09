@@ -58,8 +58,8 @@ async def fwd_media(m_msg: Message) -> Optional[Message]:
 
 def get_link_buttons(links):
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton(MSG_BUTTON_STREAM_NOW, url=links['stream_link']),
-        InlineKeyboardButton(MSG_BUTTON_DOWNLOAD, url=links['online_link'])
+        InlineKeyboardButton(MSG_BUTTON_DOWNLOAD, url=links['online_link']),
+        InlineKeyboardButton(MSG_BUTTON_STREAM_NOW, url=links['stream_link'])
     ]])
 
 

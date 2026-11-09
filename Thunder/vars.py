@@ -31,7 +31,7 @@ class Var:
     BOT_TOKEN: str = os.getenv("BOT_TOKEN", "").strip(" '\"")
 
     logger.info(
-        "FileToLink Telegram configuration loaded "
+        "FlashFile Telegram configuration loaded "
         "(api_id=%s, api_hash=%s, bot_token=%s)",
         "set" if API_ID else "missing",
         "set" if API_HASH else "missing",
@@ -42,7 +42,7 @@ class Var:
         logger.critical("Missing required Telegram API configuration")
         raise ValueError("Missing required Telegram API configuration")
 
-    NAME: str = os.getenv("NAME", "ThunderF2L")
+    NAME: str = os.getenv("NAME", "FlashFile")
     SLEEP_THRESHOLD: int = int(os.getenv("SLEEP_THRESHOLD", "600"))
     WORKERS: int = int(os.getenv("WORKERS", "8"))
 
