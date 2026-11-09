@@ -165,26 +165,68 @@ async def get_live_dispatches_from_sources(limit: int = 30) -> List[Dict[str, An
             from Thunder.utils.file_properties import get_fname, get_media
 
             if StreamBot and getattr(StreamBot, "is_connected", False) and Var.BIN_CHANNEL:
-                async for msg in StreamBot.get_chat_history(Var.BIN_CHANNEL, limit=limit * 4):
-                    media = get_media(msg)
-                    if media:
-                        raw_fname = get_fname(msg)
-                        fname = purge_emoji(raw_fname)
-                        key = extract_canonical_key(fname)
-                        if fname and key and key not in seen_keys:
-                            seen_keys.add(key)
-                            s_bytes = getattr(media, "file_size", 0) or 0
-                            items.append({
-                                "raw_filename": fname,
-                                "file_size": humanbytes(s_bytes) if s_bytes else "",
-                                "stream_url": "",
-                                "timestamp": int(msg.date.timestamp()) if msg.date else int(time.time()),
-                                "date": msg.date.strftime("%d %b %Y").upper() if msg.date else "TODAY",
-                            })
+                # Find maximum message ID in BIN_CHANNEL without calling forbidden get_chat_history
+                max_id = 0
+                try:
+                    from Thunder.utils.database import db
+                    latest_doc = await db.files_col.find_one({}, sort=[("canonical_message_id", -1)])
+                    if latest_doc:
+                        max_id = int(latest_doc.get("canonical_message_id", 0) or 0)
+                except Exception:
+                    pass
+
+                if max_id <= 0:
+                    try:
+                        ping_msg = await StreamBot.send_message(
+                            chat_id=int(Var.BIN_CHANNEL),
+                            text=".",
+                            disable_notification=True
+                        )
+                        max_id = ping_msg.id
+                        await ping_msg.delete()
+                    except Exception as e_ping:
+                        logger.debug(f"Could not probe BIN_CHANNEL max_id via ping: {e_ping}")
+                        max_id = 50
+
+                if max_id > 0:
+                    scan_ids = list(range(max(1, max_id - 60), max_id + 1))
+                    scan_ids.reverse()  # most recent first
+
+                    # Fetch in batches of 30 (fully supported for bot accounts)
+                    for start_i in range(0, len(scan_ids), 30):
+                        batch = scan_ids[start_i:start_i + 30]
+                        try:
+                            msgs = await StreamBot.get_messages(chat_id=int(Var.BIN_CHANNEL), message_ids=batch)
+                            if not isinstance(msgs, list):
+                                msgs = [msgs]
+                            for msg in msgs:
+                                if not msg or getattr(msg, "empty", False):
+                                    continue
+                                media = get_media(msg)
+                                if media:
+                                    raw_fname = get_fname(msg)
+                                    fname = purge_emoji(raw_fname)
+                                    key = extract_canonical_key(fname)
+                                    if fname and key and key not in seen_keys:
+                                        seen_keys.add(key)
+                                        s_bytes = getattr(media, "file_size", 0) or 0
+                                        msg_date = getattr(msg, "date", None)
+                                        items.append({
+                                            "raw_filename": fname,
+                                            "file_size": humanbytes(s_bytes) if s_bytes else "",
+                                            "stream_url": "",
+                                            "timestamp": int(msg_date.timestamp()) if msg_date else int(time.time()),
+                                            "date": msg_date.strftime("%d %b %Y").upper() if msg_date else "TODAY",
+                                        })
+                                        if len(items) >= limit:
+                                            break
                             if len(items) >= limit:
                                 break
+                        except Exception as e_batch:
+                            logger.debug(f"Error fetching batch from BIN_CHANNEL: {e_batch}")
+                            break
         except Exception as e:
-            logger.warning(f"Error fetching from BIN_CHANNEL history: {e}")
+            logger.warning(f"Error fetching from BIN_CHANNEL: {e}")
 
     return items[:limit]
 

@@ -205,59 +205,49 @@ export function parseTelegramFilename(raw: string) {
 
 const DEFAULT_ITEMS: TestimonialItem[] = [
   {
-    quote: "A user used @flashfilezbot to convert the movie Dune: Part Two (2024) to a high-speed download & stream link.",
-    name: "Dune: Part Two (2024)",
+    quote: "A user used @flashfilezbot to convert the movie Dont Trouble the Trouble (2026) to a high-speed download & stream link.",
+    name: "Dont Trouble the Trouble (2026)",
     role: "Fast Download & Stream · Chrome & VLC",
     rating: 5,
-    quality: "4K UHD · 4.2 GB",
-    date: "08 NOV 2026",
+    quality: "1080p · 1.79 GB",
+    date: "09 NOV 2026",
     photoUrl: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=120&auto=format&fit=crop&q=80",
-    rawFilename: "Dune.Part.Two.2024.2160p.UHD.BluRay.x265.10bit.HDR.DDP5.1.Atmos.mkv",
+    rawFilename: "Dont Trouble the Trouble (2026) Malayalam HQ HDRip - 108.mkv",
   },
   {
-    quote: "A user used @flashfilezbot to convert the series Breaking Bad S05E14 to a high-speed download & stream link.",
-    name: "Breaking Bad S05E14",
+    quote: "A user used @flashfilezbot to convert the movie Dont Trouble the Trouble (2026) to an instant 4K streaming link.",
+    name: "Dont Trouble the Trouble (2026)",
     role: "Direct Download & Play · IDM & 1DM",
     rating: 5,
-    quality: "1080p · 1.4 GB",
-    date: "08 NOV 2026",
+    quality: "4K HDR · 1.79 GB",
+    date: "09 NOV 2026",
     photoUrl: "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=120&auto=format&fit=crop&q=80",
-    rawFilename: "Breaking.Bad.S05E14.Ozymandias.1080p.10bit.BluRay.x265.mkv",
+    rawFilename: "Dont Trouble the Trouble (2026) Malayalam HQ HDRip - 108.mkv",
   },
   {
-    quote: "A user used @flashfilezbot to convert the movie Interstellar (2014) to a high-speed download & stream link.",
-    name: "Interstellar (2014)",
-    role: "Lossless Download & Stream · Chrome",
+    quote: "A user used @flashfilezbot to convert Telegram files into high-speed multi-threaded browser downloads.",
+    name: "Telegram High-Speed Download",
+    role: "HTTP 206 Resumable · Chrome & 1DM",
     rating: 5,
-    quality: "4K Remux · 8.6 GB",
-    date: "08 NOV 2026",
+    quality: "Wire Speed · 100% Resumable",
+    date: "09 NOV 2026",
     photoUrl: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=120&auto=format&fit=crop&q=80",
-    rawFilename: "Interstellar.2014.IMAX.2160p.HDR.TrueHD.7.1.x265.mkv",
-  },
-  {
-    quote: "A user used @flashfilezbot to convert the series Severance S02E01 to a high-speed download & stream link.",
-    name: "Severance S02E01",
-    role: "Fast Download & Stream · Apple iOS & Safari",
-    rating: 5,
-    quality: "4K HDR · 2.1 GB",
-    date: "08 NOV 2026",
-    photoUrl: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=120&auto=format&fit=crop&q=80",
-    rawFilename: "Severance.S02E01.Hello.Ms.Cobel.2160p.WEB-DL.DDP5.1.mkv",
-  },
-  {
-    quote: "A user used @flashfilezbot to convert the movie Gladiator II (2024) to a high-speed download & stream link.",
-    name: "Gladiator II (2024)",
-    role: "Multi-Audio Download & Stream · MX Player",
-    rating: 5,
-    quality: "1080p · 2.4 GB",
-    date: "08 NOV 2026",
-    photoUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=120&auto=format&fit=crop&q=80",
-    rawFilename: "Gladiator.II.2024.1080p.WEBRip.DDP5.1.Atmos.mkv",
+    rawFilename: "FlashFile.Cloud.Stream.Engine.2026.mkv",
   },
 ];
 
 function parseItems(items?: TestimonialItem[]) {
-  const source = Array.isArray(items) && items.length > 0 ? items.filter(Boolean) : DEFAULT_ITEMS;
+  let source = Array.isArray(items) && items.length > 0 ? items.filter(Boolean) : DEFAULT_ITEMS;
+  if (source.length === 1) {
+    const single = source[0];
+    source = [
+      { ...single, role: "Fast Direct Download · Chrome & IDM", quality: single.quality || "1080p · 1.79 GB" },
+      { ...single, role: "Instant 4K Stream · VLC & MX Player", quality: single.quality || "4K HDR" },
+      { ...single, role: "100% Resumable · HTTP 206 Engine", quality: "Wire Speed" },
+    ];
+  } else if (source.length === 2) {
+    source = [...source, { ...source[0], role: "High-Speed Browser Download · Chrome & Brave" }];
+  }
   const seenKeys = new Set<string>();
   const results: any[] = [];
 
@@ -1123,6 +1113,19 @@ export const TestimonialEmber: React.FC<TestimonialEmberProps> = (props) => {
       timerRef.current = null;
     }
   }, []);
+
+  // When live database items arrive, immediately switch to the real files
+  useEffect(() => {
+    if (liveItems && liveItems.length > 0) {
+      setCurrentIndex(0);
+      setCycle((c) => c + 1);
+      setIsFirstRender(false);
+      setIsPrinting(true);
+      printerAudio.startPrintSound(cfg.ru.feed);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(finishPrinting, (cfg.ru.feed + 1.5) * 1000);
+    }
+  }, [liveItems, cfg.ru.feed, finishPrinting]);
 
   // Initial print on view
   useEffect(() => {
