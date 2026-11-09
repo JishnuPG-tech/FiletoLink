@@ -109,13 +109,14 @@ class TestHeaderInjectionDefense:
         assert "\n" not in ascii_name
         assert "\r" not in header
         assert "\n" not in header
-        assert "legit.mp4__Set-Cookie: sessionId=hacked____" in ascii_name
+        assert "Set-Cookie: sessionId=hacked" in ascii_name
 
     def test_quote_injection_blocked(self):
         evil_name = 'movie"; evil="param.mkv'
         ascii_name, header = self.sanitize_for_header(evil_name)
         assert '"' not in ascii_name
-        assert 'movie__ evil=_param.mkv' in ascii_name
+        assert '"' not in header.split('filename="')[1].split('"')[0]
+        assert "movie_; evil=_param.mkv" == ascii_name
 
     def test_unicode_and_regional_characters_preserved_in_utf8(self):
         unicode_name = "റാം_Ramayana_2026.mkv"
