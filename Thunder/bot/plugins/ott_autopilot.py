@@ -120,21 +120,31 @@ def normalize_provider_name(provider_name: str, provider_id: Optional[int] = Non
     return name_clean
 
 
-def format_release_date(release_date_str: str, today: datetime.date) -> Tuple[bool, str]:
+def check_release_timing(release_date_str: str, today: datetime.date) -> Tuple[bool, bool, Optional[str]]:
     """
-    Returns (is_now, formatted_date_string)
-    e.g. (True, "Now")
-    or   (False, "November 6th")
+    Returns (is_valid, is_today, date_str)
+    - Strictly rejects any release date before today (rdate < today).
+    - If rdate == today -> (True, True, "Today")
+    - If rdate > today and rdate <= today + 60 days -> (True, False, "November 15th")
+    - If rdate > today + 60 days or invalid -> (False, False, None)
     """
     if not release_date_str:
-        return True, "Now"
+        return False, False, None
     try:
         rdate = datetime.datetime.strptime(release_date_str[:10], "%Y-%m-%d").date()
     except Exception:
-        return True, "Now"
+        return False, False, None
 
-    if rdate <= today:
-        return True, "Now"
+    if rdate < today:
+        # Strictly reject previous / already streaming releases
+        return False, False, None
+
+    if rdate == today:
+        return True, True, "Today"
+
+    if rdate > today + datetime.timedelta(days=60):
+        # Exclude far-future releases (>60 days)
+        return False, False, None
 
     day = rdate.day
     if 11 <= day <= 13:
@@ -143,7 +153,15 @@ def format_release_date(release_date_str: str, today: datetime.date) -> Tuple[bo
         suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
 
     month_name = rdate.strftime("%B")
-    return False, f"{month_name} {day}{suffix}"
+    return True, False, f"{month_name} {day}{suffix}"
+
+
+def format_release_date(release_date_str: str, today: datetime.date) -> Tuple[bool, str]:
+    """Compatibility wrapper for check_release_timing."""
+    valid, is_today, date_str = check_release_timing(release_date_str, today)
+    if not valid:
+        return False, ""
+    return is_today, date_str or "Today"
 
 
 async def fetch_tmdb_json(client: httpx.AsyncClient, endpoint: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -211,12 +229,17 @@ async def process_and_post_ott_updates(client: Client, manual: bool = False) -> 
 
     now_local = get_local_now()
     today = now_local.date()
-    yesterday = today - datetime.timedelta(days=10)
-    future_45d = today + datetime.timedelta(days=45)
+    future_60d = today + datetime.timedelta(days=60)
 
     MIN_POPULARITY_REGIONAL = float(getattr(Var, "OTT_MIN_POPULARITY_REGIONAL", 14.0))
-    MIN_POPULARITY_GLOBAL = float(getattr(Var, "OTT_MIN_POPULARITY_GLOBAL", 22.0))
+    MIN_POPULARITY_GLOBAL = float(getattr(Var, "OTT_MIN_POPULARITY_GLOBAL", 20.0))
     DAILY_POST_LIMIT = int(getattr(Var, "OTT_DAILY_LIMIT", 8))
+
+    BLOCKBUSTER_KEYWORDS = (
+        "ramayana", "jailer", "godzilla", "kalki", "pushpa", "salaar",
+        "devara", "kantara", "singham", "avatar", "spider-man", "deadpool",
+        "batman", "gladiator", "dune", "stranger things", "house of the dragon"
+    )
 
     stats = {"scanned": 0, "posted": 0, "skipped": 0, "low_pop_skipped": 0, "errors": 0}
 
@@ -256,16 +279,33 @@ async def process_and_post_ott_updates(client: Client, manual: bool = False) -> 
                     })
 
         # =========================================================================
-        # 2. High-Impact Indian Cinema & Series (Malayalam, Tamil, Telugu, Hindi, Kannada)
+        # 2. TMDB Upcoming Releases (Strictly Today & Future Premieres)
+        # =========================================================================
+        upcoming_res = await fetch_tmdb_json(http_client, "/movie/upcoming", {"region": "IN", "page": 1})
+        if upcoming_res and "results" in upcoming_res:
+            for item in upcoming_res["results"][:15]:
+                mid = item.get("id")
+                if mid and (mid, "movie") not in seen_cand:
+                    seen_cand.add((mid, "movie"))
+                    candidate_pool.append({
+                        "id": mid,
+                        "type": "movie",
+                        "popularity": float(item.get("popularity", 0.0)),
+                        "is_trending": True,
+                        "initial_title": item.get("title", ""),
+                    })
+
+        # =========================================================================
+        # 3. High-Impact Indian Cinema & Series (Strictly Today to +60 Days)
         # =========================================================================
         indian_langs = ["hi", "ta", "te", "ml", "kn"]
         for lang in indian_langs:
-            # High-popularity movies in release window
+            # High-popularity movies in upcoming/today window
             params = {
                 "watch_region": "IN",
                 "with_original_language": lang,
-                "primary_release_date.gte": yesterday.isoformat(),
-                "primary_release_date.lte": future_45d.isoformat(),
+                "primary_release_date.gte": today.isoformat(),
+                "primary_release_date.lte": future_60d.isoformat(),
                 "sort_by": "popularity.desc",
                 "page": 1,
             }
@@ -274,7 +314,6 @@ async def process_and_post_ott_updates(client: Client, manual: bool = False) -> 
                 for item in res_m["results"][:6]:
                     mid = item.get("id")
                     pop = float(item.get("popularity", 0.0))
-                    # Only accept items meeting popularity floor
                     if mid and (mid, "movie") not in seen_cand and pop >= MIN_POPULARITY_REGIONAL:
                         seen_cand.add((mid, "movie"))
                         candidate_pool.append({
@@ -285,12 +324,12 @@ async def process_and_post_ott_updates(client: Client, manual: bool = False) -> 
                             "initial_title": item.get("title", ""),
                         })
 
-            # High-popularity series
+            # High-popularity series in upcoming/today window
             params_tv = {
                 "watch_region": "IN",
                 "with_original_language": lang,
-                "first_air_date.gte": yesterday.isoformat(),
-                "first_air_date.lte": future_45d.isoformat(),
+                "first_air_date.gte": today.isoformat(),
+                "first_air_date.lte": future_60d.isoformat(),
                 "sort_by": "popularity.desc",
                 "page": 1,
             }
@@ -315,7 +354,7 @@ async def process_and_post_ott_updates(client: Client, manual: bool = False) -> 
             return stats
 
         # =========================================================================
-        # 3. Detailed Inspection, OTT Platform Verification & Fame Scoring
+        # 4. Detailed Inspection, Timing Verification & Blockbuster Scoring
         # =========================================================================
         verified_announcements = []
 
@@ -345,39 +384,58 @@ async def process_and_post_ott_updates(client: Client, manual: bool = False) -> 
             orig_lang = details.get("original_language", "")
             is_indian = orig_lang in ("hi", "ta", "te", "ml", "kn", "bn", "mr")
 
+            release_date_raw = details.get("release_date") or details.get("first_air_date") or ""
+            is_valid_timing, is_today, date_str = check_release_timing(release_date_raw, today)
+
+            # Strictly enforce: ONLY today and upcoming releases (zero previous/already released titles)
+            if not is_valid_timing:
+                stats["skipped"] += 1
+                continue
+
             # --- Strict Fame & Quality Filter ---
-            # Exclude obscure titles with low popularity and no votes
+            # Exclude obscure titles with low popularity and no votes, or poorly rated content
             req_pop = MIN_POPULARITY_REGIONAL if is_indian else MIN_POPULARITY_GLOBAL
             if not cand.get("is_trending") and pop < req_pop and votes < 10:
                 stats["low_pop_skipped"] += 1
                 continue
 
-            release_date_raw = details.get("release_date") or details.get("first_air_date") or ""
+            if votes >= 10 and vote_avg < 6.0:
+                stats["low_pop_skipped"] += 1
+                continue
+
             year = release_date_raw[:4] if len(release_date_raw) >= 4 else str(today.year)
             language = get_language_name(orig_lang)
             media_kind = "Movie" if media_type == "movie" else "Series"
 
-            is_now, date_str = format_release_date(release_date_raw, today)
-
-            # Deduplication: distinct record for upcoming announcements vs streaming now
-            media_key = f"{media_type}_{'now' if is_now else 'upcoming'}"
+            # Deduplication: distinct record for today releases vs specific upcoming dates
+            media_key = f"{media_type}_{'today' if is_today else 'upcoming'}_{date_str or 'today'}"
             is_already_posted = await db.is_ott_posted(tmdb_id, media_key)
             if is_already_posted:
                 stats["skipped"] += 1
                 continue
 
             # Calculate Hype & Quality Score for Ranking
-            # Highest buzz & most famous releases get prioritized
+            # Blockbusters & high ratings (Ramayana, Jailer 2, Godzilla Minus One, etc.) receive top priority
             buzz_score = pop
             if cand.get("is_trending"):
-                buzz_score += 40.0
+                buzz_score += 45.0
+            if vote_avg >= 7.5:
+                buzz_score += 35.0
+            elif vote_avg >= 6.5:
+                buzz_score += 20.0
             if votes >= 20:
-                buzz_score += min(30.0, votes * 0.1) + (vote_avg * 2.0)
+                buzz_score += min(35.0, votes * 0.1)
             if is_indian:
-                buzz_score += 15.0  # Regional audience priority
+                buzz_score += 25.0  # Regional audience hype
+            if is_today:
+                buzz_score += 30.0  # Extra priority for today releases
 
-            if is_now:
-                message_text = f"✅ '{title}' {year} {language} {media_kind} Streaming Now From {platform}"
+            title_lower = title.lower()
+            if any(k in title_lower for k in BLOCKBUSTER_KEYWORDS):
+                buzz_score += 50.0  # Top blockbuster priority
+
+            if is_today:
+                message_text = f"📣 '{title}' {year} {language} {media_kind} Streaming Today From {platform}"
             else:
                 message_text = f"📣 '{title}' {year} {language} {media_kind} Streaming {date_str} From {platform}"
 
@@ -509,7 +567,7 @@ async def ott_status_command(client: Client, message: Message):
     offset = getattr(Var, "OTT_TIMEZONE_OFFSET", 5.5)
 
     text = (
-        f"⚡ **Curated Hype OTT Updates Autopilot Status** ⚡\n\n"
+        f"⚡ **Curated Hype OTT Updates Autopilot Status**\n\n"
         f"• **Autopilot Active:** `{getattr(Var, 'OTT_AUTOPILOT', True)}`\n"
         f"• **Target Channel:** `{channel_repr}`\n"
         f"• **Filter Mode:** `Trending & Blockbusters Only (High Popularity)`\n"

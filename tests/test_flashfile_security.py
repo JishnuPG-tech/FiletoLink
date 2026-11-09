@@ -180,7 +180,7 @@ class TestMarkdownResilience:
         assert "Inception'2010'1080p.mkv" in rendered
         # Ensure balanced backticks inside the line
         for line in rendered.splitlines():
-            if "📁" in line:
+            if "File:" in line:
                 assert line.count("`") == 2  # exactly one opening and one closing
 
 
@@ -198,3 +198,91 @@ class TestZeroHardcodedSecrets:
         # Must return empty string if env is not configured
         if not os.getenv("TMDB_API_KEY"):
             assert get_tmdb_key() == ""
+
+
+# -----------------------------------------------------------------------------
+# 6. Clean URL Media Name Quoting Tests
+# -----------------------------------------------------------------------------
+class TestCleanFilenameUrlQuoting:
+    def test_quote_media_name_replaces_spaces_and_brackets(self):
+        from Thunder.utils.bot_utils import quote_media_name
+        raw = "Dont Trouble the Trouble (2026) Malayalam HQ HDRip - 108.mkv"
+        quoted = quote_media_name(raw)
+        # Must not contain %20, %28, %29 percent encoding slop
+        assert "%20" not in quoted
+        assert "%28" not in quoted
+        assert "%29" not in quoted
+        assert "Dont.Trouble.the.Trouble.2026.Malayalam.HQ.HDRip.108.mkv" in quoted
+
+    def test_quote_media_name_fallback_empty(self):
+        from Thunder.utils.bot_utils import quote_media_name
+        assert quote_media_name("") == "file"
+
+
+# -----------------------------------------------------------------------------
+# 7. Curated OTT Timing & Filter Tests
+# -----------------------------------------------------------------------------
+class TestCuratedOttReleaseTimingFilter:
+    def test_past_release_date_strictly_rejected(self):
+        from datetime import date, timedelta
+        from Thunder.bot.plugins.ott_autopilot import check_release_timing
+        today = date(2026, 11, 9)
+        past_date = (today - timedelta(days=2)).isoformat()
+        is_valid, is_today, date_str = check_release_timing(past_date, today)
+        assert is_valid is False
+        assert is_today is False
+        assert date_str is None
+
+    def test_today_release_accepted(self):
+        from datetime import date
+        from Thunder.bot.plugins.ott_autopilot import check_release_timing
+        today = date(2026, 11, 9)
+        is_valid, is_today, date_str = check_release_timing("2026-11-09", today)
+        assert is_valid is True
+        assert is_today is True
+        assert date_str == "Today"
+
+    def test_upcoming_release_accepted(self):
+        from datetime import date
+        from Thunder.bot.plugins.ott_autopilot import check_release_timing
+        today = date(2026, 11, 9)
+        is_valid, is_today, date_str = check_release_timing("2026-11-20", today)
+        assert is_valid is True
+        assert is_today is False
+        assert date_str == "November 20th"
+
+    def test_far_future_release_rejected(self):
+        from datetime import date, timedelta
+        from Thunder.bot.plugins.ott_autopilot import check_release_timing
+        today = date(2026, 11, 9)
+        far_future = (today + timedelta(days=90)).isoformat()
+        is_valid, is_today, date_str = check_release_timing(far_future, today)
+        assert is_valid is False
+        assert is_today is False
+        assert date_str is None
+
+    def test_invalid_date_string_rejected(self):
+        from datetime import date
+        from Thunder.bot.plugins.ott_autopilot import check_release_timing
+        today = date(2026, 11, 9)
+        is_valid, is_today, date_str = check_release_timing("not-a-date", today)
+        assert is_valid is False
+        assert is_today is False
+        assert date_str is None
+
+
+# -----------------------------------------------------------------------------
+# 8. Professional Message Layout & Zero Dangling Emoji Tests
+# -----------------------------------------------------------------------------
+class TestProfessionalMessageFormatting:
+    def test_no_trailing_dangling_emojis_in_headings(self):
+        from Thunder.utils.messages import MSG_LINKS, MSG_WELCOME, MSG_ABOUT, MSG_HELP, MSG_BUTTON_DOWNLOAD, MSG_BUTTON_STREAM_NOW
+        # Top heading of MSG_LINKS must start with single emoji and not have dangling trailing icon
+        first_line = MSG_LINKS.strip().splitlines()[0]
+        assert first_line == "⚡ **FlashFile**"
+        assert MSG_WELCOME.startswith("👋 **Welcome, {user_name}!**")
+        assert MSG_ABOUT.startswith("⚡ **About FlashFile**")
+        assert MSG_HELP.startswith("📖 **FlashFile Help Guide**")
+        # Buttons must use clean standard action icons
+        assert "📥" in MSG_BUTTON_DOWNLOAD
+        assert "▶️" in MSG_BUTTON_STREAM_NOW

@@ -1,6 +1,7 @@
 # Thunder/utils/bot_utils.py
 
 import asyncio
+import re
 from typing import Any, Dict, Optional
 from urllib.parse import quote
 
@@ -21,7 +22,14 @@ from Thunder.vars import Var
 
 
 def quote_media_name(file_name: str) -> str:
-    return quote(str(file_name).replace("/", "_"), safe="")
+    # Normalize dashes with surrounding spaces to single separator
+    cleaned = re.sub(r'[\s]+[-–—][\s]+', '.', str(file_name))
+    # Replace non-alphanumeric (spaces, brackets, etc.) with dots
+    cleaned = re.sub(r'[^a-zA-Z0-9._-]+', '.', cleaned)
+    # Collapse multiple consecutive dots
+    cleaned = re.sub(r'\.+', '.', cleaned)
+    cleaned = re.sub(r'^[.-]+|[.-]+$', '', cleaned)
+    return quote(cleaned or "file", safe=".-")
 
 
 async def _build_links(
