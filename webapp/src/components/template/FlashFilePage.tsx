@@ -354,6 +354,60 @@ const NAV = [
   ["#faq", "FAQ"],
 ];
 
+function DesktopTipBanner() {
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem("ff_dismiss_desktop_tip") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  if (dismissed) return null;
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    try {
+      sessionStorage.setItem("ff_dismiss_desktop_tip", "1");
+    } catch {}
+  };
+
+  return (
+    <div className="fd-frg-desktop-tip">
+      <div className="fd-frg-desktop-tip-in">
+        <svg
+          className="fd-frg-desktop-tip-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+          <line x1="8" y1="21" x2="16" y2="21" />
+          <line x1="12" y1="17" x2="12" y2="21" />
+        </svg>
+        <span className="fd-frg-desktop-tip-text">
+          Best experienced on Desktop or Landscape mode.
+        </span>
+        <button
+          type="button"
+          onClick={handleDismiss}
+          className="fd-frg-desktop-tip-close"
+          aria-label="Dismiss banner"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Nav() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
@@ -366,6 +420,7 @@ function Nav() {
 
   return (
     <header className="fd-frg-nav" data-scrolled={scrolled || undefined} data-open={open || undefined}>
+      <DesktopTipBanner />
       <div className="fd-frg-nav-in">
         <a href="#top" className="fd-frg-brand" aria-label="FlashFile home">
           <span className="fd-frg-brand-text">FlashFile</span>
@@ -1551,6 +1606,73 @@ const css = `
 
 .fd-frg-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--fd-frg-line-2); border-radius: 9999px; font: 400 0.75rem/1 var(--fd-frg-mono-f); color: var(--fd-frg-mute); white-space: nowrap; }
 .fd-frg-chip-acc { color: var(--fd-frg-accent); border-color: rgba(217,119,87,0.35); background: var(--fd-frg-accent-soft); }
+
+/* mobile desktop experience tip banner */
+.fd-frg-desktop-tip {
+  display: none;
+  background: rgba(14, 14, 16, 0.94);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  width: 100%;
+}
+
+@media (max-width: 1024px) {
+  .fd-frg-desktop-tip {
+    display: block;
+  }
+}
+
+.fd-frg-desktop-tip-in {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 7px 14px;
+  font: 500 0.75rem/1.2 var(--fd-frg-sans, sans-serif);
+  color: #d4d4d8;
+  letter-spacing: -0.01em;
+}
+
+.fd-frg-desktop-tip-icon {
+  width: 14px;
+  height: 14px;
+  color: #D97757;
+  flex-shrink: 0;
+}
+
+.fd-frg-desktop-tip-text {
+  flex: 1;
+  text-align: center;
+}
+
+.fd-frg-desktop-tip-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.fd-frg-desktop-tip-close:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.fd-frg-desktop-tip-close svg {
+  width: 12px;
+  height: 12px;
+}
 
 /* nav */
 .fd-frg-nav { position: sticky; top: 0; z-index: 50; display: block; border-bottom: 1px solid transparent; transition: background-color var(--fd-dur-3) var(--fd-ease-out), border-color var(--fd-dur-3) var(--fd-ease-out); }
