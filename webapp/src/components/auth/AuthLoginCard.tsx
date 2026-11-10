@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { EyeIcon, EyeOffIcon, ArrowRight } from "lucide-react";
+import { CodexReveal } from "@/components/canvas/CodexReveal";
 
 interface AuthLoginCardProps {
   onSuccess: () => void;
@@ -75,8 +76,18 @@ export function AuthLoginCard({ onSuccess }: AuthLoginCardProps) {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#000000] flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-sm">
+    <div className="relative min-h-screen w-full bg-[#000000] flex items-center justify-center p-4 select-none overflow-hidden">
+      {/* Codex Reveal interactive ASCII water canvas background */}
+      <CodexReveal
+        fontSize={13}
+        density={1.05}
+        damping={0.96}
+        velocity={0.48}
+        maxOpacity={0.4}
+      />
+
+      {/* Foreground Login Form - purely Username & Password */}
+      <div className="relative z-10 w-full max-w-sm">
         {errorMsg && (
           <div className="mb-4 py-2 px-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 text-center">
             {errorMsg}
@@ -93,7 +104,7 @@ export function AuthLoginCard({ onSuccess }: AuthLoginCardProps) {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="Username"
-            className="w-full h-11 px-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-white placeholder-neutral-500 outline-none transition-colors focus:border-[#D97757] focus:bg-white/[0.06]"
+            className="w-full h-11 px-4 rounded-xl bg-black/60 border border-white/[0.12] text-sm text-white placeholder-neutral-500 outline-none backdrop-blur-md transition-colors focus:border-[#D97757] focus:bg-black/80"
           />
 
           <div className="relative w-full">
@@ -105,7 +116,7 @@ export function AuthLoginCard({ onSuccess }: AuthLoginCardProps) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
-              className="w-full h-11 pl-4 pr-11 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-white placeholder-neutral-500 outline-none transition-colors focus:border-[#D97757] focus:bg-white/[0.06]"
+              className="w-full h-11 pl-4 pr-11 rounded-xl bg-black/60 border border-white/[0.12] text-sm text-white placeholder-neutral-500 outline-none backdrop-blur-md transition-colors focus:border-[#D97757] focus:bg-black/80"
             />
             <button
               type="button"
