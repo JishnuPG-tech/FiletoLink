@@ -542,6 +542,16 @@ class Database:
                     if key and key not in seen_hashes:
                         seen_hashes.add(key)
                         files_list.append(cf)
+
+                # If owner or user has few conversions, supplement with library media on disk
+                from Thunder.vars import Var
+                if user_id == Var.OWNER_ID or len(files_list) < 5:
+                    lib_files = channel_extractor.get_all_library_files()
+                    for lf in lib_files:
+                        key = lf.get("public_hash") or lf.get("file_name")
+                        if key and key not in seen_hashes:
+                            seen_hashes.add(key)
+                            files_list.append(lf)
             except Exception as e:
                 logger.debug(f"Error merging channel files for user {user_id}: {e}")
 
