@@ -559,6 +559,7 @@ async def process_single(
             if not source_info:
                 source_info = f"@{source_msg.from_user.username}" if source_msg.from_user.username else "Unknown User"
             source_id = source_msg.from_user.id
+            p_hash_val = canonical_record.get("public_hash", "") if canonical_record else ""
             try:
                 await db.track_user_conversion(
                     user_id=source_id,
@@ -566,10 +567,22 @@ async def process_single(
                     username=source_msg.from_user.username or "",
                     file_name=links.get('media_name', ''),
                     file_size=links.get('media_size', ''),
-                    public_hash=links.get('public_hash', '')
+                    public_hash=p_hash_val
                 )
             except Exception as e:
                 logger.debug(f"Error logging admin user conversion: {e}")
+            try:
+                from Thunder.utils.channel_extractor import channel_extractor
+                channel_extractor.register_live_conversion(
+                    user_id=source_id,
+                    user_name=source_info,
+                    username=source_msg.from_user.username or "",
+                    file_name=links.get('media_name', ''),
+                    file_size=links.get('media_size', ''),
+                    public_hash=p_hash_val
+                )
+            except Exception as e:
+                logger.debug(f"Error registering live conversion: {e}")
         elif source_msg.chat.type == enums.ChatType.CHANNEL:
             source_info = source_msg.chat.title or "Unknown Channel"
             source_id = source_msg.chat.id

@@ -126,6 +126,11 @@ async def reply_user_err(msg: Message, err_txt: str):
 async def log_newusr(cli: Client, uid: int, fname: str, username: str = ""):
     try:
         is_new = await db.add_user(uid, fname, username)
+        try:
+            from Thunder.utils.channel_extractor import channel_extractor
+            channel_extractor.register_live_user(uid, fname, username)
+        except Exception:
+            pass
         if not is_new:
             return
         if hasattr(Var, 'BIN_CHANNEL') and isinstance(Var.BIN_CHANNEL, int) and Var.BIN_CHANNEL != 0:

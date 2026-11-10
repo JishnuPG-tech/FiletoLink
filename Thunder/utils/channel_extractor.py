@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import datetime
+from urllib.parse import unquote
 from typing import Dict, Any, List, Optional, Set
 from Thunder.vars import Var
 from Thunder.utils.logger import logger
@@ -11,12 +12,74 @@ class TelegramChannelExtractor:
     def __init__(self):
         self._user_files: Dict[int, List[Dict[str, Any]]] = {}
         self._user_profiles: Dict[int, Dict[str, Any]] = {}
-        self._all_library_files: List[Dict[str, Any]] = []
         self._last_scan_time: Optional[datetime.datetime] = None
         self._is_scanning: bool = False
         self._lock = asyncio.Lock()
 
-    async def scan_channel(self, client, limit: int = 1500) -> None:
+    def register_live_user(self, user_id: int, name: str, username: str = "") -> None:
+        """Immediately registers a user in memory when they start or interact with the bot."""
+        clean_uname = username.lstrip("@").strip() if username else ""
+        disp_name = f"@{clean_uname}" if clean_uname else (name.strip() if name and name.strip() else f"User {user_id}")
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+        if user_id not in self._user_profiles:
+            self._user_profiles[user_id] = {
+                "id": user_id,
+                "name": disp_name,
+                "username": clean_uname,
+                "total_files": len(self._user_files.get(user_id, [])),
+                "join_date": now_iso,
+                "last_active": now_iso
+            }
+        else:
+            if clean_uname:
+                self._user_profiles[user_id]["username"] = clean_uname
+            if disp_name and not disp_name.startswith("User "):
+                self._user_profiles[user_id]["name"] = disp_name
+            self._user_profiles[user_id]["last_active"] = now_iso
+
+    def register_live_conversion(
+        self,
+        user_id: int,
+        user_name: str,
+        username: str,
+        file_name: str,
+        file_size: str,
+        public_hash: str
+    ) -> None:
+        """Immediately registers a converted movie/series in memory as soon as the bot converts it."""
+        self.register_live_user(user_id, user_name, username)
+        if not file_name:
+            return
+
+        if user_id not in self._user_files:
+            self._user_files[user_id] = []
+
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        m_type = "movie"
+        upper = file_name.upper()
+        if any(x in upper for x in ["S0", "E0", "EPISODE", "SEASON"]):
+            m_type = "series"
+
+        f_entry = {
+            "file_name": file_name,
+            "file_size": file_size or "Unknown Size",
+            "media_type": m_type,
+            "converted_at": now_iso,
+            "public_hash": public_hash or ""
+        }
+
+        # Deduplicate
+        existing_idx = next((i for i, x in enumerate(self._user_files[user_id]) if x["file_name"] == file_name), -1)
+        if existing_idx >= 0:
+            self._user_files[user_id][existing_idx] = f_entry
+        else:
+            self._user_files[user_id].insert(0, f_entry)
+
+        if user_id in self._user_profiles:
+            self._user_profiles[user_id]["total_files"] = len(self._user_files[user_id])
+
+    async def scan_channel(self, client, limit: int = 2500) -> None:
         """Extracts all user requests, movies, series, and user profiles directly from BIN_CHANNEL using get_messages."""
         if not client or not getattr(client, "is_connected", False) or not Var.BIN_CHANNEL:
             return
@@ -29,7 +92,7 @@ class TelegramChannelExtractor:
         try:
             logger.info(f"[CHANNEL-EXTRACTOR] Starting chunked ID scan of BIN_CHANNEL ({Var.BIN_CHANNEL}) with limit {limit}...")
             media_messages: Dict[int, Dict[str, Any]] = {}
-            user_links: List[Dict[str, Any]] = []
+            raw_text_events: List[Dict[str, Any]] = []
             discovered_uids: Set[int] = set()
 
             # 1. Determine max_id in BIN_CHANNEL
@@ -42,7 +105,7 @@ class TelegramChannelExtractor:
                 except Exception:
                     pass
             except Exception as e:
-                logger.debug(f"[CHANNEL-EXTRACTOR] Ping failed, determining max_id from database: {e}")
+                logger.debug(f"[CHANNEL-EXTRACTOR] Ping failed, checking DB canonical_message_id: {e}")
                 try:
                     from Thunder.utils.database import db
                     doc = await db.files_col.find_one({}, sort=[("canonical_message_id", -1)])
@@ -52,7 +115,7 @@ class TelegramChannelExtractor:
                     pass
 
             if max_id <= 0:
-                max_id = 500  # Fallback starting probe
+                max_id = 1500
 
             start_id = max(1, max_id - limit)
             chunk_size = 100
@@ -108,30 +171,47 @@ class TelegramChannelExtractor:
                         if text:
                             m_id = re.search(r'(?:User\s*)?ID:\*?\*?\s*[`\[]?(\d+)', text, re.IGNORECASE)
                             m_src = re.search(r'(?:Source|Name):\*?\*?\s*\[(.*?)\]', text, re.IGNORECASE)
-                            m_hash = re.search(r'/(?:download|stream|watch)/([a-zA-Z0-9_-]+)', text, re.IGNORECASE)
+                            
+                            # Extract public hash and explicit filename from link:
+                            # Handles:
+                            # /watch/f/<hash>/<filename>
+                            # /f/<hash>/<filename>
+                            # /watch/<hash>/<filename>
+                            # /<hash>/<filename>
+                            url_fname = ""
+                            p_hash = ""
+
+                            m_link = re.search(r'https?://[^\s`"\'<>]*/(?:watch/)?(?:f/)?([a-zA-Z0-9_-]{8,})/?([^\s\?`"\'<>]*)', text)
+                            if m_link:
+                                raw_h = m_link.group(1)
+                                if raw_h.lower() not in ("watch", "download", "stream", "file"):
+                                    p_hash = raw_h
+                                if m_link.group(2):
+                                    dec_name = unquote(m_link.group(2)).strip()
+                                    if "." in dec_name:
+                                        url_fname = dec_name
+
+                            # Fallback: check for explicit File: or Name: in text
+                            if not url_fname:
+                                m_ftext = re.search(r'(?:File|Name):\*?\*?\s*[`]?([^`\n\r]+)[`]?', text, re.IGNORECASE)
+                                if m_ftext:
+                                    cand = m_ftext.group(1).strip()
+                                    if "." in cand:
+                                        url_fname = cand
+
+                            reply_id = getattr(msg, "reply_to_message_id", None)
 
                             uid = int(m_id.group(1)) if m_id else None
                             src_name = m_src.group(1).strip() if m_src else ""
-                            p_hash = m_hash.group(1) if m_hash else ""
-                            reply_id = getattr(msg, "reply_to_message_id", None)
 
                             if uid and uid > 0:
                                 discovered_uids.add(uid)
-                                if uid not in self._user_profiles:
-                                    self._user_profiles[uid] = {
-                                        "id": uid,
-                                        "name": src_name or f"User {uid}",
-                                        "username": "",
-                                        "total_files": 0,
-                                        "join_date": msg.date.isoformat() if hasattr(msg, "date") and msg.date else "",
-                                        "last_active": msg.date.isoformat() if hasattr(msg, "date") and msg.date else ""
-                                    }
-                                elif src_name and (self._user_profiles[uid]["name"].startswith("User ") or not self._user_profiles[uid]["name"]):
-                                    self._user_profiles[uid]["name"] = src_name
+                                self.register_live_user(uid, src_name)
 
-                                user_links.append({
+                                raw_text_events.append({
                                     "user_id": uid,
                                     "user_name": src_name,
+                                    "file_name": url_fname,
                                     "public_hash": p_hash,
                                     "reply_to_message_id": reply_id,
                                     "message_id": msg.id,
@@ -140,37 +220,63 @@ class TelegramChannelExtractor:
                 except Exception as e:
                     logger.debug(f"[CHANNEL-EXTRACTOR] Error in message chunk: {e}")
 
-            logger.info(f"[CHANNEL-EXTRACTOR] Read {len(media_messages)} media files, {len(user_links)} user events, discovered {len(discovered_uids)} users in BIN_CHANNEL.")
+            logger.info(f"[CHANNEL-EXTRACTOR] Read {len(media_messages)} media files, {len(raw_text_events)} user events. Found {len(discovered_uids)} users in BIN_CHANNEL.")
 
-            # 3. Associate media messages with users
-            paired_media_ids: Set[int] = set()
-            for link in user_links:
-                uid = link["user_id"]
-                rep_id = link["reply_to_message_id"]
-                p_hash = link["public_hash"]
+            # 3. Associate media files with requesting users
+            for event in raw_text_events:
+                uid = event["user_id"]
+                rep_id = event["reply_to_message_id"]
+                url_fname = event["file_name"]
+                p_hash = event["public_hash"]
+                msg_id = event["message_id"]
 
+                # Find associated media
                 target_media = None
                 if rep_id and rep_id in media_messages:
                     target_media = media_messages[rep_id]
-                    paired_media_ids.add(rep_id)
-                elif (link["message_id"] - 1) in media_messages and (link["message_id"] - 1) not in paired_media_ids:
-                    target_media = media_messages[link["message_id"] - 1]
-                    paired_media_ids.add(link["message_id"] - 1)
+                else:
+                    # Check adjacent messages (offsets: -1, -2, -3, -4, -5, +1, +2)
+                    for offset in [-1, -2, -3, -4, -5, 1, 2]:
+                        cand = media_messages.get(msg_id + offset)
+                        if cand:
+                            target_media = cand
+                            break
+
+                resolved_name = ""
+                resolved_size = "Unknown Size"
+                resolved_type = "movie"
+                resolved_date = event["date"].isoformat() if event["date"] else datetime.datetime.now(datetime.timezone.utc).isoformat()
 
                 if target_media:
-                    f_entry = {
-                        "file_name": target_media["file_name"],
-                        "file_size": target_media["file_size"],
-                        "media_type": target_media["media_type"],
-                        "converted_at": target_media["date"] or (link["date"].isoformat() if link["date"] else ""),
-                        "public_hash": p_hash or target_media.get("public_hash", "")
-                    }
+                    t_name = target_media["file_name"]
+                    if url_fname and (not t_name or t_name in ("Unnamed Media", "video", "document", "file")):
+                        resolved_name = url_fname
+                    else:
+                        resolved_name = t_name or url_fname
+                    resolved_size = target_media["file_size"]
+                    resolved_type = target_media["media_type"]
+                    resolved_date = target_media["date"] or resolved_date
+                elif url_fname:
+                    resolved_name = url_fname
+
+                if resolved_name and resolved_name != "Unnamed Media":
                     if uid not in self._user_files:
                         self._user_files[uid] = []
-                    if not any(x["file_name"] == f_entry["file_name"] for x in self._user_files[uid]):
+
+                    f_entry = {
+                        "file_name": resolved_name,
+                        "file_size": resolved_size,
+                        "media_type": resolved_type,
+                        "converted_at": resolved_date,
+                        "public_hash": p_hash
+                    }
+
+                    # Deduplicate by clean file name
+                    clean_res = re.sub(r'[^a-zA-Z0-9]+', ' ', resolved_name).strip().lower()
+                    if not any(re.sub(r'[^a-zA-Z0-9]+', ' ', x["file_name"]).strip().lower() == clean_res for x in self._user_files[uid]):
                         self._user_files[uid].append(f_entry)
 
-            # 4. Resolve live Telegram profiles for all discovered users
+            # 4. Resolve exact Telegram handles (@username and real name) for all users
             for uid in discovered_uids:
                 prof = self._user_profiles.get(uid, {"id": uid, "name": f"User {uid}", "username": ""})
                 if not prof.get("username") or prof.get("name", "").startswith("User "):
@@ -181,12 +287,9 @@ class TelegramChannelExtractor:
                             last = getattr(tg_user, "last_name", "") or ""
                             uname = getattr(tg_user, "username", "") or ""
                             full = f"{first} {last}".strip()
-                            if not full and uname:
-                                full = f"@{uname}"
-                            elif not full:
-                                full = prof["name"]
+                            disp = f"@{uname}" if uname else (full or prof["name"])
 
-                            prof["name"] = full
+                            prof["name"] = disp
                             prof["username"] = uname
                             self._user_profiles[uid] = prof
                     except Exception as e:
@@ -195,51 +298,13 @@ class TelegramChannelExtractor:
                 prof["total_files"] = len(self._user_files.get(uid, []))
                 self._user_profiles[uid] = prof
 
-            # 5. Scan local disk for Jellyfin / Media STRM library if present
-            self._scan_disk_library()
-
             self._last_scan_time = datetime.datetime.now(datetime.timezone.utc)
-            logger.info(f"[CHANNEL-EXTRACTOR] Extraction complete. Mapped {len(self._user_profiles)} users and {sum(len(v) for v in self._user_files.values())} files.")
+            logger.info(f"[CHANNEL-EXTRACTOR] Mapped {len(self._user_profiles)} users and {sum(len(v) for v in self._user_files.values())} files directly from BIN_CHANNEL.")
 
         except Exception as e:
             logger.error(f"[CHANNEL-EXTRACTOR] Scan error: {e}", exc_info=True)
         finally:
             self._is_scanning = False
-
-    def _scan_disk_library(self) -> None:
-        """Discovers all movies, series, and STRM files in persistent storage."""
-        lib_dirs = ["/data/jellyfin/media", "/opt/jellyfin-local/media"]
-        all_files = []
-        for base in lib_dirs:
-            if not os.path.exists(base):
-                continue
-            for root, _, files in os.walk(base):
-                for f in files:
-                    if f.endswith((".strm", ".mkv", ".mp4", ".avi")):
-                        f_name = os.path.splitext(f)[0] if f.endswith(".strm") else f
-                        p_hash = ""
-                        # If it's a strm file, read the public_hash from the URL
-                        if f.endswith(".strm"):
-                            try:
-                                with open(os.path.join(root, f), "r", encoding="utf-8") as s_file:
-                                    s_content = s_file.read().strip()
-                                    m_hash = re.search(r'/(?:download|stream|watch)/([a-zA-Z0-9_-]+)', s_content)
-                                    if m_hash:
-                                        p_hash = m_hash.group(1)
-                            except Exception:
-                                pass
-
-                        m_type = "tv" if "TV Shows" in root or "Season" in root else "movie"
-                        all_files.append({
-                            "file_name": f_name,
-                            "file_size": "Direct Stream",
-                            "media_type": m_type,
-                            "converted_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                            "public_hash": p_hash
-                        })
-        if all_files:
-            self._all_library_files = all_files
-            logger.info(f"[CHANNEL-EXTRACTOR] Discovered {len(all_files)} library media items on disk.")
 
     def get_extracted_users(self) -> List[Dict[str, Any]]:
         return list(self._user_profiles.values())
@@ -247,13 +312,10 @@ class TelegramChannelExtractor:
     def get_extracted_user_files(self, user_id: int) -> List[Dict[str, Any]]:
         return self._user_files.get(user_id, [])
 
-    def get_all_library_files(self) -> List[Dict[str, Any]]:
-        return self._all_library_files
-
     def should_rescan(self) -> bool:
         if self._last_scan_time is None:
             return True
         diff = datetime.datetime.now(datetime.timezone.utc) - self._last_scan_time
-        return diff.total_seconds() > 180  # Rescan every 3 minutes
+        return diff.total_seconds() > 180
 
 channel_extractor = TelegramChannelExtractor()

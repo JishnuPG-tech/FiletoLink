@@ -422,11 +422,18 @@ class Database:
                             eu["username"] = cu["username"]
                         if (eu.get("name", "").startswith("User ") or not eu.get("name")) and cu.get("name"):
                             eu["name"] = cu["name"]
-                        eu["total_files"] = max(eu.get("total_files", 0), cu.get("total_files", 0))
                     else:
                         results.append(cu)
             except Exception as e:
                 logger.debug(f"Error merging channel users: {e}")
+
+            # 6. Ensure total_files strictly matches the exact count from get_user_file_history
+            for u in results:
+                try:
+                    u_files = await self.get_user_file_history(u["id"])
+                    u["total_files"] = len(u_files)
+                except Exception:
+                    pass
 
             return results
         except Exception as e:
@@ -436,9 +443,39 @@ class Database:
     async def get_user_file_history(self, user_id: int, limit: int = 1000) -> list[Dict[str, Any]]:
         """Extracts complete movies and series requested by a user (past, present & future)."""
         try:
+            seen_names = set()
             seen_hashes = set()
             files_list = []
             from Thunder.utils.human_readable import humanbytes
+
+            def is_valid_hash(h: Optional[str]) -> bool:
+                return bool(h and len(h) >= 8 and h.lower() not in ("watch", "download", "stream", "file", "unknown"))
+
+            def get_clean_name(name: str) -> str:
+                return re.sub(r'[^a-zA-Z0-9]+', ' ', name or '').strip().lower()
+
+            def add_entry(name: str, size: str, m_type: str, date_val: Any, p_hash: str):
+                if not name or name == "Unnamed Media":
+                    return
+                c_name = get_clean_name(name)
+                if not c_name or c_name in seen_names:
+                    return
+
+                if is_valid_hash(p_hash):
+                    if p_hash in seen_hashes:
+                        return
+                    seen_hashes.add(p_hash)
+
+                seen_names.add(c_name)
+                date_str = date_val.isoformat() if isinstance(date_val, datetime.datetime) else str(date_val or "")
+
+                files_list.append({
+                    "file_name": name,
+                    "file_size": size or "Unknown Size",
+                    "media_type": m_type or "movie",
+                    "converted_at": date_str,
+                    "public_hash": p_hash if is_valid_hash(p_hash) else ""
+                })
 
             # 1. Live conversions stream (matches both int and str user_id)
             cursor = self.conversions_col.find({
@@ -446,20 +483,13 @@ class Database:
             }).sort("converted_at", -1).limit(limit)
 
             async for doc in cursor:
-                p_hash = doc.get("public_hash")
-                name = doc.get("file_name") or "Unnamed Media"
-                key = p_hash or name
-                if key in seen_hashes:
-                    continue
-                seen_hashes.add(key)
-
-                files_list.append({
-                    "file_name": name,
-                    "file_size": doc.get("file_size") or "Unknown Size",
-                    "media_type": doc.get("media_type") or "movie",
-                    "converted_at": doc.get("converted_at").isoformat() if isinstance(doc.get("converted_at"), datetime.datetime) else str(doc.get("converted_at") or ""),
-                    "public_hash": p_hash or ""
-                })
+                add_entry(
+                    name=doc.get("file_name") or "",
+                    size=doc.get("file_size") or "Unknown Size",
+                    m_type=doc.get("media_type") or "movie",
+                    date_val=doc.get("converted_at"),
+                    p_hash=doc.get("public_hash") or ""
+                )
 
             # 2. Historical canonical_files collection (checks all source/user chat fields)
             cf_cursor = self.files_col.find({
@@ -476,23 +506,15 @@ class Database:
             }).sort("created_at", -1).limit(limit)
 
             async for doc in cf_cursor:
-                p_hash = doc.get("public_hash")
-                name = doc.get("file_name") or "Unnamed Media"
-                key = p_hash or name
-                if key in seen_hashes:
-                    continue
-                seen_hashes.add(key)
-
                 raw_sz = doc.get("file_size", 0)
                 sz_human = humanbytes(raw_sz) if isinstance(raw_sz, (int, float)) and raw_sz > 0 else "Unknown Size"
-
-                files_list.append({
-                    "file_name": name,
-                    "file_size": sz_human,
-                    "media_type": doc.get("media_type") or "movie",
-                    "converted_at": doc.get("created_at").isoformat() if isinstance(doc.get("created_at"), datetime.datetime) else str(doc.get("created_at") or ""),
-                    "public_hash": p_hash or ""
-                })
+                add_entry(
+                    name=doc.get("file_name") or "",
+                    size=sz_human,
+                    m_type=doc.get("media_type") or "movie",
+                    date_val=doc.get("created_at"),
+                    p_hash=doc.get("public_hash") or ""
+                )
 
             # 3. Check temporary passes (where user accessed/requested files)
             pass_cursor = self.temp_passes_col.find({
@@ -515,43 +537,28 @@ class Database:
                 }).limit(limit)
 
                 async for doc in pf_cursor:
-                    p_hash = doc.get("public_hash")
-                    name = doc.get("file_name") or "Unnamed Media"
-                    key = p_hash or name
-                    if key in seen_hashes:
-                        continue
-                    seen_hashes.add(key)
-
                     raw_sz = doc.get("file_size", 0)
                     sz_human = humanbytes(raw_sz) if isinstance(raw_sz, (int, float)) and raw_sz > 0 else "Unknown Size"
-
-                    files_list.append({
-                        "file_name": name,
-                        "file_size": sz_human,
-                        "media_type": doc.get("media_type") or "movie",
-                        "converted_at": doc.get("created_at").isoformat() if isinstance(doc.get("created_at"), datetime.datetime) else str(doc.get("created_at") or ""),
-                        "public_hash": p_hash or ""
-                    })
+                    add_entry(
+                        name=doc.get("file_name") or "",
+                        size=sz_human,
+                        m_type=doc.get("media_type") or "movie",
+                        date_val=doc.get("created_at"),
+                        p_hash=doc.get("public_hash") or ""
+                    )
 
             # 4. Merge with channel_extractor files (extracted directly from BIN_CHANNEL)
             try:
                 from Thunder.utils.channel_extractor import channel_extractor
                 channel_files = channel_extractor.get_extracted_user_files(user_id)
                 for cf in channel_files:
-                    key = cf.get("public_hash") or cf.get("file_name")
-                    if key and key not in seen_hashes:
-                        seen_hashes.add(key)
-                        files_list.append(cf)
-
-                # If owner or user has few conversions, supplement with library media on disk
-                from Thunder.vars import Var
-                if user_id == Var.OWNER_ID or len(files_list) < 5:
-                    lib_files = channel_extractor.get_all_library_files()
-                    for lf in lib_files:
-                        key = lf.get("public_hash") or lf.get("file_name")
-                        if key and key not in seen_hashes:
-                            seen_hashes.add(key)
-                            files_list.append(lf)
+                    add_entry(
+                        name=cf.get("file_name") or "",
+                        size=cf.get("file_size") or "Unknown Size",
+                        m_type=cf.get("media_type") or "movie",
+                        date_val=cf.get("converted_at"),
+                        p_hash=cf.get("public_hash") or ""
+                    )
             except Exception as e:
                 logger.debug(f"Error merging channel files for user {user_id}: {e}")
 
