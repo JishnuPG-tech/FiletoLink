@@ -405,6 +405,29 @@ class Database:
                     "total_files": total_files
                 })
 
+            # 5. Merge with channel_extractor (live extraction from BIN_CHANNEL)
+            try:
+                from Thunder.utils.channel_extractor import channel_extractor
+                if bot and channel_extractor.should_rescan():
+                    await channel_extractor.scan_channel(bot)
+
+                channel_users = channel_extractor.get_extracted_users()
+                existing_map = {u["id"]: u for u in results}
+
+                for cu in channel_users:
+                    c_uid = cu["id"]
+                    if c_uid in existing_map:
+                        eu = existing_map[c_uid]
+                        if not eu.get("username") and cu.get("username"):
+                            eu["username"] = cu["username"]
+                        if (eu.get("name", "").startswith("User ") or not eu.get("name")) and cu.get("name"):
+                            eu["name"] = cu["name"]
+                        eu["total_files"] = max(eu.get("total_files", 0), cu.get("total_files", 0))
+                    else:
+                        results.append(cu)
+            except Exception as e:
+                logger.debug(f"Error merging channel users: {e}")
+
             return results
         except Exception as e:
             logger.error(f"Error fetching admin users: {e}", exc_info=True)
@@ -509,6 +532,18 @@ class Database:
                         "converted_at": doc.get("created_at").isoformat() if isinstance(doc.get("created_at"), datetime.datetime) else str(doc.get("created_at") or ""),
                         "public_hash": p_hash or ""
                     })
+
+            # 4. Merge with channel_extractor files (extracted directly from BIN_CHANNEL)
+            try:
+                from Thunder.utils.channel_extractor import channel_extractor
+                channel_files = channel_extractor.get_extracted_user_files(user_id)
+                for cf in channel_files:
+                    key = cf.get("public_hash") or cf.get("file_name")
+                    if key and key not in seen_hashes:
+                        seen_hashes.add(key)
+                        files_list.append(cf)
+            except Exception as e:
+                logger.debug(f"Error merging channel files for user {user_id}: {e}")
 
             return files_list
         except Exception as e:
