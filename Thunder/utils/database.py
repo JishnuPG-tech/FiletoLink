@@ -25,6 +25,7 @@ class Database:
         self.temp_passes_col: AsyncCollection = self.db.temp_passes
         self.sub_requests_col: AsyncCollection = self.db.subscription_requests
         self.ott_posts_col: AsyncCollection = self.db.ott_posts
+        self.conversions_col: AsyncCollection = self.db.user_conversions
 
     async def _deduplicate_users(self) -> None:
         pipeline = [
@@ -70,6 +71,8 @@ class Database:
             await self.sub_requests_col.create_index("request_id", unique=True)
             await self.sub_requests_col.create_index("user_id")
             await self.ott_posts_col.create_index([("tmdb_id", 1), ("media_type", 1)], unique=True)
+            await self.conversions_col.create_index([("user_id", 1), ("converted_at", -1)])
+            await self.conversions_col.create_index("converted_at")
 
             logger.debug("Database indexes ensured.")
             return True
@@ -165,6 +168,166 @@ class Database:
         except Exception as e:
             logger.error(f"Error in delete_user for user {user_id}: {e}", exc_info=True)
             raise
+
+    async def track_user_conversion(
+        self,
+        user_id: int,
+        user_name: str = "",
+        username: str = "",
+        file_name: str = "",
+        file_size: str = "",
+        public_hash: str = "",
+        media_type: str = "movie"
+    ) -> bool:
+        """Records user conversion activity in real-time for the admin dashboard."""
+        try:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            # 1. Upsert / update user document with live name, username, last_active, and file count
+            await self.col.update_one(
+                {'id': user_id},
+                {
+                    '$set': {
+                        'name': user_name or "User",
+                        'username': username or "",
+                        'last_active': now,
+                    },
+                    '$inc': {'total_files': 1},
+                    '$setOnInsert': {
+                        'id': user_id,
+                        'join_date': now
+                    }
+                },
+                upsert=True
+            )
+            # 2. Record conversion event in activity stream
+            await self.conversions_col.insert_one({
+                'user_id': user_id,
+                'user_name': user_name or "User",
+                'username': username or "",
+                'file_name': file_name or "Unknown File",
+                'file_size': file_size or "0 B",
+                'media_type': media_type or "movie",
+                'public_hash': public_hash or "",
+                'converted_at': now
+            })
+            return True
+        except Exception as e:
+            logger.error(f"Error tracking conversion for user {user_id}: {e}", exc_info=True)
+            return False
+
+    async def get_admin_stats(self) -> Dict[str, Any]:
+        """Provides high-level KPI counts for the admin dashboard header."""
+        try:
+            total_users = await self.col.count_documents({})
+            total_conversions = await self.conversions_col.count_documents({})
+            if total_conversions == 0:
+                total_conversions = await self.files_col.count_documents({})
+
+            now = datetime.datetime.now(datetime.timezone.utc)
+            today_start = datetime.datetime(now.year, now.month, now.day, tzinfo=datetime.timezone.utc)
+            active_today = await self.col.count_documents({"last_active": {"$gte": today_start}})
+
+            return {
+                "total_users": total_users,
+                "total_files": total_conversions,
+                "active_today": max(active_today, 1 if total_users > 0 else 0)
+            }
+        except Exception as e:
+            logger.error(f"Error fetching admin stats: {e}", exc_info=True)
+            return {"total_users": 0, "total_files": 0, "active_today": 0}
+
+    async def get_admin_users(self, query: str = "", limit: int = 250) -> list[Dict[str, Any]]:
+        """Returns users list sorted by recency with total converted file counts."""
+        try:
+            filter_q = {}
+            if query:
+                clean_q = query.strip()
+                if clean_q.isdigit():
+                    filter_q = {"id": int(clean_q)}
+                else:
+                    filter_q = {
+                        "$or": [
+                            {"name": {"$regex": clean_q, "$options": "i"}},
+                            {"username": {"$regex": clean_q, "$options": "i"}}
+                        ]
+                    }
+
+            cursor = self.col.find(filter_q).sort("last_active", -1).limit(limit)
+            results = []
+            async for doc in cursor:
+                uid = doc.get("id")
+                files_count = doc.get("total_files")
+                if files_count is None or files_count == 0:
+                    conv_count = await self.conversions_col.count_documents({"user_id": uid})
+                    if conv_count > 0:
+                        files_count = conv_count
+                    else:
+                        files_count = await self.files_col.count_documents({"first_source_chat_id": uid})
+
+                results.append({
+                    "id": uid,
+                    "name": doc.get("name") or doc.get("first_name") or f"User {uid}",
+                    "username": doc.get("username") or "",
+                    "join_date": doc.get("join_date").isoformat() if isinstance(doc.get("join_date"), datetime.datetime) else str(doc.get("join_date") or ""),
+                    "last_active": doc.get("last_active").isoformat() if isinstance(doc.get("last_active"), datetime.datetime) else str(doc.get("last_active") or ""),
+                    "total_files": files_count or 0
+                })
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching admin users: {e}", exc_info=True)
+            return []
+
+    async def get_user_file_history(self, user_id: int, limit: int = 250) -> list[Dict[str, Any]]:
+        """Extracts complete movies and series requested by a user (past, present & future)."""
+        try:
+            seen_hashes = set()
+            files_list = []
+
+            # 1. Live conversions stream
+            cursor = self.conversions_col.find({"user_id": user_id}).sort("converted_at", -1).limit(limit)
+            async for doc in cursor:
+                p_hash = doc.get("public_hash")
+                name = doc.get("file_name") or "Unnamed File"
+                key = p_hash or name
+                if key in seen_hashes:
+                    continue
+                seen_hashes.add(key)
+
+                files_list.append({
+                    "file_name": name,
+                    "file_size": doc.get("file_size") or "Unknown Size",
+                    "media_type": doc.get("media_type") or "movie",
+                    "converted_at": doc.get("converted_at").isoformat() if isinstance(doc.get("converted_at"), datetime.datetime) else str(doc.get("converted_at") or ""),
+                    "public_hash": p_hash or ""
+                })
+
+            # 2. Historical canonical_files collection
+            if len(files_list) < limit:
+                cf_cursor = self.files_col.find({"first_source_chat_id": user_id}).sort("created_at", -1).limit(limit - len(files_list))
+                async for doc in cf_cursor:
+                    p_hash = doc.get("public_hash")
+                    name = doc.get("file_name") or "Unnamed File"
+                    key = p_hash or name
+                    if key in seen_hashes:
+                        continue
+                    seen_hashes.add(key)
+
+                    from Thunder.utils.human_readable import humanbytes
+                    raw_sz = doc.get("file_size", 0)
+                    sz_human = humanbytes(raw_sz) if isinstance(raw_sz, (int, float)) and raw_sz > 0 else "Unknown Size"
+
+                    files_list.append({
+                        "file_name": name,
+                        "file_size": sz_human,
+                        "media_type": doc.get("media_type") or "movie",
+                        "converted_at": doc.get("created_at").isoformat() if isinstance(doc.get("created_at"), datetime.datetime) else str(doc.get("created_at") or ""),
+                        "public_hash": p_hash or ""
+                    })
+
+            return files_list
+        except Exception as e:
+            logger.error(f"Error fetching user files for {user_id}: {e}", exc_info=True)
+            return []
 
 
     async def add_banned_user(

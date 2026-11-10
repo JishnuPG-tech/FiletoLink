@@ -557,6 +557,17 @@ async def process_single(
             if not source_info:
                 source_info = f"@{source_msg.from_user.username}" if source_msg.from_user.username else "Unknown User"
             source_id = source_msg.from_user.id
+            try:
+                await db.track_user_conversion(
+                    user_id=source_id,
+                    user_name=source_info,
+                    username=source_msg.from_user.username or "",
+                    file_name=links.get('media_name', ''),
+                    file_size=links.get('media_size', ''),
+                    public_hash=links.get('public_hash', '')
+                )
+            except Exception as e:
+                logger.debug(f"Error logging admin user conversion: {e}")
         elif source_msg.chat.type == enums.ChatType.CHANNEL:
             source_info = source_msg.chat.title or "Unknown Channel"
             source_id = source_msg.chat.id

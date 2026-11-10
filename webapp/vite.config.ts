@@ -16,9 +16,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api/live-dispatches': {
+      '/api': {
         target: 'https://jishnupg-filetolink.hf.space',
         changeOrigin: true,
+        secure: false,
       },
       '/dispatches': {
         target: 'https://jishnupg-filetolink.hf.space',

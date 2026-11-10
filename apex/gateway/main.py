@@ -119,8 +119,16 @@ async def route_catch_all(path: str, request: Request):
         elif logo_png and os.path.isfile(logo_png):
             return FileResponse(logo_png, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
-    if req_path in ("/", "/index.html"):
+    if req_path in ("/", "/index.html", "/admin", "/dashboard") or req_path.startswith("/admin/") or req_path.startswith("/dashboard/"):
         return await root_portal(request)
+
+    if req_path.startswith("/api/admin"):
+        logger.info(f"[ROUTER] {req_path} (Admin API) -> FileToLink ({FILETOLINK_PORT})")
+        return await proxy_http_request(
+            f"http://127.0.0.1:{FILETOLINK_PORT}{raw_path}",
+            request,
+            default_prefix="",
+        )
 
     if req_path in ("/api/live-dispatches", "/dispatches", "/live-dispatches"):
         logger.info(f"[ROUTER] {req_path} (Live Teleprinter API) -> FileToLink ({FILETOLINK_PORT})")

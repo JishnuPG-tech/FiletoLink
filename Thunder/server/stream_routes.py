@@ -355,6 +355,71 @@ async def upi_redirect_handler(request: web.Request):
 </html>"""
     return web.Response(text=html, content_type="text/html")
 
+# =========================================================================
+# ====== PRIVATE ADMIN DASHBOARD API ======
+# =========================================================================
+
+_ADMIN_SESSIONS = set()
+
+def _check_admin_auth(request: web.Request) -> bool:
+    auth_header = request.headers.get("Authorization", "")
+    token = ""
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    elif "X-Admin-Token" in request.headers:
+        token = request.headers.get("X-Admin-Token", "").strip()
+
+    if token and token in _ADMIN_SESSIONS:
+        return True
+
+    admin_key = os.getenv("ADMIN_PASSWORD", os.getenv("ADMIN_KEY", str(getattr(Var, "OWNER_ID", "")))).strip()
+    if admin_key and (token == admin_key or request.headers.get("X-Admin-Key", "").strip() == admin_key):
+        return True
+    return False
+
+@routes.post("/api/admin/auth")
+async def admin_auth_endpoint(request: web.Request):
+    try:
+        data = await request.json()
+        password = str(data.get("password", "")).strip()
+        admin_key = os.getenv("ADMIN_PASSWORD", os.getenv("ADMIN_KEY", str(getattr(Var, "OWNER_ID", "")))).strip()
+
+        if not admin_key:
+            return web.json_response({"status": "error", "message": "Admin password not configured in environment."}, status=403)
+
+        if password == admin_key:
+            new_token = secrets.token_hex(24)
+            _ADMIN_SESSIONS.add(new_token)
+            if len(_ADMIN_SESSIONS) > 500:
+                _ADMIN_SESSIONS.pop()
+            return web.json_response({"status": "ok", "token": new_token})
+        else:
+            return web.json_response({"status": "error", "message": "Incorrect password"}, status=401)
+    except Exception as e:
+        logger.error(f"Error in admin auth: {e}", exc_info=True)
+        return web.json_response({"status": "error", "message": "Invalid request"}, status=400)
+
+@routes.get("/api/admin/stats", allow_head=True)
+async def admin_stats_endpoint(request: web.Request):
+    if not _check_admin_auth(request):
+        return web.json_response({"status": "error", "message": "Unauthorized"}, status=401)
+    stats = await db.get_admin_stats()
+    return web.json_response({"status": "ok", "stats": stats})
+
+@routes.get("/api/admin/users", allow_head=True)
+async def admin_users_endpoint(request: web.Request):
+    query = request.query.get("q", "").strip()
+    users = await db.get_admin_users(query=query)
+    return web.json_response({"status": "ok", "users": users, "total": len(users)})
+
+@routes.get(r"/api/admin/user/{user_id:\d+}/files", allow_head=True)
+async def admin_user_files_endpoint(request: web.Request):
+    user_id = int(request.match_info["user_id"])
+    files = await db.get_user_file_history(user_id=user_id)
+    return web.json_response({"status": "ok", "user_id": user_id, "files": files, "total": len(files)})
+
+@routes.get("/admin", allow_head=True)
+@routes.get("/dashboard", allow_head=True)
 @routes.get("/", allow_head=True)
 async def root_redirect(request):
     accept = request.headers.get("Accept", "")
