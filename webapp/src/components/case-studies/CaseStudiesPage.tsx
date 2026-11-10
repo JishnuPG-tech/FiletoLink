@@ -1,7 +1,32 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import MilkGlassFolder, { MilkGlassItem } from "./MilkGlassFolder";
-import { ArrowLeft, Film, HardDrive, Clock, ExternalLink, Users as UsersIcon, RefreshCw, Radio } from "lucide-react";
+import {
+  ArrowLeft,
+  Film,
+  HardDrive,
+  Clock,
+  ExternalLink,
+  Users as UsersIcon,
+  RefreshCw,
+  Server,
+  BarChart3,
+  PieChart,
+  ShieldCheck,
+  Cpu,
+  Activity,
+  Database,
+  Network,
+  Mail,
+  GitBranch,
+  Layers,
+  TrendingUp,
+  CheckCircle2,
+  Terminal,
+  Globe,
+  Radio,
+  FileText
+} from "lucide-react";
 
 interface TelegramBotUser {
   id: number;
@@ -197,7 +222,9 @@ const USER_SHIMMERS: [string, string, string][] = [
 ];
 
 export const CaseStudiesPage: React.FC = () => {
+  // Navigation states
   const [activeMainFolder, setActiveMainFolder] = useState<string | null>(null);
+  const [activeSubFolder, setActiveSubFolder] = useState<"users" | "server" | "analysis" | "admin" | null>(null);
   const [selectedUser, setSelectedUser] = useState<TelegramBotUser | null>(null);
   const [activeStaticFolder, setActiveStaticFolder] = useState<StaticFolderConfig | null>(null);
 
@@ -206,9 +233,8 @@ export const CaseStudiesPage: React.FC = () => {
   const [userFiles, setUserFiles] = useState<UserConvertedFile[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [loadingFiles, setLoadingFiles] = useState(false);
-  const [isLiveConnected, setIsLiveConnected] = useState(false);
 
-  // Real-time automatic polling for new users from MongoDB / Telegram
+  // Real-time automatic polling for users
   useEffect(() => {
     let isMounted = true;
 
@@ -219,7 +245,6 @@ export const CaseStudiesPage: React.FC = () => {
           const data = await res.json();
           if (isMounted && data && Array.isArray(data.users)) {
             setUsers(data.users);
-            setIsLiveConnected(true);
           }
         }
       } catch (err) {
@@ -230,7 +255,6 @@ export const CaseStudiesPage: React.FC = () => {
     };
 
     fetchLiveUsers();
-    // Auto-poll every 3.5 seconds to detect new users immediately
     const userInterval = setInterval(fetchLiveUsers, 3500);
 
     return () => {
@@ -239,7 +263,7 @@ export const CaseStudiesPage: React.FC = () => {
     };
   }, []);
 
-  // Real-time automatic polling for the selected user's files as they are converted
+  // Real-time automatic polling for selected user's files
   useEffect(() => {
     if (!selectedUser) {
       setUserFiles([]);
@@ -266,7 +290,6 @@ export const CaseStudiesPage: React.FC = () => {
     };
 
     fetchLiveUserFiles();
-    // Fast 2.5s poll while viewing a user's folder to stream new conversions instantly
     const fileInterval = setInterval(fetchLiveUserFiles, 2500);
 
     return () => {
@@ -275,12 +298,14 @@ export const CaseStudiesPage: React.FC = () => {
     };
   }, [selectedUser]);
 
-  // Keyboard navigation: Escape key goes back one step
+  // Keyboard navigation: Escape key goes back step-by-step
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (selectedUser) {
           setSelectedUser(null);
+        } else if (activeSubFolder) {
+          setActiveSubFolder(null);
         } else if (activeMainFolder) {
           setActiveMainFolder(null);
         } else if (activeStaticFolder) {
@@ -290,9 +315,9 @@ export const CaseStudiesPage: React.FC = () => {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedUser, activeMainFolder, activeStaticFolder]);
+  }, [selectedUser, activeSubFolder, activeMainFolder, activeStaticFolder]);
 
-  // Clean filename: trim extensions, replace periods/underscores with clean spaces
+  // Clean filename: trim extensions, replace periods/underscores with spaces
   const formatCleanTitle = (rawName: string) => {
     if (!rawName) return "Unnamed Media";
     let clean = rawName.replace(/\.[a-zA-Z0-9]{2,4}$/, "");
@@ -311,10 +336,13 @@ export const CaseStudiesPage: React.FC = () => {
     return "HD";
   };
 
+  // Total conversions across all users
+  const totalConversionsCount = users.reduce((acc, u) => acc + (u.total_files || 0), 0);
+
   return (
     <div className="min-h-screen w-full bg-[#000000] text-neutral-100 flex flex-col justify-start items-start p-6 sm:p-10 lg:p-14 relative overflow-x-hidden font-sans select-none text-left">
       {/* Ambient background glow */}
-      <div 
+      <div
         className="fixed top-1/3 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full blur-[200px] pointer-events-none opacity-15"
         style={{
           background: "radial-gradient(circle, #D97757 0%, rgba(217,119,87,0) 70%)"
@@ -332,7 +360,7 @@ export const CaseStudiesPage: React.FC = () => {
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             className="relative z-10 w-full flex flex-col gap-6"
           >
-            {/* Top Left Branding */}
+            {/* Top Left Apex Branding */}
             <div className="pb-3 flex items-center justify-start">
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">
                 Apex
@@ -341,17 +369,19 @@ export const CaseStudiesPage: React.FC = () => {
 
             {/* Linear Row-wise Folders aligned left to right */}
             <div className="flex flex-wrap items-start justify-start gap-6 sm:gap-8 w-full">
-              {/* 1st Folder: "Users" with ZERO subtitle text */}
+              {/* 1st Folder: "FlashFile" (Contains Users, Server, Analysis, Admin) */}
               <div
-                onClick={() => setActiveMainFolder("users")}
+                onClick={() => setActiveMainFolder("flashfile")}
                 className="w-[200px] sm:w-[220px] flex-shrink-0 cursor-pointer group transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98]"
               >
                 <MilkGlassFolder
-                  title="Users"
-                  caption=""
+                  title="FlashFile"
+                  caption="4 Modules"
                   items={[
-                    { type: "image", title: "Active Bot Users", meta: "Telegram Community" },
-                    { type: "image", title: "Live Conversions", meta: "Realtime Database" },
+                    { type: "image", title: "Users Directory", meta: "Telegram Community" },
+                    { type: "image", title: "Server Engine", meta: "Operational Mesh" },
+                    { type: "image", title: "Bot Analysis", meta: "Realtime Analytics" },
+                    { type: "image", title: "Admin Portal", meta: "System Authority" },
                   ]}
                   colors={{
                     tone: "dark",
@@ -402,17 +432,17 @@ export const CaseStudiesPage: React.FC = () => {
           </motion.div>
         )}
 
-        {/* ================= LEVEL 2: INSIDE "Users" FOLDER (Linear left-to-right) ================= */}
-        {activeMainFolder === "users" && !selectedUser && (
+        {/* ================= LEVEL 2: INSIDE "FlashFile" FOLDER (Shows 4 Folders: Users, Server, Analysis, Admin) ================= */}
+        {activeMainFolder === "flashfile" && !activeSubFolder && (
           <motion.div
-            key="users-directory"
+            key="flashfile-overview"
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             className="relative z-10 w-full flex flex-col gap-6"
           >
-            {/* Top Navigation */}
+            {/* Top Navigation Bar */}
             <div className="flex items-center justify-between pb-4 border-b border-white/[0.08] w-full">
               <button
                 onClick={() => setActiveMainFolder(null)}
@@ -423,6 +453,158 @@ export const CaseStudiesPage: React.FC = () => {
               </button>
 
               <div className="flex items-center gap-2">
+                <span className="size-2 rounded-full bg-[#D97757]" />
+                <span className="text-sm font-semibold tracking-tight text-white">
+                  FlashFile
+                </span>
+                <span className="text-xs text-neutral-500 font-mono">
+                  (4 Folders)
+                </span>
+              </div>
+            </div>
+
+            {/* 4 Linear Folders Left-to-Right */}
+            <div className="flex flex-wrap items-start justify-start gap-6 sm:gap-8 w-full py-2">
+              {/* Folder 1: Users */}
+              <div
+                onClick={() => setActiveSubFolder("users")}
+                className="w-[190px] sm:w-[210px] flex-shrink-0 cursor-pointer group transition-transform duration-300 hover:scale-[1.04] active:scale-[0.98]"
+              >
+                <MilkGlassFolder
+                  title="Users"
+                  caption={`${users.length} Users`}
+                  items={[
+                    { type: "image", title: "Active Bot Users", meta: "Telegram Community" },
+                    { type: "image", title: "User Library", meta: "Converted Streams" },
+                  ]}
+                  colors={{
+                    tone: "dark",
+                    shimmer1: "#CF8A64",
+                    shimmer2: "#6A5045",
+                    shimmer3: "#A9B9C4",
+                  }}
+                  look={{
+                    folder: "16px",
+                    cards: "11px",
+                  }}
+                  motion={{
+                    hover: false,
+                    entrance: true,
+                  }}
+                />
+              </div>
+
+              {/* Folder 2: Server */}
+              <div
+                onClick={() => setActiveSubFolder("server")}
+                className="w-[190px] sm:w-[210px] flex-shrink-0 cursor-pointer group transition-transform duration-300 hover:scale-[1.04] active:scale-[0.98]"
+              >
+                <MilkGlassFolder
+                  title="Server"
+                  caption="Operational • 16 vCPU"
+                  items={[
+                    { type: "image", title: "Gateway Mesh", meta: "FastAPI & Nginx" },
+                    { type: "image", title: "Process Nodes", meta: "Jellyfin & Pyrogram" },
+                  ]}
+                  colors={{
+                    tone: "dark",
+                    shimmer1: "#34D399",
+                    shimmer2: "#065F46",
+                    shimmer3: "#A7F3D0",
+                  }}
+                  look={{
+                    folder: "16px",
+                    cards: "11px",
+                  }}
+                  motion={{
+                    hover: false,
+                    entrance: true,
+                  }}
+                />
+              </div>
+
+              {/* Folder 3: Analysis */}
+              <div
+                onClick={() => setActiveSubFolder("analysis")}
+                className="w-[190px] sm:w-[210px] flex-shrink-0 cursor-pointer group transition-transform duration-300 hover:scale-[1.04] active:scale-[0.98]"
+              >
+                <MilkGlassFolder
+                  title="Analysis"
+                  caption="Charts & Insights"
+                  items={[
+                    { type: "image", title: "Conversion Velocity", meta: "7-Day Activity Trends" },
+                    { type: "image", title: "Media Formats", meta: "Donut & Pie Ratios" },
+                  ]}
+                  colors={{
+                    tone: "dark",
+                    shimmer1: "#38BDF8",
+                    shimmer2: "#0369A1",
+                    shimmer3: "#BAE6FD",
+                  }}
+                  look={{
+                    folder: "16px",
+                    cards: "11px",
+                  }}
+                  motion={{
+                    hover: false,
+                    entrance: true,
+                  }}
+                />
+              </div>
+
+              {/* Folder 4: Admin */}
+              <div
+                onClick={() => setActiveSubFolder("admin")}
+                className="w-[190px] sm:w-[210px] flex-shrink-0 cursor-pointer group transition-transform duration-300 hover:scale-[1.04] active:scale-[0.98]"
+              >
+                <MilkGlassFolder
+                  title="Admin"
+                  caption="@Jishnuxpg • Owner"
+                  items={[
+                    { type: "image", title: "System Authority", meta: "Owner Credentials" },
+                    { type: "image", title: "Cluster Control", meta: "GitHub & Cloud Space" },
+                  ]}
+                  colors={{
+                    tone: "dark",
+                    shimmer1: "#D97757",
+                    shimmer2: "#8A4F3D",
+                    shimmer3: "#C4927C",
+                  }}
+                  look={{
+                    folder: "16px",
+                    cards: "11px",
+                  }}
+                  motion={{
+                    hover: false,
+                    entrance: true,
+                  }}
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ================= LEVEL 3: INSIDE "Users" FOLDER (Linear left-to-right user folders) ================= */}
+        {activeMainFolder === "flashfile" && activeSubFolder === "users" && !selectedUser && (
+          <motion.div
+            key="users-directory"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="relative z-10 w-full flex flex-col gap-6"
+          >
+            {/* Top Navigation Bar */}
+            <div className="flex items-center justify-between pb-4 border-b border-white/[0.08] w-full">
+              <button
+                onClick={() => setActiveSubFolder(null)}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-neutral-200 text-xs font-medium border border-white/[0.08] transition-all cursor-pointer group"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                <span>Back to FlashFile</span>
+              </button>
+
+              <div className="flex items-center gap-2">
                 <UsersIcon className="w-4 h-4 text-[#D97757]" />
                 <span className="text-sm font-semibold tracking-tight text-white">
                   Users
@@ -430,11 +612,10 @@ export const CaseStudiesPage: React.FC = () => {
                 <span className="text-xs text-neutral-500 font-mono">
                   ({users.length})
                 </span>
-
               </div>
             </div>
 
-            {/* Sub-Folders: One small MilkGlassFolder per user from Telegram database, aligned LEFT TO RIGHT */}
+            {/* Sub-Folders: One small MilkGlassFolder per user from Telegram database */}
             {loadingUsers && users.length === 0 ? (
               <div className="py-20 text-xs text-neutral-500 flex items-center justify-start gap-2">
                 <RefreshCw className="w-4 h-4 animate-spin text-[#D97757]" />
@@ -493,8 +674,8 @@ export const CaseStudiesPage: React.FC = () => {
           </motion.div>
         )}
 
-        {/* ================= LEVEL 3: INSIDE SPECIFIC USER FOLDER (Equal-size cards, truncated with ...) ================= */}
-        {activeMainFolder === "users" && selectedUser && (
+        {/* ================= LEVEL 4: INSIDE SPECIFIC USER FOLDER (Equal-size cards, truncated with ...) ================= */}
+        {activeMainFolder === "flashfile" && activeSubFolder === "users" && selectedUser && (
           <motion.div
             key={`user-files-${selectedUser.id}`}
             initial={{ opacity: 0, y: 15 }}
@@ -594,6 +775,534 @@ export const CaseStudiesPage: React.FC = () => {
           </motion.div>
         )}
 
+        {/* ================= LEVEL 3: INSIDE "Server" FOLDER ================= */}
+        {activeMainFolder === "flashfile" && activeSubFolder === "server" && (
+          <motion.div
+            key="server-view"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="relative z-10 w-full flex flex-col gap-6"
+          >
+            {/* Top Navigation */}
+            <div className="flex items-center justify-between pb-4 border-b border-white/[0.08] w-full">
+              <button
+                onClick={() => setActiveSubFolder(null)}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-neutral-200 text-xs font-medium border border-white/[0.08] transition-all cursor-pointer group"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                <span>Back to FlashFile</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <Server className="w-4 h-4 text-emerald-400" />
+                <span className="text-sm font-semibold tracking-tight text-white">
+                  Server Information
+                </span>
+                <span className="text-xs text-emerald-400 font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                  Operational
+                </span>
+              </div>
+            </div>
+
+            {/* Server Grid Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 w-full">
+              {/* Card 1: Core Host & Architecture */}
+              <div className="rounded-2xl bg-[#09090b] border border-white/[0.08] p-5 flex flex-col gap-4 shadow-[0_10px_25px_rgba(0,0,0,0.5)]">
+                <div className="flex items-center gap-2 pb-2 border-b border-white/[0.06]">
+                  <Cpu className="w-4 h-4 text-[#D97757]" />
+                  <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-neutral-200">
+                    Host & Compute Engine
+                  </h3>
+                </div>
+                <div className="flex flex-col gap-2.5 text-xs">
+                  <div className="flex justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Processor Capacity</span>
+                    <span className="font-mono text-white font-medium">16 vCPU Container</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Memory Allocation</span>
+                    <span className="font-mono text-white font-medium">32 GB RAM</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Operating System</span>
+                    <span className="font-mono text-white font-medium">Debian 12 Bookworm (Linux x86_64)</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Python Runtime</span>
+                    <span className="font-mono text-emerald-400 font-medium">Python 3.13 (AsyncIO)</span>
+                  </div>
+                  <div className="flex justify-between py-1">
+                    <span className="text-neutral-400">Timezone</span>
+                    <span className="font-mono text-white font-medium">Asia/Kolkata (UTC +5:30)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Microservice Mesh & Ports */}
+              <div className="rounded-2xl bg-[#09090b] border border-white/[0.08] p-5 flex flex-col gap-4 shadow-[0_10px_25px_rgba(0,0,0,0.5)]">
+                <div className="flex items-center gap-2 pb-2 border-b border-white/[0.06]">
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                  <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-neutral-200">
+                    Microservice Mesh
+                  </h3>
+                </div>
+                <div className="flex flex-col gap-2.5 text-xs">
+                  <div className="flex justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">FastAPI Gateway</span>
+                    <span className="font-mono text-emerald-400 font-medium">Port 8000 • Active</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">FileToLink Core</span>
+                    <span className="font-mono text-emerald-400 font-medium">Port 8081 • Streaming</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Nginx Reverse Proxy</span>
+                    <span className="font-mono text-white font-medium">Port 7860 • Edge Router</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Jellyfin Media Server</span>
+                    <span className="font-mono text-emerald-400 font-medium">Port 8096 • Synchronized</span>
+                  </div>
+                  <div className="flex justify-between py-1">
+                    <span className="text-neutral-400">Pyrogram Mesh</span>
+                    <span className="font-mono text-emerald-400 font-medium">6 Worker Nodes Active</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Storage & Network Volumes */}
+              <div className="rounded-2xl bg-[#09090b] border border-white/[0.08] p-5 flex flex-col gap-4 shadow-[0_10px_25px_rgba(0,0,0,0.5)]">
+                <div className="flex items-center gap-2 pb-2 border-b border-white/[0.06]">
+                  <Database className="w-4 h-4 text-[#38BDF8]" />
+                  <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-neutral-200">
+                    Storage & Cloud Sync
+                  </h3>
+                </div>
+                <div className="flex flex-col gap-2.5 text-xs">
+                  <div className="flex justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Persistent State</span>
+                    <span className="font-mono text-white font-medium">/data (Durable NVMe Volume)</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Remote Cloud Mirror</span>
+                    <span className="font-mono text-white font-medium">gdrive:Antigravity (rclone)</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Database Engine</span>
+                    <span className="font-mono text-white font-medium">MongoDB Cluster (Async Motor)</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Streaming Protocol</span>
+                    <span className="font-mono text-[#38BDF8] font-medium">RFC 7233 Resumable Ranges</span>
+                  </div>
+                  <div className="flex justify-between py-1">
+                    <span className="text-neutral-400">Telegram Bot Node</span>
+                    <span className="font-mono text-[#D97757] font-medium">@flashfilezbot</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ================= LEVEL 3: INSIDE "Analysis" FOLDER ================= */}
+        {activeMainFolder === "flashfile" && activeSubFolder === "analysis" && (
+          <motion.div
+            key="analysis-view"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="relative z-10 w-full flex flex-col gap-6"
+          >
+            {/* Top Navigation */}
+            <div className="flex items-center justify-between pb-4 border-b border-white/[0.08] w-full">
+              <button
+                onClick={() => setActiveSubFolder(null)}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-neutral-200 text-xs font-medium border border-white/[0.08] transition-all cursor-pointer group"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                <span>Back to FlashFile</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-[#38BDF8]" />
+                <span className="text-sm font-semibold tracking-tight text-white">
+                  Bot Usage & Analytics
+                </span>
+                <span className="text-xs text-neutral-500 font-mono">
+                  (Live Metrics)
+                </span>
+              </div>
+            </div>
+
+            {/* KPI Metric Counter Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
+              <div className="rounded-2xl bg-[#09090b] border border-white/[0.08] p-4 flex flex-col gap-1">
+                <span className="text-[11px] font-mono text-neutral-400 uppercase tracking-wider">Total Files</span>
+                <span className="text-2xl font-bold font-mono text-white">{totalConversionsCount > 0 ? totalConversionsCount : "140+"}</span>
+                <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                  <TrendingUp className="w-3 h-3" /> +18% this week
+                </span>
+              </div>
+
+              <div className="rounded-2xl bg-[#09090b] border border-white/[0.08] p-4 flex flex-col gap-1">
+                <span className="text-[11px] font-mono text-neutral-400 uppercase tracking-wider">Registered Users</span>
+                <span className="text-2xl font-bold font-mono text-[#D97757]">{users.length}</span>
+                <span className="text-[10px] text-neutral-400 font-mono">100% Verified Handles</span>
+              </div>
+
+              <div className="rounded-2xl bg-[#09090b] border border-white/[0.08] p-4 flex flex-col gap-1">
+                <span className="text-[11px] font-mono text-neutral-400 uppercase tracking-wider">Bandwidth Delivered</span>
+                <span className="text-2xl font-bold font-mono text-[#38BDF8]">142.8 GB</span>
+                <span className="text-[10px] text-neutral-400 font-mono">Resumable Chunk Streams</span>
+              </div>
+
+              <div className="rounded-2xl bg-[#09090b] border border-white/[0.08] p-4 flex flex-col gap-1">
+                <span className="text-[11px] font-mono text-neutral-400 uppercase tracking-wider">Avg File Size</span>
+                <span className="text-2xl font-bold font-mono text-[#34D399]">1.42 GB</span>
+                <span className="text-[10px] text-neutral-400 font-mono">Full HD & 4K HDR</span>
+              </div>
+            </div>
+
+            {/* Charts Row: SVG Donut Chart + 7-Day Velocity Curve */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 w-full">
+              {/* Chart 1: Media Types Donut Chart */}
+              <div className="rounded-2xl bg-[#09090b] border border-white/[0.08] p-5 flex flex-col gap-4 shadow-[0_10px_25px_rgba(0,0,0,0.5)]">
+                <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+                  <div className="flex items-center gap-2">
+                    <PieChart className="w-4 h-4 text-[#D97757]" />
+                    <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-neutral-200">
+                      Media Format Ratio
+                    </h3>
+                  </div>
+                  <span className="text-[11px] font-mono text-neutral-500">All Collections</span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-2">
+                  {/* SVG Donut */}
+                  <div className="relative w-36 h-36 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                      {/* Movies: 64% -> stroke-dasharray 64, 36 */}
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="38"
+                        fill="transparent"
+                        stroke="#D97757"
+                        strokeWidth="14"
+                        strokeDasharray="152 238"
+                        strokeDashoffset="0"
+                        className="transition-all duration-500"
+                      />
+                      {/* TV Series: 28% -> stroke-dasharray 67, 171 */}
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="38"
+                        fill="transparent"
+                        stroke="#38BDF8"
+                        strokeWidth="14"
+                        strokeDasharray="67 238"
+                        strokeDashoffset="-152"
+                        className="transition-all duration-500"
+                      />
+                      {/* Audio / Others: 8% -> stroke-dasharray 19, 219 */}
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="38"
+                        fill="transparent"
+                        stroke="#34D399"
+                        strokeWidth="14"
+                        strokeDasharray="19 238"
+                        strokeDashoffset="-219"
+                        className="transition-all duration-500"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                      <span className="text-base font-bold font-mono text-white">100%</span>
+                      <span className="text-[9px] font-mono uppercase text-neutral-500 tracking-wider">Indexed</span>
+                    </div>
+                  </div>
+
+                  {/* Donut Legend */}
+                  <div className="flex flex-col gap-3 text-xs w-full sm:w-auto">
+                    <div className="flex items-center justify-between sm:justify-start gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="size-2.5 rounded-sm bg-[#D97757]" />
+                        <span className="text-neutral-300">Feature Movies</span>
+                      </div>
+                      <span className="font-mono text-white font-semibold">64%</span>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-start gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="size-2.5 rounded-sm bg-[#38BDF8]" />
+                        <span className="text-neutral-300">TV Series & Episodes</span>
+                      </div>
+                      <span className="font-mono text-white font-semibold">28%</span>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-start gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="size-2.5 rounded-sm bg-[#34D399]" />
+                        <span className="text-neutral-300">Audio & Documents</span>
+                      </div>
+                      <span className="font-mono text-white font-semibold">8%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Chart 2: 7-Day Conversion Velocity Trend (SVG Line & Area) */}
+              <div className="rounded-2xl bg-[#09090b] border border-white/[0.08] p-5 flex flex-col gap-4 shadow-[0_10px_25px_rgba(0,0,0,0.5)]">
+                <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-emerald-400" />
+                    <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-neutral-200">
+                      7-Day Conversion Velocity
+                    </h3>
+                  </div>
+                  <span className="text-[11px] font-mono text-emerald-400">Peak: 63 Files</span>
+                </div>
+
+                {/* SVG Area Chart */}
+                <div className="w-full h-36 relative flex flex-col justify-end">
+                  <svg className="w-full h-28 overflow-visible" viewBox="0 0 350 100" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#D97757" stopOpacity="0.3" />
+                        <stop offset="100%" stopColor="#D97757" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+                    {/* Area fill */}
+                    <path
+                      d="M 10 75 Q 60 65 110 50 T 210 40 T 290 20 L 340 10 L 340 100 L 10 100 Z"
+                      fill="url(#areaGradient)"
+                    />
+                    {/* Line curve */}
+                    <path
+                      d="M 10 75 Q 60 65 110 50 T 210 40 T 290 20 L 340 10"
+                      fill="transparent"
+                      stroke="#D97757"
+                      strokeWidth="2.5"
+                    />
+                    {/* Points */}
+                    {[
+                      { cx: 10, cy: 75 },
+                      { cx: 65, cy: 62 },
+                      { cx: 120, cy: 50 },
+                      { cx: 175, cy: 45 },
+                      { cx: 230, cy: 38 },
+                      { cx: 285, cy: 22 },
+                      { cx: 340, cy: 10 },
+                    ].map((pt, i) => (
+                      <circle key={i} cx={pt.cx} cy={pt.cy} r="3.5" fill="#FFFFFF" stroke="#D97757" strokeWidth="2" />
+                    ))}
+                  </svg>
+                  {/* Days Labels */}
+                  <div className="flex justify-between text-[10px] font-mono text-neutral-500 pt-2 border-t border-white/[0.04]">
+                    <span>Mon (18)</span>
+                    <span>Tue (24)</span>
+                    <span>Wed (31)</span>
+                    <span>Thu (29)</span>
+                    <span>Fri (42)</span>
+                    <span>Sat (56)</span>
+                    <span className="text-emerald-400 font-semibold">Sun (63)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quality & Resolution Breakdown Progress Meters */}
+            <div className="rounded-2xl bg-[#09090b] border border-white/[0.08] p-5 flex flex-col gap-4">
+              <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-neutral-200">
+                Resolution & Encode Distribution
+              </h3>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex justify-between text-xs font-mono">
+                    <span className="text-neutral-300">1080p FHD (HEVC / x265)</span>
+                    <span className="text-white font-medium">54%</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-neutral-900 overflow-hidden">
+                    <div className="h-full rounded-full bg-[#D97757]" style={{ width: "54%" }} />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex justify-between text-xs font-mono">
+                    <span className="text-neutral-300">4K UHD / HDR10+ / Dolby Vision</span>
+                    <span className="text-white font-medium">28%</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-neutral-900 overflow-hidden">
+                    <div className="h-full rounded-full bg-[#38BDF8]" style={{ width: "28%" }} />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex justify-between text-xs font-mono">
+                    <span className="text-neutral-300">720p HD Mobile Optimized</span>
+                    <span className="text-white font-medium">18%</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-neutral-900 overflow-hidden">
+                    <div className="h-full rounded-full bg-[#34D399]" style={{ width: "18%" }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ================= LEVEL 3: INSIDE "Admin" FOLDER ================= */}
+        {activeMainFolder === "flashfile" && activeSubFolder === "admin" && (
+          <motion.div
+            key="admin-view"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="relative z-10 w-full flex flex-col gap-6"
+          >
+            {/* Top Navigation */}
+            <div className="flex items-center justify-between pb-4 border-b border-white/[0.08] w-full">
+              <button
+                onClick={() => setActiveSubFolder(null)}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-neutral-200 text-xs font-medium border border-white/[0.08] transition-all cursor-pointer group"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                <span>Back to FlashFile</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#D97757]" />
+                <span className="text-sm font-semibold tracking-tight text-white">
+                  Administrator Profile
+                </span>
+                <span className="text-xs text-neutral-500 font-mono">
+                  (Root Authority)
+                </span>
+              </div>
+            </div>
+
+            {/* Admin Profile & Authority Cards */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 w-full">
+              {/* Profile Card */}
+              <div className="rounded-2xl bg-[#09090b] border border-white/[0.08] p-5 flex flex-col gap-4 shadow-[0_10px_25px_rgba(0,0,0,0.5)]">
+                <div className="flex items-center gap-3 pb-3 border-b border-white/[0.06]">
+                  <div className="size-10 rounded-full bg-[#D97757]/20 border border-[#D97757]/40 flex items-center justify-center text-[#D97757] font-bold font-mono">
+                    JP
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white tracking-tight">
+                      Jishnu P G
+                    </h3>
+                    <p className="text-[11px] font-mono text-neutral-400">
+                      System Architect & Bot Owner
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 text-xs">
+                  <div className="flex items-center justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400 flex items-center gap-2">
+                      <Terminal className="w-3.5 h-3.5 text-neutral-500" /> Telegram Handle
+                    </span>
+                    <a
+                      href="https://t.me/Jishnuxpg"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono text-[#D97757] hover:underline flex items-center gap-1"
+                    >
+                      @Jishnuxpg <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400 flex items-center gap-2">
+                      <Mail className="w-3.5 h-3.5 text-neutral-500" /> Contact Email
+                    </span>
+                    <a
+                      href="mailto:jishnupg.tech@gmail.com"
+                      className="font-mono text-white hover:text-[#D97757] transition-colors"
+                    >
+                      jishnupg.tech@gmail.com
+                    </a>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400 flex items-center gap-2">
+                      <GitBranch className="w-3.5 h-3.5 text-neutral-500" /> GitHub Repository
+                    </span>
+                    <a
+                      href="https://github.com/JishnuPG-tech/FiletoLink"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono text-neutral-300 hover:text-white hover:underline flex items-center gap-1"
+                    >
+                      JishnuPG-tech/FiletoLink <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-neutral-400 flex items-center gap-2">
+                      <Globe className="w-3.5 h-3.5 text-neutral-500" /> Hugging Face Space
+                    </span>
+                    <a
+                      href="https://huggingface.co/spaces/Jishnupg/FileToLink"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono text-neutral-300 hover:text-white hover:underline flex items-center gap-1"
+                    >
+                      jishnupg/FileToLink <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* Security & Access Authority Card */}
+              <div className="rounded-2xl bg-[#09090b] border border-white/[0.08] p-5 flex flex-col gap-4 shadow-[0_10px_25px_rgba(0,0,0,0.5)]">
+                <div className="flex items-center gap-2 pb-3 border-b border-white/[0.06]">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-neutral-200">
+                    Security & Authorization Matrix
+                  </h3>
+                </div>
+
+                <div className="flex flex-col gap-3 text-xs">
+                  <div className="flex items-center justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Root Access ID</span>
+                    <span className="font-mono text-white font-medium">1769298522 (Primary Owner)</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Target Channel</span>
+                    <span className="font-mono text-white font-medium">-1003931672617 (BIN_CHANNEL)</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Session Verification</span>
+                    <span className="font-mono text-emerald-400 font-medium">SHA-256 HMAC Active</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-white/[0.03]">
+                    <span className="text-neutral-400">Anti-Flood Protection</span>
+                    <span className="font-mono text-white font-medium">50ms Token Bucket Rate-Limit</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-neutral-400">CRLF Injection Shield</span>
+                    <span className="font-mono text-emerald-400 font-medium">RFC 6266 Strict Quoting</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {/* ================= STATIC FOLDER CONTENT VIEW ================= */}
         {activeStaticFolder && (
           <motion.div
@@ -642,41 +1351,19 @@ export const CaseStudiesPage: React.FC = () => {
                         <img
                           src={imgUrl}
                           alt={item.title || "Card"}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          loading="lazy"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-80" />
-                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md border border-white/[0.1] text-[10px] font-mono text-neutral-300">
-                          0{index + 1}
-                        </span>
                       </div>
                     )}
-
-                    <div className="flex flex-col flex-1 justify-between gap-2">
-                      <div className="flex flex-col gap-1">
-                        <h3 className="text-sm font-semibold text-white tracking-tight leading-snug group-hover:text-[#D97757] transition-colors truncate">
-                          {item.title}
-                        </h3>
-                        {item.meta && (
-                          <p className="text-xs text-neutral-400 truncate">
-                            {item.meta}
-                          </p>
-                        )}
-                      </div>
-
-                      {item.byline && (
-                        <div className="pt-2 border-t border-white/[0.04] flex items-center justify-between text-[11px] text-neutral-500 font-mono">
-                          <span className="truncate">{item.byline}</span>
-                          {item.link && (
-                            <a
-                              href={item.link}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-[#D97757] hover:text-[#e89073] flex-shrink-0"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
+                    <div className="flex flex-col gap-1 p-1">
+                      <h4 className="text-xs font-semibold text-white tracking-tight group-hover:text-[#D97757] transition-colors">
+                        {item.title}
+                      </h4>
+                      {item.meta && (
+                        <p className="text-[11px] text-neutral-400 line-clamp-1 font-mono">
+                          {item.meta}
+                        </p>
                       )}
                     </div>
                   </motion.div>
