@@ -11,8 +11,8 @@ export interface GridPatternProps extends React.SVGProps<SVGSVGElement> {
 }
 
 export function GridPattern({
-  width = 40,
-  height = 40,
+  width = 44,
+  height = 44,
   x = -1,
   y = -1,
   strokeDasharray = "0",
@@ -27,7 +27,7 @@ export function GridPattern({
       aria-hidden
       data-slot="grid-pattern"
       className={cn(
-        "pointer-events-none absolute inset-0 size-full fill-white/[0.02] stroke-white/[0.06]",
+        "pointer-events-none absolute inset-0 size-full fill-white/[0.015] stroke-white/[0.04]",
         className
       )}
       {...props}
@@ -63,50 +63,6 @@ export function GridPattern({
           ))}
         </svg>
       )}
-    </svg>
-  );
-}
-
-export interface DotPatternProps extends React.SVGProps<SVGSVGElement> {
-  width?: number;
-  height?: number;
-  cx?: number;
-  cy?: number;
-  cr?: number;
-}
-
-export function DotPattern({
-  width = 20,
-  height = 20,
-  cx = 1,
-  cy = 1,
-  cr = 1,
-  className,
-  ...props
-}: DotPatternProps) {
-  const id = useId();
-
-  return (
-    <svg
-      aria-hidden
-      data-slot="dot-pattern"
-      className={cn(
-        "pointer-events-none absolute inset-0 size-full fill-white/[0.04]",
-        className
-      )}
-      {...props}
-    >
-      <defs>
-        <pattern
-          id={id}
-          width={width}
-          height={height}
-          patternUnits="userSpaceOnUse"
-        >
-          <circle cx={cx} cy={cy} r={cr} />
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" strokeWidth={0} fill={`url(#${id})`} />
     </svg>
   );
 }
