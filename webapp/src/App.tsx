@@ -1,28 +1,37 @@
 import React, { useState, useEffect } from "react";
 import { Page as FlashFilePage } from "./components/template/FlashFilePage";
 import { CaseStudiesPage } from "./components/case-studies/CaseStudiesPage";
+import { AuthLoginCard } from "./components/auth/AuthLoginCard";
 
 export const App: React.FC = () => {
-  const [view, setView] = useState<"case-studies" | "portal">(() => {
+  const checkIsAdminRoute = () => {
     const p = window.location.pathname.toLowerCase();
     const h = window.location.hash.toLowerCase();
     const s = window.location.search.toLowerCase();
-    if (p.includes("portal") || h.includes("portal") || s.includes("portal")) {
-      return "portal";
-    }
-    return "case-studies";
+    return (
+      p.includes("admin") ||
+      p.includes("dashboard") ||
+      p.includes("login") ||
+      h.includes("admin") ||
+      h.includes("dashboard") ||
+      h.includes("login") ||
+      s.includes("admin") ||
+      s.includes("dashboard")
+    );
+  };
+
+  const [isAdminRoute, setIsAdminRoute] = useState<boolean>(checkIsAdminRoute);
+
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return (
+      localStorage.getItem("flashfile_admin_auth") === "true" ||
+      sessionStorage.getItem("flashfile_admin_auth") === "true"
+    );
   });
 
   useEffect(() => {
     const handleLocation = () => {
-      const p = window.location.pathname.toLowerCase();
-      const h = window.location.hash.toLowerCase();
-      const s = window.location.search.toLowerCase();
-      if (p.includes("portal") || h.includes("portal") || s.includes("portal")) {
-        setView("portal");
-      } else {
-        setView("case-studies");
-      }
+      setIsAdminRoute(checkIsAdminRoute());
     };
     window.addEventListener("popstate", handleLocation);
     window.addEventListener("hashchange", handleLocation);
@@ -32,10 +41,43 @@ export const App: React.FC = () => {
     };
   }, []);
 
+  const handleLoginSuccess = () => {
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("flashfile_admin_auth");
+    localStorage.removeItem("flashfile_admin_user");
+    sessionStorage.removeItem("flashfile_admin_auth");
+    sessionStorage.removeItem("flashfile_admin_user");
+    setIsAuthenticated(false);
+  };
+
+  const handleBackToHome = () => {
+    window.history.pushState({}, "", "/");
+    setIsAdminRoute(false);
+  };
+
+  // Root endpoint: Main FlashFile Webapp
+  if (!isAdminRoute) {
+    return <FlashFilePage />;
+  }
+
+  // /admin endpoint: Login Screen if unauthenticated, otherwise Admin Portal (Apex CaseStudiesPage)
+  if (!isAuthenticated) {
+    return (
+      <AuthLoginCard
+        onSuccess={handleLoginSuccess}
+        onBackToHome={handleBackToHome}
+      />
+    );
+  }
+
   return (
-    <div>
-      {view === "case-studies" ? <CaseStudiesPage /> : <FlashFilePage />}
-    </div>
+    <CaseStudiesPage
+      onLogout={handleLogout}
+      onBackToHome={handleBackToHome}
+    />
   );
 };
 

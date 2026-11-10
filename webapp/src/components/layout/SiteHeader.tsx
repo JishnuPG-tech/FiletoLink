@@ -68,6 +68,12 @@ export const SiteHeader: React.FC = () => {
           >
             FAQ
           </a>
+          <a
+            href="/admin"
+            className="text-xs font-medium text-zinc-400 hover:text-[#D97757] transition-colors"
+          >
+            Admin
+          </a>
         </nav>
 
         {/* Right CTA Button (Generously Curved Pill) */}
@@ -125,6 +131,13 @@ export const SiteHeader: React.FC = () => {
             className="block text-sm text-zinc-300 hover:text-white"
           >
             FAQ
+          </a>
+          <a
+            href="/admin"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block text-sm text-[#D97757] hover:text-[#ea6f4a] font-medium"
+          >
+            Admin Portal
           </a>
           <div className="pt-2">
             <a

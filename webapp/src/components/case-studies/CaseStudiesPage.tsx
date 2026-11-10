@@ -221,7 +221,12 @@ const USER_SHIMMERS: [string, string, string][] = [
   ["#FBBF24", "#B45309", "#FDE68A"],
 ];
 
-export const CaseStudiesPage: React.FC = () => {
+export interface CaseStudiesPageProps {
+  onLogout?: () => void;
+  onBackToHome?: () => void;
+}
+
+export const CaseStudiesPage: React.FC<CaseStudiesPageProps> = ({ onLogout, onBackToHome }) => {
   // Navigation states
   const [activeMainFolder, setActiveMainFolder] = useState<string | null>(null);
   const [activeSubFolder, setActiveSubFolder] = useState<"users" | "server" | "analysis" | "admin" | null>(null);
@@ -360,11 +365,35 @@ export const CaseStudiesPage: React.FC = () => {
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             className="relative z-10 w-full flex flex-col gap-6"
           >
-            {/* Top Left Apex Branding */}
-            <div className="pb-3 flex items-center justify-start">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">
-                Apex
-              </h1>
+            {/* Top Left Apex Branding & Session Controls */}
+            <div className="pb-3 flex items-center justify-between w-full">
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">
+                  Apex
+                </h1>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                  Admin Authority
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onBackToHome || (() => { window.location.href = "/"; })}
+                  className="px-3 py-1.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-xs font-medium text-neutral-300 hover:text-white border border-white/[0.06] transition-all cursor-pointer"
+                >
+                  FlashFile Home
+                </button>
+                {onLogout && (
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="px-3 py-1.5 rounded-full bg-red-500/10 hover:bg-red-500/20 text-xs font-medium text-red-300 border border-red-500/20 transition-all cursor-pointer"
+                  >
+                    Lock Session
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Linear Row-wise Folders aligned left to right */}
@@ -1226,10 +1255,10 @@ export const CaseStudiesPage: React.FC = () => {
                       <Mail className="w-3.5 h-3.5 text-neutral-500" /> Contact Email
                     </span>
                     <a
-                      href="mailto:jishnupg.tech@gmail.com"
+                      href="mailto:jishnupg2005@gmail.com"
                       className="font-mono text-white hover:text-[#D97757] transition-colors"
                     >
-                      jishnupg.tech@gmail.com
+                      jishnupg2005@gmail.com
                     </a>
                   </div>
 
