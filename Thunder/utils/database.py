@@ -1,3 +1,4 @@
+import asyncio
 import secrets
 # Thunder/utils/database.py
 
@@ -95,13 +96,16 @@ class Database:
     async def add_user(self, user_id: int, name: str = "", username: str = "") -> bool:
         try:
             now = datetime.datetime.now(datetime.timezone.utc)
-            user_display_name = name.strip() if name and name.strip() else f"User {user_id}"
+            clean_username = username.strip().lstrip("@") if username else ""
+            user_display_name = name.strip() if name and name.strip() else ""
+            if not user_display_name or user_display_name.startswith("User "):
+                user_display_name = f"@{clean_username}" if clean_username else f"User {user_id}"
             result = await self.col.update_one(
                 {'id': user_id},
                 {
                     '$set': {
                         'name': user_display_name,
-                        'username': username.strip() if username else "",
+                        'username': clean_username,
                         'last_active': now
                     },
                     '$setOnInsert': {
@@ -249,12 +253,87 @@ class Database:
             logger.error(f"Error fetching admin stats: {e}", exc_info=True)
             return {"total_users": 0, "total_files": 0, "active_today": 0}
 
-    async def get_admin_users(self, query: str = "", limit: int = 250) -> list[Dict[str, Any]]:
-        """Returns users list sorted by recency with total converted file counts."""
+    async def get_admin_users(self, query: str = "", limit: int = 500) -> list[Dict[str, Any]]:
+        """Discovers and returns ALL users (past, present, future) from all collections with exact Telegram usernames."""
         try:
+            discovered_uids: set[int] = set()
+
+            # 1. Discover all user IDs from users collection
+            async for doc in self.col.find({}, {"id": 1}):
+                uid = doc.get("id")
+                if uid:
+                    try:
+                        u_int = int(uid)
+                        if u_int > 0:
+                            discovered_uids.add(u_int)
+                    except (ValueError, TypeError):
+                        pass
+
+            # 2. Discover user IDs from canonical files collection
+            for field in ["first_source_chat_id", "source_chat_id", "user_id", "chat_id"]:
+                try:
+                    vals = await self.files_col.distinct(field)
+                    for v in vals:
+                        if v:
+                            try:
+                                v_int = int(v)
+                                if v_int > 0:
+                                    discovered_uids.add(v_int)
+                            except (ValueError, TypeError):
+                                pass
+                except Exception:
+                    pass
+
+            # 3. Discover user IDs from tokens, conversions, passes, subscriptions
+            for col, field in [
+                (self.token_col, "user_id"),
+                (self.conversions_col, "user_id"),
+                (self.temp_passes_col, "user_id"),
+                (self.subscriptions_col, "user_id"),
+                (self.sub_requests_col, "user_id"),
+                (self.authorized_users_col, "user_id")
+            ]:
+                try:
+                    vals = await col.distinct(field)
+                    for v in vals:
+                        if v:
+                            try:
+                                v_int = int(v)
+                                if v_int > 0:
+                                    discovered_uids.add(v_int)
+                            except (ValueError, TypeError):
+                                pass
+                except Exception:
+                    pass
+
+            # Ensure all discovered users exist in self.col
+            now = datetime.datetime.now(datetime.timezone.utc)
+            for uid in discovered_uids:
+                await self.col.update_one(
+                    {"id": uid},
+                    {"$setOnInsert": {
+                        "id": uid,
+                        "name": f"User {uid}",
+                        "username": "",
+                        "join_date": now,
+                        "last_active": now,
+                        "total_files": 0
+                    }},
+                    upsert=True
+                )
+
+            # 4. Resolve exact Telegram usernames & full names via StreamBot
+            bot = None
+            try:
+                from Thunder.bot import StreamBot
+                if getattr(StreamBot, "is_connected", False):
+                    bot = StreamBot
+            except Exception:
+                bot = None
+
             filter_q = {}
             if query:
-                clean_q = query.strip()
+                clean_q = query.strip().lstrip("@")
                 if clean_q.isdigit():
                     filter_q = {"id": int(clean_q)}
                 else:
@@ -269,38 +348,83 @@ class Database:
             results = []
             async for doc in cursor:
                 uid = doc.get("id")
-                files_count = doc.get("total_files")
-                if files_count is None or files_count == 0:
-                    conv_count = await self.conversions_col.count_documents({"user_id": uid})
-                    if conv_count > 0:
-                        files_count = conv_count
-                    else:
-                        files_count = await self.files_col.count_documents({"first_source_chat_id": uid})
+                raw_name = doc.get("name") or ""
+                raw_username = doc.get("username") or ""
+
+                # If missing exact username or has generic name, fetch live from Telegram
+                if bot and uid and (not raw_username or not raw_name or raw_name.startswith("User ")):
+                    try:
+                        tg_user = await bot.get_users(uid)
+                        if tg_user:
+                            first = getattr(tg_user, "first_name", "") or ""
+                            last = getattr(tg_user, "last_name", "") or ""
+                            uname = getattr(tg_user, "username", "") or ""
+                            full = f"{first} {last}".strip()
+                            if not full and uname:
+                                full = f"@{uname}"
+                            elif not full:
+                                full = f"User {uid}"
+
+                            raw_name = full
+                            raw_username = uname
+                            doc["name"] = full
+                            doc["username"] = uname
+
+                            # Update database in background
+                            asyncio.create_task(self.col.update_one(
+                                {"id": uid},
+                                {"$set": {"name": full, "username": uname, "last_active": now}}
+                            ))
+                    except Exception as e:
+                        logger.debug(f"Telegram user lookup for {uid}: {e}")
+
+                # Count all files across conversions and canonical files
+                conv_count = await self.conversions_col.count_documents({
+                    "$or": [{"user_id": uid}, {"user_id": str(uid)}]
+                })
+                file_count = await self.files_col.count_documents({
+                    "$or": [
+                        {"first_source_chat_id": uid},
+                        {"first_source_chat_id": str(uid)},
+                        {"source_chat_id": uid},
+                        {"source_chat_id": str(uid)},
+                        {"user_id": uid},
+                        {"user_id": str(uid)},
+                        {"chat_id": uid},
+                        {"chat_id": str(uid)}
+                    ]
+                })
+                total_files = max(doc.get("total_files") or 0, conv_count, file_count)
 
                 results.append({
                     "id": uid,
-                    "name": doc.get("name") or doc.get("first_name") or f"User {uid}",
-                    "username": doc.get("username") or "",
+                    "name": raw_name or f"User {uid}",
+                    "username": raw_username,
                     "join_date": doc.get("join_date").isoformat() if isinstance(doc.get("join_date"), datetime.datetime) else str(doc.get("join_date") or ""),
                     "last_active": doc.get("last_active").isoformat() if isinstance(doc.get("last_active"), datetime.datetime) else str(doc.get("last_active") or ""),
-                    "total_files": files_count or 0
+                    "total_files": total_files
                 })
+
             return results
         except Exception as e:
             logger.error(f"Error fetching admin users: {e}", exc_info=True)
             return []
 
-    async def get_user_file_history(self, user_id: int, limit: int = 250) -> list[Dict[str, Any]]:
+    async def get_user_file_history(self, user_id: int, limit: int = 1000) -> list[Dict[str, Any]]:
         """Extracts complete movies and series requested by a user (past, present & future)."""
         try:
             seen_hashes = set()
             files_list = []
+            from Thunder.utils.human_readable import humanbytes
 
-            # 1. Live conversions stream
-            cursor = self.conversions_col.find({"user_id": user_id}).sort("converted_at", -1).limit(limit)
+            # 1. Live conversions stream (matches both int and str user_id)
+            cursor = self.conversions_col.find({
+                "$or": [{"user_id": user_id}, {"user_id": str(user_id)}]
+            }).sort("converted_at", -1).limit(limit)
+
             async for doc in cursor:
                 p_hash = doc.get("public_hash")
-                name = doc.get("file_name") or "Unnamed File"
+                name = doc.get("file_name") or "Unnamed Media"
                 key = p_hash or name
                 if key in seen_hashes:
                     continue
@@ -314,18 +438,67 @@ class Database:
                     "public_hash": p_hash or ""
                 })
 
-            # 2. Historical canonical_files collection
-            if len(files_list) < limit:
-                cf_cursor = self.files_col.find({"first_source_chat_id": user_id}).sort("created_at", -1).limit(limit - len(files_list))
-                async for doc in cf_cursor:
+            # 2. Historical canonical_files collection (checks all source/user chat fields)
+            cf_cursor = self.files_col.find({
+                "$or": [
+                    {"first_source_chat_id": user_id},
+                    {"first_source_chat_id": str(user_id)},
+                    {"source_chat_id": user_id},
+                    {"source_chat_id": str(user_id)},
+                    {"user_id": user_id},
+                    {"user_id": str(user_id)},
+                    {"chat_id": user_id},
+                    {"chat_id": str(user_id)}
+                ]
+            }).sort("created_at", -1).limit(limit)
+
+            async for doc in cf_cursor:
+                p_hash = doc.get("public_hash")
+                name = doc.get("file_name") or "Unnamed Media"
+                key = p_hash or name
+                if key in seen_hashes:
+                    continue
+                seen_hashes.add(key)
+
+                raw_sz = doc.get("file_size", 0)
+                sz_human = humanbytes(raw_sz) if isinstance(raw_sz, (int, float)) and raw_sz > 0 else "Unknown Size"
+
+                files_list.append({
+                    "file_name": name,
+                    "file_size": sz_human,
+                    "media_type": doc.get("media_type") or "movie",
+                    "converted_at": doc.get("created_at").isoformat() if isinstance(doc.get("created_at"), datetime.datetime) else str(doc.get("created_at") or ""),
+                    "public_hash": p_hash or ""
+                })
+
+            # 3. Check temporary passes (where user accessed/requested files)
+            pass_cursor = self.temp_passes_col.find({
+                "$or": [{"user_id": user_id}, {"user_id": str(user_id)}]
+            }).sort("created_at", -1).limit(200)
+
+            pass_file_ids = []
+            async for p in pass_cursor:
+                fid = p.get("file_id")
+                if fid:
+                    pass_file_ids.append(str(fid))
+
+            if pass_file_ids:
+                pf_cursor = self.files_col.find({
+                    "$or": [
+                        {"file_unique_id": {"$in": pass_file_ids}},
+                        {"file_id": {"$in": pass_file_ids}},
+                        {"public_hash": {"$in": pass_file_ids}}
+                    ]
+                }).limit(limit)
+
+                async for doc in pf_cursor:
                     p_hash = doc.get("public_hash")
-                    name = doc.get("file_name") or "Unnamed File"
+                    name = doc.get("file_name") or "Unnamed Media"
                     key = p_hash or name
                     if key in seen_hashes:
                         continue
                     seen_hashes.add(key)
 
-                    from Thunder.utils.human_readable import humanbytes
                     raw_sz = doc.get("file_size", 0)
                     sz_human = humanbytes(raw_sz) if isinstance(raw_sz, (int, float)) and raw_sz > 0 else "Unknown Size"
 
@@ -341,7 +514,6 @@ class Database:
         except Exception as e:
             logger.error(f"Error fetching user files for {user_id}: {e}", exc_info=True)
             return []
-
 
     async def add_banned_user(
         self, user_id: int, banned_by: Optional[int] = None,

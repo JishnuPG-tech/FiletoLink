@@ -359,7 +359,9 @@ async def private_receive_handler(bot: Client, msg: Message, **kwargs):
 
         notification_msg = handler_kwargs.get('notification_msg')
 
-        await log_newusr(client, message.from_user.id, message.from_user.first_name or "", message.from_user.username or "")
+        user = message.from_user
+        full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or (f"@{user.username}" if user.username else f"User {user.id}")
+        await log_newusr(client, user.id, full_name, user.username or "")
         try:
             status_msg = await message.reply_text(MSG_PROCESSING_FILE, quote=True)
         except FloodWait as e:

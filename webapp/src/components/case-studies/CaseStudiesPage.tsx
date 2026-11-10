@@ -455,9 +455,14 @@ export const CaseStudiesPage: React.FC = () => {
               <div className="flex flex-wrap items-start justify-start gap-6 sm:gap-8 w-full py-2">
                 {users.map((u, idx) => {
                   const shimmer = USER_SHIMMERS[idx % USER_SHIMMERS.length];
-                  const captionText = u.total_files > 0 
-                    ? `${u.total_files} files` 
-                    : (u.username ? `@${u.username}` : "");
+                  const displayTitle = u.username 
+                    ? `@${u.username}` 
+                    : (u.name && !u.name.startsWith("User ") ? u.name : `User ${u.id}`);
+                  
+                  const hasRealName = u.name && !u.name.startsWith("User ") && u.name !== `@${u.username}`;
+                  const displayCaption = u.username && hasRealName
+                    ? `${u.name} • ${u.total_files} files`
+                    : (u.total_files > 0 ? `${u.total_files} files` : "");
 
                   return (
                     <div
@@ -466,8 +471,8 @@ export const CaseStudiesPage: React.FC = () => {
                       className="w-[180px] sm:w-[200px] flex-shrink-0 cursor-pointer group transition-transform duration-300 hover:scale-[1.04] active:scale-[0.98]"
                     >
                       <MilkGlassFolder
-                        title={u.name || (u.username ? `@${u.username}` : `User ${u.id}`)}
-                        caption={captionText}
+                        title={displayTitle}
+                        caption={displayCaption}
                         items={[
                           { type: "image", title: "Converted Files", meta: "Telegram Stream Bot" },
                         ]}
@@ -517,11 +522,11 @@ export const CaseStudiesPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <span className="size-2 rounded-full bg-[#D97757] animate-pulse" />
                 <span className="text-sm font-semibold tracking-tight text-white">
-                  {selectedUser.name}
+                  {selectedUser.username ? `@${selectedUser.username}` : selectedUser.name}
                 </span>
-                {selectedUser.username && (
-                  <span className="text-xs text-neutral-500 font-mono">
-                    (@{selectedUser.username})
+                {selectedUser.username && selectedUser.name && selectedUser.name !== `@${selectedUser.username}` && !selectedUser.name.startsWith("User ") && (
+                  <span className="text-xs text-neutral-400">
+                    ({selectedUser.name})
                   </span>
                 )}
                 <span className="text-xs text-neutral-300 font-mono px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08]">
