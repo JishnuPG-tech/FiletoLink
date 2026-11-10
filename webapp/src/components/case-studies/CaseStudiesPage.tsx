@@ -332,15 +332,11 @@ export const CaseStudiesPage: React.FC = () => {
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             className="relative z-10 w-full flex flex-col gap-6"
           >
-            {/* Live Indicator */}
-            <div className="flex items-center gap-2 pb-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-              </span>
-              <span className="text-[11px] font-mono uppercase tracking-wider text-neutral-400">
-                Live Telegram Bot Database Sync ({users.length} registered users)
-              </span>
+            {/* Top Left Branding */}
+            <div className="pb-3 flex items-center justify-start">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">
+                Apex
+              </h1>
             </div>
 
             {/* Linear Row-wise Folders aligned left to right */}
@@ -434,9 +430,7 @@ export const CaseStudiesPage: React.FC = () => {
                 <span className="text-xs text-neutral-500 font-mono">
                   ({users.length})
                 </span>
-                <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-mono ml-2">
-                  <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Sync
-                </span>
+
               </div>
             </div>
 

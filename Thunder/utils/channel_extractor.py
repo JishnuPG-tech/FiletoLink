@@ -208,19 +208,28 @@ class TelegramChannelExtractor:
                                 discovered_uids.add(uid)
                                 self.register_live_user(uid, src_name)
 
-                                raw_text_events.append({
-                                    "user_id": uid,
-                                    "user_name": src_name,
-                                    "file_name": url_fname,
-                                    "public_hash": p_hash,
-                                    "reply_to_message_id": reply_id,
-                                    "message_id": msg.id,
-                                    "date": getattr(msg, "date", None)
-                                })
+                                # STRICT ISOLATION:
+                                # ONLY add as a file event if this message genuinely represents a file conversion!
+                                # A "New User Alert" or generic bot notification is NOT a file request.
+                                is_new_user_alert = "New User Alert" in text or "new user" in text.lower()
+                                is_file_event = (not is_new_user_alert) and (
+                                    bool(reply_id) or bool(url_fname) or any(k in text for k in ["Download:", "Stream:", "🚀", "🖥️"])
+                                )
+
+                                if is_file_event:
+                                    raw_text_events.append({
+                                        "user_id": uid,
+                                        "user_name": src_name,
+                                        "file_name": url_fname,
+                                        "public_hash": p_hash,
+                                        "reply_to_message_id": reply_id,
+                                        "message_id": msg.id,
+                                        "date": getattr(msg, "date", None)
+                                    })
                 except Exception as e:
                     logger.debug(f"[CHANNEL-EXTRACTOR] Error in message chunk: {e}")
 
-            logger.info(f"[CHANNEL-EXTRACTOR] Read {len(media_messages)} media files, {len(raw_text_events)} user events. Found {len(discovered_uids)} users in BIN_CHANNEL.")
+            logger.info(f"[CHANNEL-EXTRACTOR] Read {len(media_messages)} media files, {len(raw_text_events)} verified user file events. Found {len(discovered_uids)} users in BIN_CHANNEL.")
 
             # 3. Associate media files with requesting users
             for event in raw_text_events:
@@ -234,13 +243,15 @@ class TelegramChannelExtractor:
                 target_media = None
                 if rep_id and rep_id in media_messages:
                     target_media = media_messages[rep_id]
-                else:
-                    # Check adjacent messages (offsets: -1, -2, -3, -4, -5, +1, +2)
-                    for offset in [-1, -2, -3, -4, -5, 1, 2]:
+                elif url_fname:
+                    # If we know the exact filename from the download URL, check adjacent messages ONLY if the filename matches!
+                    for offset in [-1, -2, 1]:
                         cand = media_messages.get(msg_id + offset)
-                        if cand:
-                            target_media = cand
-                            break
+                        if cand and cand.get("file_name"):
+                            cand_name = cand["file_name"].strip()
+                            if cand_name == url_fname or url_fname in cand_name or cand_name in url_fname:
+                                target_media = cand
+                                break
 
                 resolved_name = ""
                 resolved_size = "Unknown Size"
@@ -259,22 +270,25 @@ class TelegramChannelExtractor:
                 elif url_fname:
                     resolved_name = url_fname
 
-                if resolved_name and resolved_name != "Unnamed Media":
-                    if uid not in self._user_files:
-                        self._user_files[uid] = []
+                # Reject any unnamed or empty file
+                if not resolved_name or resolved_name == "Unnamed Media":
+                    continue
 
-                    f_entry = {
-                        "file_name": resolved_name,
-                        "file_size": resolved_size,
-                        "media_type": resolved_type,
-                        "converted_at": resolved_date,
-                        "public_hash": p_hash
-                    }
+                if uid not in self._user_files:
+                    self._user_files[uid] = []
 
-                    # Deduplicate by clean file name
-                    clean_res = re.sub(r'[^a-zA-Z0-9]+', ' ', resolved_name).strip().lower()
-                    if not any(re.sub(r'[^a-zA-Z0-9]+', ' ', x["file_name"]).strip().lower() == clean_res for x in self._user_files[uid]):
-                        self._user_files[uid].append(f_entry)
+                f_entry = {
+                    "file_name": resolved_name,
+                    "file_size": resolved_size,
+                    "media_type": resolved_type,
+                    "converted_at": resolved_date,
+                    "public_hash": p_hash
+                }
+
+                # Deduplicate by clean file name
+                clean_res = re.sub(r'[^a-zA-Z0-9]+', ' ', resolved_name).strip().lower()
+                if not any(re.sub(r'[^a-zA-Z0-9]+', ' ', x["file_name"]).strip().lower() == clean_res for x in self._user_files[uid]):
+                    self._user_files[uid].append(f_entry)
 
             # 4. Resolve exact Telegram handles (@username and real name) for all users
             for uid in discovered_uids:
