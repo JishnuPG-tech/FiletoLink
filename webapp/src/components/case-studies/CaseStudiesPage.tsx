@@ -57,158 +57,23 @@ const STATIC_FOLDERS: StaticFolderConfig[] = [
   {
     id: "autonomous-ai",
     title: "Autonomous AI",
-    caption: "4 Deployments",
+    caption: "",
     shimmer: ["#D97757", "#8A4F3D", "#C4927C"],
-    items: [
-      {
-        type: "image",
-        title: "TMDB 9:00 AM Autopilot",
-        meta: "Automated OTT release curation",
-        byline: "4K posters & daily Telegram feed",
-        image: {
-          src: "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=800&auto=format&fit=crop&q=80",
-          alt: "Film production",
-        },
-        link: "https://t.me/flashfilez",
-      },
-      {
-        type: "image",
-        title: "Weekly Milestone Teleprinter",
-        meta: "Automated health & performance cards",
-        byline: "Sunday 8:00 PM network broadcast",
-        image: {
-          src: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&auto=format&fit=crop&q=80",
-          alt: "Analytics dashboard",
-        },
-        link: "https://t.me/flashfilezbot",
-      },
-      {
-        type: "image",
-        title: "Realtime Force-Sub Verifier",
-        meta: "Sub-50ms membership check",
-        byline: "Anti-flood token bucket rate limiting",
-        image: {
-          src: "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&auto=format&fit=crop&q=80",
-          alt: "Biometric security",
-        },
-        link: "https://t.me/flashfilez",
-      },
-      {
-        type: "image",
-        title: "Omniroute Multi-Model Brain",
-        meta: "Context-engineered agent framework",
-        byline: "Intelligent prompt routing",
-        image: {
-          src: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80",
-          alt: "Abstract intelligence",
-        },
-        link: "https://github.com/JishnuPG-tech/FiletoLink",
-      },
-    ],
+    items: [],
   },
   {
     id: "kinetic-ui",
-    title: "Kinetic UI Physics",
-    caption: "4 Experiments",
+    title: "Kinetic UI",
+    caption: "",
     shimmer: ["#38BDF8", "#0369A1", "#BAE6FD"],
-    items: [
-      {
-        type: "image",
-        title: "Milk Glass Folder Envelope",
-        meta: "Procedural grain & 3D card fanning",
-        byline: "CSS container query scaling (cqw)",
-        image: {
-          src: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&auto=format&fit=crop&q=80",
-          alt: "Minimal architecture",
-        },
-        link: "https://framer.com/m/MilkGlassFolder-WLP5FF.js@iT1pE3GkDkeFYqn3xFXA",
-      },
-      {
-        type: "image",
-        title: "Liquid Glass Ambient Tokens",
-        meta: "Pitch black (#000000) & Claude Orange",
-        byline: "Zero AI slop UI design philosophy",
-        image: {
-          src: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80",
-          alt: "Prism reflections",
-        },
-        link: "https://jishnupg-filetolink.hf.space/",
-      },
-      {
-        type: "image",
-        title: "60 FPS Spring Choreography",
-        meta: "Damped spring bezier physics",
-        byline: "Instant peek & velocity interpolation",
-        image: {
-          src: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop&q=80",
-          alt: "Fluid wave",
-        },
-        link: "https://github.com/JishnuPG-tech/FiletoLink",
-      },
-      {
-        type: "image",
-        title: "Adaptive Mobile Landscape",
-        meta: "Dynamic device orientation guidance",
-        byline: "Auto-dismissible session alerts",
-        image: {
-          src: "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=800&auto=format&fit=crop&q=80",
-          alt: "Mobile device",
-        },
-        link: "https://jishnupg-filetolink.hf.space/",
-      },
-    ],
+    items: [],
   },
   {
     id: "cloud-architecture",
     title: "Cloud Infrastructure",
-    caption: "4 Architectures",
+    caption: "",
     shimmer: ["#34D399", "#065F46", "#A7F3D0"],
-    items: [
-      {
-        type: "image",
-        title: "16-vCPU Cloud Container",
-        meta: "Zero cold start streaming cluster",
-        byline: "Persistent rclone cloud snapshotting",
-        image: {
-          src: "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=800&auto=format&fit=crop&q=80",
-          alt: "Server racks",
-        },
-        link: "https://huggingface.co/spaces/Jishnupg/FileToLink",
-      },
-      {
-        type: "image",
-        title: "Anti-Header-Injection Gate",
-        meta: "RFC 6266 & CRLF injection defense",
-        byline: "Strict UTF-8 filename quoting",
-        image: {
-          src: "https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=800&auto=format&fit=crop&q=80",
-          alt: "Code security",
-        },
-        link: "https://github.com/JishnuPG-tech/FiletoLink",
-      },
-      {
-        type: "image",
-        title: "Sharded MongoDB Engine",
-        meta: "Compound indexed user timeline",
-        byline: "Unified historical & live conversions",
-        image: {
-          src: "https://images.unsplash.com/photo-1544383835-bda2bc66a55d?w=800&auto=format&fit=crop&q=80",
-          alt: "Database nodes",
-        },
-        link: "https://jishnupg-filetolink.hf.space/",
-      },
-      {
-        type: "image",
-        title: "32/32 Automated Test Suite",
-        meta: "Exhaustive PyTest security harness",
-        byline: "Automated pre-deployment verification",
-        image: {
-          src: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&auto=format&fit=crop&q=80",
-          alt: "Security terminal",
-        },
-        link: "https://github.com/JishnuPG-tech/FiletoLink",
-      },
-    ],
+    items: [],
   },
 ];
 
@@ -1494,51 +1359,64 @@ export const CaseStudiesPage: React.FC<CaseStudiesPageProps> = ({ onLogout, onBa
                 <span className="text-sm font-semibold tracking-tight text-white">
                   {activeStaticFolder.title}
                 </span>
-                <span className="text-xs text-neutral-500 font-mono">
-                  ({activeStaticFolder.items.length})
-                </span>
               </div>
             </div>
 
-            {/* Static Items Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 w-full">
-              {activeStaticFolder.items.map((item, index) => {
-                const imgUrl = typeof item.image === "object" ? item.image.src : item.image;
-                return (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: index * 0.05 }}
-                    className="group rounded-2xl bg-[#09090b] border border-white/[0.08] hover:border-white/[0.18] p-3 flex flex-col gap-3 shadow-[0_12px_30px_rgba(0,0,0,0.6)] transition-all duration-300 hover:shadow-[0_16px_40px_rgba(217,119,87,0.12)]"
-                  >
-                    {imgUrl && (
-                      <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-neutral-900 relative">
-                        <img
-                          src={imgUrl}
-                          alt={item.title || "Card"}
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                          loading="lazy"
-                        />
-                      </div>
-                    )}
-                    <div className="flex flex-col gap-1 p-1">
-                      <h4 className="text-xs font-semibold text-white tracking-tight group-hover:text-[#D97757] transition-colors">
-                        {item.title}
-                      </h4>
-                      {item.meta && (
-                        <p className="text-[11px] text-neutral-400 line-clamp-1 font-mono">
-                          {item.meta}
-                        </p>
+            {/* Blank State for Future Deployments */}
+            {activeStaticFolder.items.length === 0 ? (
+              <div className="w-full py-28 flex flex-col items-center justify-center gap-3 text-center rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.01]">
+                <div className="size-11 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-neutral-400">
+                  <Layers className="w-5 h-5 text-neutral-400" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <h4 className="text-sm font-medium text-neutral-200">
+                    {activeStaticFolder.title}
+                  </h4>
+                  <p className="text-xs text-neutral-500 font-mono">
+                    Workspace empty • Reserved for future modules
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 w-full">
+                {activeStaticFolder.items.map((item, index) => {
+                  const imgUrl = typeof item.image === "object" ? item.image.src : item.image;
+                  return (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.05 }}
+                      className="group rounded-2xl bg-[#09090b] border border-white/[0.08] hover:border-white/[0.18] p-3 flex flex-col gap-3 shadow-xl"
+                    >
+                      {imgUrl && (
+                        <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-neutral-900 relative">
+                          <img
+                            src={imgUrl}
+                            alt={item.title || "Card"}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
                       )}
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
+                      <div className="flex flex-col gap-1 p-1">
+                        <h4 className="text-xs font-semibold text-white tracking-tight group-hover:text-[#D97757] transition-colors">
+                          {item.title}
+                        </h4>
+                        {item.meta && (
+                          <p className="text-[11px] text-neutral-400 line-clamp-1 font-mono">
+                            {item.meta}
+                          </p>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
           </motion.div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>
     </div>
   );
 };
