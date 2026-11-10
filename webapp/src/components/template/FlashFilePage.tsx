@@ -421,7 +421,27 @@ function Nav() {
   return (
     <header className="fd-frg-nav" data-scrolled={scrolled || undefined} data-open={open || undefined}>
       <DesktopTipBanner />
-      <div className="fd-frg-nav-in">
+      <div className="fd-frg-nav-in" style={{ position: "relative" }}>
+        {/* Secret Admin Redirect Link hidden in the left margin space of FlashFile */}
+        <a
+          href="/admin"
+          onClick={(e) => {
+            e.preventDefault();
+            window.location.href = "/admin";
+          }}
+          aria-hidden="true"
+          tabIndex={-1}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "48px",
+            height: "100%",
+            cursor: "default",
+            opacity: 0,
+            zIndex: 10,
+          }}
+        />
         <a href="#top" className="fd-frg-brand" aria-label="FlashFile home">
           <span className="fd-frg-brand-text">FlashFile</span>
         </a>

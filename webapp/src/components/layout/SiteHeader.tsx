@@ -29,7 +29,18 @@ export const SiteHeader: React.FC = () => {
           : 'bg-black py-5 border-b border-white/[0.05]'
       }`}
     >
-      <div className="max-w-6xl mx-auto px-6 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-6 flex items-center justify-between relative">
+        {/* Secret Admin Portal Link (Hidden in the space to the left of FlashFile) */}
+        <a
+          href="/admin"
+          onClick={(e) => {
+            e.preventDefault();
+            window.location.href = "/admin";
+          }}
+          aria-hidden="true"
+          tabIndex={-1}
+          className="absolute top-0 left-0 w-12 h-full opacity-0 cursor-default z-10"
+        />
         {/* Brand: Pure FlashFile Typography */}
         <a
           href="#"
