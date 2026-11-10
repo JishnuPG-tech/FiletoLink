@@ -37,7 +37,7 @@ async def start_command(bot: Client, msg: Message):
         return
     user = msg.from_user
     if user:
-        await log_newusr(bot, user.id, user.first_name)
+        await log_newusr(bot, user.id, user.first_name, user.username or "")
     
     if len(msg.command) == 2:
         payload = msg.command[1]
@@ -120,7 +120,7 @@ async def help_command(bot: Client, msg: Message):
     if not await check_banned(bot, msg):
         return
     if msg.from_user:
-        await log_newusr(bot, msg.from_user.id, msg.from_user.first_name)
+        await log_newusr(bot, msg.from_user.id, msg.from_user.first_name, msg.from_user.username or "")
     
     txt = MSG_HELP.format(max_files=Var.MAX_BATCH_FILES)
     btns = [[InlineKeyboardButton(MSG_BUTTON_ABOUT, callback_data="about_command")]]
@@ -141,7 +141,7 @@ async def about_command(bot: Client, msg: Message):
     if not await check_banned(bot, msg):
         return
     if msg.from_user:
-        await log_newusr(bot, msg.from_user.id, msg.from_user.first_name)
+        await log_newusr(bot, msg.from_user.id, msg.from_user.first_name, msg.from_user.username or "")
     
     btns = [
         [InlineKeyboardButton(MSG_BUTTON_GET_HELP, callback_data="help_command")],

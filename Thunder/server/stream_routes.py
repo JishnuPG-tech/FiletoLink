@@ -19,6 +19,7 @@ from Thunder.utils.canonical_files import (
     update_cached_file_id,
 )
 from Thunder.utils.custom_dl import ByteStreamer
+from Thunder.utils.database import db
 from Thunder.utils.file_properties import get_media
 from Thunder.utils.logger import logger
 from Thunder.utils.render_template import render_media_page, render_page

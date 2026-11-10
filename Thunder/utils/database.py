@@ -92,15 +92,28 @@ class Database:
             logger.error(f"Error in new_user for user {user_id}: {e}", exc_info=True)
             raise
 
-    async def add_user(self, user_id: int) -> bool:
+    async def add_user(self, user_id: int, name: str = "", username: str = "") -> bool:
         try:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            user_display_name = name.strip() if name and name.strip() else f"User {user_id}"
             result = await self.col.update_one(
                 {'id': user_id},
-                {'$setOnInsert': self.new_user(user_id)},
+                {
+                    '$set': {
+                        'name': user_display_name,
+                        'username': username.strip() if username else "",
+                        'last_active': now
+                    },
+                    '$setOnInsert': {
+                        'id': user_id,
+                        'join_date': now,
+                        'total_files': 0
+                    }
+                },
                 upsert=True
             )
             if result.upserted_id:
-                logger.debug(f"Added new user {user_id} to database.")
+                logger.debug(f"Added new user {user_id} ({user_display_name}) to database.")
                 return True
             return False
         except Exception as e:

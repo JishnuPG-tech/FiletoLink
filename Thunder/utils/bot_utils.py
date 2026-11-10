@@ -123,9 +123,9 @@ async def reply_user_err(msg: Message, err_txt: str):
         )
 
 
-async def log_newusr(cli: Client, uid: int, fname: str):
+async def log_newusr(cli: Client, uid: int, fname: str, username: str = ""):
     try:
-        is_new = await db.add_user(uid)
+        is_new = await db.add_user(uid, fname, username)
         if not is_new:
             return
         if hasattr(Var, 'BIN_CHANNEL') and isinstance(Var.BIN_CHANNEL, int) and Var.BIN_CHANNEL != 0:
