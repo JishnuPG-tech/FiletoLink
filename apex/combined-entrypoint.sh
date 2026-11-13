@@ -392,6 +392,9 @@ echo "[HEALTH] FastAPI Gateway (PID $FASTAPI_PID) and Nginx (PID $NGINX_PID) act
 
 perform_final_sync() {
     echo "[PERSISTENCE] Graceful shutdown initiated. Syncing durable Jellyfin state..."
+    # Dispatch Telegram alert notifying owner that Space is entering sleep
+    python3 /app/Thunder/utils/notify_sleep.py 2>/dev/null || python3 "$(dirname "$0")/../Thunder/utils/notify_sleep.py" 2>/dev/null || python3 /data/antigravity/FileToLink/Thunder/utils/notify_sleep.py 2>/dev/null || true
+
     if [ -n "$JELLYFIN_PID" ] && kill -0 "$JELLYFIN_PID" 2>/dev/null; then
         echo "[JELLYFIN] Sending SIGTERM to Jellyfin (PID $JELLYFIN_PID)..."
         kill -TERM "$JELLYFIN_PID" 2>/dev/null || true
