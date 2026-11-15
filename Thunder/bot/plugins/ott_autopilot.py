@@ -13,7 +13,7 @@ Daily Curated OTT Release Updates Autopilot:
 
 import asyncio
 import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import httpx
 from pyrogram import Client, filters
@@ -68,7 +68,7 @@ def get_tmdb_key() -> str:
     return getattr(Var, "TMDB_API_KEY", "").strip()
 
 
-def get_target_channel() -> Optional[int]:
+def get_target_channel() -> Optional[Union[int, str]]:
     return getattr(Var, "OTT_CHANNEL_ID", None) or getattr(Var, "FORCE_CHANNEL_ID", None)
 
 
@@ -504,12 +504,17 @@ async def ott_scheduler_worker():
                 now_local = get_local_now()
                 today_str = now_local.strftime("%Y-%m-%d")
 
-                is_target_hour = now_local.hour == hour
-                is_target_minute = now_local.minute == minute
+                is_past_time = (now_local.hour > hour) or (now_local.hour == hour and now_local.minute >= minute)
+                last_db_run = await db.get_state("last_ott_run_date")
 
-                if is_target_hour and is_target_minute and _LAST_RUN_DATE != today_str:
-                    logger.info(f"[OTT-AUTOPILOT] 09:00 AM trigger activated for {today_str}. Initiating curated OTT scan...")
+                if is_past_time and _LAST_RUN_DATE != today_str and last_db_run != today_str:
+                    logger.info(
+                        f"[OTT-AUTOPILOT] Schedule trigger activated for {today_str} "
+                        f"(current local time {now_local.strftime('%H:%M:%S')}, scheduled for {hour:02d}:{minute:02d}). "
+                        f"Initiating curated OTT scan..."
+                    )
                     _LAST_RUN_DATE = today_str
+                    await db.set_state("last_ott_run_date", today_str)
                     res = await process_and_post_ott_updates(StreamBot, manual=False)
                     logger.info(f"[OTT-AUTOPILOT] Daily curated OTT scan completed: {res}")
 
@@ -536,17 +541,33 @@ async def post_ott_command(client: Client, message: Message):
     if message.from_user.id != Var.OWNER_ID:
         return
 
-    status_msg = await message.reply_text("🔍 **Scanning TMDB for famous & trending OTT release updates...**", quote=True)
+    channel_id = get_target_channel()
+    channel_repr = str(channel_id) if channel_id else "❌ Not configured"
+
+    status_msg = await message.reply_text(
+        f"🔍 **Scanning TMDB for famous & trending OTT releases...**\n"
+        f"🎯 **Target Channel:** `{channel_repr}`",
+        quote=True
+    )
     res = await process_and_post_ott_updates(client, manual=True)
+
+    error_note = ""
+    if res.get("errors", 0) > 0 or not channel_id:
+        error_note = (
+            f"\n\n⚠️ **Posting Issues Detected:** `{res.get('errors', 0)}` error(s).\n"
+            f"👉 Use `/test_channel` to check bot permissions and channel access."
+        )
 
     report = (
         f"📊 **Curated OTT Updates Scan Complete!**\n\n"
+        f"• **Target Channel:** `{channel_repr}`\n"
         f"• **Candidates Scanned:** `{res['scanned']}`\n"
         f"• **New Hype Releases Published:** `{res['posted']}`\n"
         f"• **Already Published (Skipped):** `{res['skipped']}`\n"
         f"• **Low-Buzz / Non-Trending Skipped:** `{res.get('low_pop_skipped', 0)}`\n"
         f"• **Errors:** `{res['errors']}`\n\n"
         f"*(ℹ️ Note: Only famous, trending blockbusters and top-rated series are broadcast. Zero low-grade spam.)*"
+        f"{error_note}"
     )
     await status_msg.edit_text(report)
 
@@ -565,6 +586,8 @@ async def ott_status_command(client: Client, message: Message):
     hour = getattr(Var, "OTT_SCHEDULE_HOUR", 9)
     minute = getattr(Var, "OTT_SCHEDULE_MINUTE", 0)
     offset = getattr(Var, "OTT_TIMEZONE_OFFSET", 5.5)
+    last_db_run = await db.get_state("last_ott_run_date")
+    last_run_display = _LAST_RUN_DATE or last_db_run or "None yet"
 
     text = (
         f"⚡ **Curated Hype OTT Updates Autopilot Status**\n\n"
@@ -577,7 +600,8 @@ async def ott_status_command(client: Client, message: Message):
         f"• **Schedule Time:** `{hour:02d}:{minute:02d}` Daily (UTC+{offset})\n"
         f"• **Current Local Time:** `{now_local.strftime('%Y-%m-%d %H:%M:%S')}`\n"
         f"• **Total Updates Posted to Date:** `{total_posted}`\n"
-        f"• **Last Daily Run Date:** `{_LAST_RUN_DATE or 'None yet'}`\n\n"
-        f"*(To trigger an immediate curated scan and post, send /post_ott)*"
+        f"• **Last Daily Run Date:** `{last_run_display}`\n\n"
+        f"*(To trigger an immediate curated scan and post, send /post_ott)*\n"
+        f"*(To verify channel connectivity and permissions, send /test_channel)*"
     )
     await message.reply_text(text, quote=True)

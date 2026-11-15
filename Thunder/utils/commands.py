@@ -28,6 +28,11 @@ def get_commands():
         "authorize": "(Admin) Grant permanent access to a user",
         "deauthorize": "(Admin) Remove permanent access from a user",
         "listauth": "(Admin) List all authorized users",
+        "test_channel": "(Admin) Test channel connection & permissions",
+        "post_ott": "(Admin) Scan and broadcast latest OTT releases",
+        "ott_status": "(Admin) Check OTT autopilot status and schedule",
+        "post_milestone": "(Admin) Generate and post weekly milestone card",
+        "preview_milestone": "(Admin) Preview weekly network milestone card",
     }
 
     # Only expose subscription and payment commands when PAYMENT_ENABLED is True

@@ -124,6 +124,20 @@ async def help_command(bot: Client, msg: Message):
         await log_newusr(bot, msg.from_user.id, msg.from_user.first_name, msg.from_user.username or "")
     
     txt = MSG_HELP.format(max_files=Var.MAX_BATCH_FILES)
+    if msg.from_user and msg.from_user.id == Var.OWNER_ID:
+        txt += (
+            "\n\n👑 **Admin & Broadcasting Commands:**\n"
+            "> `/test_channel` - Test channel connectivity & write permissions\n"
+            "> `/post_ott` - Scan & broadcast latest curated OTT releases\n"
+            "> `/ott_status` - Inspect OTT autopilot status & schedule\n"
+            "> `/post_milestone` - Post weekly network milestone stats\n"
+            "> `/preview_milestone` - Preview weekly network milestone card\n"
+            "> `/status` - Bot resources & active streaming nodes\n"
+            "> `/stats` - Total database users & files streamed\n"
+            "> `/broadcast` - Broadcast message to all bot users\n"
+            "> `/speedtest` - Run network latency and speed test\n"
+            "> `/restart` - Restart & reload bot in place"
+        )
     btns = [[InlineKeyboardButton(MSG_BUTTON_ABOUT, callback_data="about_command")]]
     
     link, title = await get_force_info(bot)

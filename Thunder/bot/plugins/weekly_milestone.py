@@ -15,7 +15,7 @@
 import asyncio
 import datetime
 import time
-from typing import Optional
+from typing import Optional, Union
 
 import psutil
 from pyrogram import Client, filters
@@ -38,7 +38,7 @@ _MILESTONE_RUNNING = False
 _LAST_MILESTONE_DATE: Optional[str] = None
 
 
-def get_milestone_channel() -> Optional[int]:
+def get_milestone_channel() -> Optional[Union[int, str]]:
     return Var.MILESTONE_CHANNEL_ID or Var.FORCE_CHANNEL_ID
 
 
@@ -147,12 +147,19 @@ async def milestone_scheduler_worker():
                 today_str = now_local.strftime("%Y-%m-%d")
 
                 is_target_day = now_local.weekday() == Var.MILESTONE_DAY
-                is_target_hour = now_local.hour == Var.MILESTONE_HOUR
-                is_target_minute = now_local.minute == Var.MILESTONE_MINUTE
+                is_past_time = (now_local.hour > Var.MILESTONE_HOUR) or (
+                    now_local.hour == Var.MILESTONE_HOUR and now_local.minute >= Var.MILESTONE_MINUTE
+                )
+                last_db_milestone = await db.get_state("last_milestone_date")
 
-                if is_target_day and is_target_hour and is_target_minute and _LAST_MILESTONE_DATE != today_str:
-                    logger.info(f"[MILESTONE] Sunday trigger activated for {today_str}. Publishing milestone...")
+                if is_target_day and is_past_time and _LAST_MILESTONE_DATE != today_str and last_db_milestone != today_str:
+                    logger.info(
+                        f"[MILESTONE] Sunday trigger activated for {today_str} "
+                        f"(current local time {now_local.strftime('%H:%M:%S')}, scheduled for {Var.MILESTONE_HOUR:02d}:{Var.MILESTONE_MINUTE:02d}). "
+                        f"Publishing milestone..."
+                    )
                     _LAST_MILESTONE_DATE = today_str
+                    await db.set_state("last_milestone_date", today_str)
                     await post_milestone_card(StreamBot)
 
             await asyncio.sleep(30)
@@ -178,14 +185,24 @@ async def post_milestone_command(client: Client, message: Message):
     if message.from_user.id != Var.OWNER_ID:
         return
 
-    status_msg = await message.reply_text("⏳ **Generating and posting weekly milestone card...**", quote=True)
+    channel_id = get_milestone_channel()
+    channel_str = str(channel_id) if channel_id else "Unset"
+
+    status_msg = await message.reply_text(
+        f"⏳ **Generating and posting weekly milestone card...**\n"
+        f"🎯 **Target Channel:** `{channel_str}`",
+        quote=True
+    )
     success = await post_milestone_card(client)
     if success:
-        await status_msg.edit_text("✅ **Weekly Network Milestone successfully posted to your channel!**")
+        today_str = get_local_now().strftime("%Y-%m-%d")
+        await db.set_state("last_milestone_date", today_str)
+        await status_msg.edit_text(f"✅ **Weekly Network Milestone successfully posted to `{channel_str}`!**")
     else:
-        channel_id = get_milestone_channel()
-        channel_str = str(channel_id) if channel_id else "Unset"
-        await status_msg.edit_text(f"❌ **Failed to post milestone.** Check channel ID (`{channel_str}`) or bot admin permissions.")
+        await status_msg.edit_text(
+            f"❌ **Failed to post milestone.** Check channel ID (`{channel_str}`) or bot admin permissions.\n"
+            f"👉 Run `/test_channel` to verify bot channel access and permissions."
+        )
 
 
 @StreamBot.on_message(filters.command(["preview_milestone"]) & filters.private)

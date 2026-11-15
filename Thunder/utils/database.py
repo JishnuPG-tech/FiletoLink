@@ -1094,8 +1094,31 @@ class Database:
             logger.error(f"Error in get_total_files_count: {e}", exc_info=True)
             return 0
 
+    async def get_state(self, key: str, default: Any = None) -> Any:
+        try:
+            doc = await self.db.bot_state.find_one({"key": key})
+            return doc.get("value", default) if doc else default
+        except Exception as e:
+            logger.error(f"Error getting state {key}: {e}", exc_info=True)
+            return default
+
+    async def set_state(self, key: str, value: Any) -> None:
+        try:
+            await self.db.bot_state.update_one(
+                {"key": key},
+                {"$set": {
+                    "key": key,
+                    "value": value,
+                    "updated_at": datetime.datetime.now(datetime.timezone.utc)
+                }},
+                upsert=True
+            )
+        except Exception as e:
+            logger.error(f"Error setting state {key}: {e}", exc_info=True)
+
     async def close(self):
         if self._client:
             await self._client.close()
 
 db = Database(Var.DATABASE_URL, Var.NAME)
+

@@ -3,7 +3,7 @@
 import os
 
 from dotenv import load_dotenv
-from typing import Set, Optional
+from typing import Set, Optional, Union
 from Thunder.utils.logger import logger
 
 load_dotenv("config.env")
@@ -21,6 +21,23 @@ def str_to_int_set(val: str) -> Set[int]:
         except (TypeError, ValueError):
             continue
     return result
+
+def parse_channel_target(val: Optional[str], default: Optional[str] = None) -> Optional[Union[int, str]]:
+    raw = (val or default or "").strip(" '\"")
+    if not raw:
+        return None
+    if "t.me/" in raw:
+        raw = raw.split("t.me/")[-1].strip("/")
+    try:
+        num = int(raw)
+        if num > 0 and len(str(num)) >= 9:
+            num = int(f"-100{num}")
+        return num
+    except ValueError:
+        if not raw.startswith("@") and not raw.startswith("-"):
+            raw = f"@{raw}"
+        return raw
+
 
 
 
@@ -85,15 +102,7 @@ class Var:
 
     MULTI_CLIENT: bool = False
 
-    FORCE_CHANNEL_ID: Optional[int] = None
-
-    force_channel_env = os.getenv("FORCE_CHANNEL_ID", "").strip()
-
-    if force_channel_env:
-        try:
-            FORCE_CHANNEL_ID = int(force_channel_env)
-        except ValueError:
-            logger.warning(f"Invalid FORCE_CHANNEL_ID '{force_channel_env}' in environment; must be an integer.")
+    FORCE_CHANNEL_ID: Optional[Union[int, str]] = parse_channel_target(os.getenv("FORCE_CHANNEL_ID"), default="@flashfilez")
 
     TOKEN_ENABLED: bool = str_to_bool(os.getenv("TOKEN_ENABLED", "False"))
     TOKEN_TTL_HOURS: int = int(os.getenv("TOKEN_TTL_HOURS", "24"))
@@ -121,13 +130,10 @@ class Var:
     # TMDB & OTT Channel Autopilot
     TMDB_API_KEY: str = os.getenv("TMDB_API_KEY", "").strip()
     OTT_AUTOPILOT: bool = str_to_bool(os.getenv("OTT_AUTOPILOT", "True"))
-    OTT_CHANNEL_ID: Optional[int] = None
-    ott_channel_env = os.getenv("OTT_CHANNEL_ID", "").strip()
-    if ott_channel_env:
-        try:
-            OTT_CHANNEL_ID = int(ott_channel_env)
-        except ValueError:
-            logger.warning(f"Invalid OTT_CHANNEL_ID '{ott_channel_env}'; must be an integer.")
+    OTT_CHANNEL_ID: Optional[Union[int, str]] = parse_channel_target(
+        os.getenv("OTT_CHANNEL_ID"),
+        default=os.getenv("FORCE_CHANNEL_ID", "@flashfilez"),
+    )
 
     OTT_REGION: str = os.getenv("OTT_REGION", "IN").strip().upper()
     OTT_SCHEDULE_HOUR: int = int(os.getenv("OTT_SCHEDULE_HOUR", "9"))
@@ -140,13 +146,10 @@ class Var:
 
     # Weekly Server Milestone Card
     MILESTONE_ENABLED: bool = str_to_bool(os.getenv("MILESTONE_ENABLED", "True"))
-    MILESTONE_CHANNEL_ID: Optional[int] = None
-    milestone_channel_env = os.getenv("MILESTONE_CHANNEL_ID", "").strip()
-    if milestone_channel_env:
-        try:
-            MILESTONE_CHANNEL_ID = int(milestone_channel_env)
-        except ValueError:
-            logger.warning(f"Invalid MILESTONE_CHANNEL_ID '{milestone_channel_env}'; must be an integer.")
+    MILESTONE_CHANNEL_ID: Optional[Union[int, str]] = parse_channel_target(
+        os.getenv("MILESTONE_CHANNEL_ID"),
+        default=os.getenv("FORCE_CHANNEL_ID", "@flashfilez"),
+    )
 
     MILESTONE_DAY: int = int(os.getenv("MILESTONE_DAY", "6"))  # 6 = Sunday
     MILESTONE_HOUR: int = int(os.getenv("MILESTONE_HOUR", "20"))  # 20:00 = 8:00 PM

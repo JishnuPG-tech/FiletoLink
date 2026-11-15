@@ -45,7 +45,7 @@ from Thunder.utils.messages import (
 from Thunder.utils.time_format import get_readable_time
 from Thunder.utils.tokens import authorize, deauthorize, list_allowed
 from Thunder.utils.speedtest import run_speedtest
-from Thunder.vars import Var
+from Thunder.vars import Var, parse_channel_target
 
 owner_filter = filters.private & filters.user(Var.OWNER_ID)
 
@@ -527,3 +527,95 @@ async def _send_result(message: Message, status_msg: Message, result_text: str, 
 
 def _fmt(value, decimals: int = 2) -> str:
     return f"{float(value):.{decimals}f}"
+
+
+# =========================================================================
+# Channel Diagnostic Command (/test_channel)
+# =========================================================================
+
+@StreamBot.on_message(filters.command(["test_channel"]) & filters.private)
+async def test_channel_command(client: Client, message: Message):
+    if message.from_user.id != Var.OWNER_ID:
+        return
+
+    args = message.text.split(maxsplit=1)
+    custom_target = args[1].strip() if len(args) > 1 else None
+
+    status_msg = await message.reply_text("🔍 **Checking Telegram channel connectivity & permissions...**", quote=True)
+
+    targets_to_check = []
+    if custom_target:
+        parsed = parse_channel_target(custom_target)
+        if parsed:
+            targets_to_check.append(("Custom Input", parsed))
+        else:
+            await status_msg.edit_text(f"❌ **Invalid channel format:** `{custom_target}`")
+            return
+    else:
+        # Check all configured channel targets
+        if Var.FORCE_CHANNEL_ID:
+            targets_to_check.append(("Broadcast / Force Channel", Var.FORCE_CHANNEL_ID))
+        if Var.OTT_CHANNEL_ID and Var.OTT_CHANNEL_ID != Var.FORCE_CHANNEL_ID:
+            targets_to_check.append(("OTT Autopilot Channel", Var.OTT_CHANNEL_ID))
+        if Var.MILESTONE_CHANNEL_ID and Var.MILESTONE_CHANNEL_ID != Var.FORCE_CHANNEL_ID and Var.MILESTONE_CHANNEL_ID != Var.OTT_CHANNEL_ID:
+            targets_to_check.append(("Milestone Channel", Var.MILESTONE_CHANNEL_ID))
+
+    if not targets_to_check:
+        await status_msg.edit_text(
+            "⚠️ **No channels configured!**\n\n"
+            "Set `FORCE_CHANNEL_ID`, `OTT_CHANNEL_ID`, or `MILESTONE_CHANNEL_ID` in your environment (e.g. `@flashfilez` or `-100...`).\n"
+            "Or run: `/test_channel @yourchannel`"
+        )
+        return
+
+    results = []
+    bot_user = await client.get_me()
+
+    for label, target in targets_to_check:
+        target_display = str(target)
+        res = [f"📢 **{label}:** `{target_display}`"]
+        try:
+            chat = await client.get_chat(target)
+            chat_title = chat.title or "Unknown Title"
+            chat_type = str(chat.type).split(".")[-1].capitalize()
+            res.append(f"• **Chat:** {chat_title} (`{chat.id}`) [{chat_type}]")
+
+            # Check bot membership and permissions in the channel
+            try:
+                member = await client.get_chat_member(target, bot_user.id)
+                status_str = str(member.status).split(".")[-1].capitalize()
+                res.append(f"• **Bot Role:** `{status_str}`")
+
+                # Try sending a quick test message and deleting it
+                try:
+                    sent = await client.send_message(
+                        chat_id=target,
+                        text="🤖 **[Self-Test]** Bot connection verified. Removing test ping in 5 seconds...",
+                        disable_notification=True
+                    )
+                    res.append("• **Write Permission:** ✅ Verified (Test message posted)")
+                    await asyncio.sleep(5)
+                    try:
+                        await sent.delete()
+                        res.append("• **Cleanup:** ✅ Test message auto-deleted")
+                    except Exception:
+                        pass
+                except Exception as post_err:
+                    res.append(f"• **Write Permission:** ❌ FAILED (`{post_err}`)")
+                    res.append("  👉 *Fix: Make sure the bot is an Administrator with 'Post Messages' permission enabled.*")
+
+            except Exception as member_err:
+                res.append(f"• **Member Check:** ⚠️ Could not verify membership (`{member_err}`)")
+                res.append(f"  👉 *Fix: Add @{bot_user.username or 'bot'} to the channel as an Administrator.*")
+
+        except Exception as chat_err:
+            res.append(f"• **Connection:** ❌ FAILED (`{chat_err}`)")
+            res.append(f"  👉 *Fix: Ensure the channel username or ID `{target_display}` exists and bot has been added.*")
+
+        results.append("\n".join(res))
+
+    final_report = "📊 **Channel Diagnostics Report**\n\n" + "\n\n────────────────────\n\n".join(results)
+    final_report += "\n\n💡 *Tip: You can test any specific channel with `/test_channel @ChannelUsername`*"
+
+    await status_msg.edit_text(final_report)
+
